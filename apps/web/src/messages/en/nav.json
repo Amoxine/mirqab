@@ -1,0 +1,12 @@
+{
+  "dashboard": "Dashboard",
+  "apis": "APIs",
+  "keys": "Keys",
+  "tenants": "Tenants",
+  "analytics": "Analytics",
+  "auditLogs": "Audit Logs",
+  "expandSidebar": "Expand sidebar",
+  "collapseSidebar": "Collapse sidebar",
+  "brand": "Open Gateway",
+  "brandShort": "OG"
+}

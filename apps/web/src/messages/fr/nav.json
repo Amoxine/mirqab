@@ -1,0 +1,12 @@
+{
+  "dashboard": "Tableau de bord",
+  "apis": "API",
+  "keys": "Clés",
+  "tenants": "Locataires",
+  "analytics": "Analytique",
+  "auditLogs": "Journaux d'audit",
+  "expandSidebar": "Développer la barre latérale",
+  "collapseSidebar": "Réduire la barre latérale",
+  "brand": "Open Gateway",
+  "brandShort": "OG"
+}

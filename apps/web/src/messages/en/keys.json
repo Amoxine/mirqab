@@ -1,0 +1,144 @@
+{
+  "list": {
+    "title": "API Keys",
+    "description": "Manage API keys for authentication and authorization.",
+    "createButton": "Create Key",
+    "openMenu": "Open menu",
+    "viewDetails": "View details",
+    "columns": {
+      "api": "API",
+      "expires": "Expires"
+    },
+    "never": "Never",
+    "filters": {
+      "statusLabel": "Filter by status",
+      "allStatuses": "All statuses",
+      "apiLabel": "Filter by API",
+      "allApis": "All APIs"
+    },
+    "empty": "No API keys found.",
+    "emptyFiltered": "No API keys match these filters."
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "REVOKED": "Revoked",
+    "EXPIRED": "Expired"
+  },
+  "actions": {
+    "revoke": "Revoke",
+    "revoking": "Revoking..."
+  },
+  "detail": {
+    "backToKeys": "Back to API keys",
+    "notFound": "API key not found",
+    "loadFailed": "Failed to load API key",
+    "unexpectedError": "Unexpected error.",
+    "description": "API key details, live limits and usage.",
+    "editDisabledHint": "Editing is unavailable while the gateway is unreachable",
+    "detailsCard": {
+      "title": "Details",
+      "api": "API",
+      "created": "Created",
+      "expires": "Expires"
+    },
+    "limitsCard": {
+      "title": "Limits",
+      "description": "Live configuration read from the gateway.",
+      "rateLimit": "Rate limit",
+      "quota": "Quota",
+      "noQuota": "No quota",
+      "quotaRemaining": "Quota remaining",
+      "quotaPeriod": "Quota period",
+      "quotaRenews": "Quota renews"
+    },
+    "gatewayUnreachable": "Gateway unreachable — live limits unavailable."
+  },
+  "usage": {
+    "title": "Usage",
+    "description": "Traffic for this key and its live quota.",
+    "rangeLabel": "Usage range",
+    "ranges": {
+      "1h": "Last hour",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days"
+    },
+    "loadFailed": "Failed to load usage.",
+    "quota": "Quota",
+    "quotaUsed": "{used} / {max} used",
+    "quotaUsedAria": "Quota used",
+    "quotaRemaining": "{remaining} remaining",
+    "quotaResets": " · resets {date}",
+    "noQuota": "No quota configured for this key.",
+    "stats": {
+      "requests": "Requests",
+      "errors": "Errors",
+      "errorRate": "Error rate",
+      "avgLatencyLabel": "Avg latency",
+      "avgLatency": "{value} ms"
+    },
+    "noTraffic": "No traffic recorded for this key in the selected range."
+  },
+  "createdDialog": {
+    "title": "Copy your API key",
+    "description": "This key is shown only once and cannot be retrieved later. Store it somewhere safe.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Could not copy the key. Select it and copy it manually."
+  },
+  "form": {
+    "createTitle": "Create API key",
+    "editTitle": "Edit API key",
+    "createDescription": "Generate a key scoped to one API, with optional limits.",
+    "editDescription": "Update the key name, expiry and limits.",
+    "nameLabel": "Key name",
+    "namePlaceholder": "Production key",
+    "apiLabel": "API",
+    "apiLoading": "Loading APIs...",
+    "apiPlaceholder": "Select an API",
+    "noActiveApis": "No active APIs yet. Create and activate an API first.",
+    "apiSyncHint": "The API must be synced to the gateway before keys can be created for it.",
+    "apiNotEditable": "A key cannot be moved to another API.",
+    "expiresLabel": "Expiration date (optional)",
+    "expiresHint": "Valid through the end of this day (UTC). Leave blank for no expiry.",
+    "rateLimitLabel": "Rate limit (requests / second)",
+    "rateLimitPlaceholder": "Unlimited",
+    "rateLimitHint": "Leave blank or 0 for unlimited.",
+    "quotaLabel": "Quota (requests per period)",
+    "quotaPlaceholder": "No quota",
+    "quotaHint": "Leave blank for no quota.",
+    "quotaPeriodLabel": "Quota period",
+    "editQuotaWarning": "Changing the quota resets this key's consumed quota for the current period.",
+    "submitCreate": "Create key",
+    "submitCreating": "Creating...",
+    "submitSave": "Save changes",
+    "submitSaving": "Saving...",
+    "createSuccess": "API key created",
+    "updateSuccess": "API key updated",
+    "createFailed": "Failed to create API key",
+    "updateFailed": "Failed to update API key",
+    "quotaPeriods": {
+      "HOURLY": "Hourly",
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly"
+    },
+    "everyNSeconds": "Every {seconds} s",
+    "errors": {
+      "nameRequired": "Name is required",
+      "nameTooLong": "Name must be at most 100 characters",
+      "apiRequired": "API is required",
+      "expiryMustBeFuture": "Expiry must be a future date",
+      "rateLimitInvalid": "Rate limit must be a whole number of at least 0",
+      "quotaInvalid": "Quota must be a whole number of at least 1"
+    }
+  },
+  "revokeDialog": {
+    "title": "Revoke this API key?",
+    "description": "{keyName} will stop working immediately and is removed from the gateway. This cannot be undone.",
+    "thisKey": "This key",
+    "confirm": "Revoke key",
+    "success": "Key \"{name}\" revoked",
+    "failed": "Failed to revoke key"
+  }
+}

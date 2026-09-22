@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Tenants",
+    "description": "Manage tenant organizations and subscriptions.",
+    "createButton": "Create Tenant",
+    "openMenu": "Open menu",
+    "empty": "No tenants found."
+  },
+  "fields": {
+    "plan": "Plan",
+    "slug": "Slug",
+    "updated": "Updated",
+    "role": "Role"
+  },
+  "actions": {
+    "suspend": "Suspend",
+    "reactivate": "Reactivate",
+    "archive": "Archive"
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "SUSPENDED": "Suspended",
+    "ARCHIVED": "Archived"
+  },
+  "plan": {
+    "FREE": "Free",
+    "STARTER": "Starter",
+    "PRO": "Pro",
+    "ENTERPRISE": "Enterprise"
+  },
+  "roles": {
+    "admin": "Admin",
+    "operator": "Operator",
+    "viewer": "Viewer",
+    "super_admin": "Super Admin"
+  },
+  "detail": {
+    "backToTenants": "Back to Tenants",
+    "overview": "Overview",
+    "notFoundTitle": "Tenant not found",
+    "notFoundMessage": "This tenant does not exist, or you are not a member of it.",
+    "loadErrorTitle": "Could not load this tenant"
+  },
+  "members": {
+    "title": "Members",
+    "invite": "Invite",
+    "empty": "No members yet.",
+    "columnUser": "User",
+    "columnJoined": "Joined",
+    "roleAriaLabel": "Role for {email}",
+    "removeAriaLabel": "Remove {email}",
+    "roleUpdatedToast": "{email} is now {role}",
+    "roleUpdateError": "Failed to change role"
+  },
+  "form": {
+    "createTitle": "Create tenant",
+    "editTitle": "Edit tenant",
+    "createDescription": "Add a new tenant organization.",
+    "editDescription": "Update this tenant’s details.",
+    "namePlaceholder": "Acme Corporation",
+    "slugPlaceholder": "acme-corp",
+    "slugImmutable": "The slug cannot be changed after creation.",
+    "planPlaceholder": "Select a plan",
+    "submitCreate": "Create",
+    "submitSave": "Save changes",
+    "submitSaving": "Saving...",
+    "createSuccess": "Tenant created",
+    "updateSuccess": "Tenant updated",
+    "saveFailed": "Failed to save tenant",
+    "errors": {
+      "nameTooShort": "Must be at least 2 characters",
+      "slugInvalid": "Lowercase alphanumeric with hyphens only"
+    }
+  },
+  "invite": {
+    "title": "Invite a member",
+    "description": "Add an existing Open Gateway user to this tenant by email.",
+    "emailPlaceholder": "person@example.com",
+    "rolePlaceholder": "Select a role",
+    "submit": "Invite",
+    "submitting": "Inviting...",
+    "successToast": "Invited {email}",
+    "errorToast": "Failed to invite user",
+    "notFoundError": "No user with this email has signed in yet. They need to register and log in once before you can invite them.",
+    "alreadyMemberError": "This user is already a member of this tenant.",
+    "errors": {
+      "emailRequired": "Required",
+      "emailInvalid": "Enter a valid email"
+    }
+  },
+  "remove": {
+    "title": "Remove this member?",
+    "descriptionSuffix": "loses access to this tenant immediately.",
+    "confirm": "Remove",
+    "pending": "Removing...",
+    "successToast": "Removed {email}",
+    "errorToast": "Failed to remove member"
+  },
+  "statusDialog": {
+    "suspend": {
+      "title": "Suspend this tenant?",
+      "description": "Its members lose access immediately. You can reactivate it later.",
+      "confirm": "Suspend",
+      "pending": "Suspending..."
+    },
+    "reactivate": {
+      "title": "Reactivate this tenant?",
+      "description": "Its members regain access immediately.",
+      "confirm": "Reactivate",
+      "pending": "Reactivating..."
+    },
+    "archive": {
+      "title": "Archive this tenant?",
+      "description": "This is a soft delete: the tenant and its data are kept but it becomes unusable. This cannot be undone from this page.",
+      "confirm": "Archive",
+      "pending": "Archiving..."
+    },
+    "suspendedToast": "\"{name}\" suspended",
+    "reactivatedToast": "\"{name}\" reactivated",
+    "archivedToast": "\"{name}\" archived",
+    "errorToast": "Failed to update tenant"
+  }
+}

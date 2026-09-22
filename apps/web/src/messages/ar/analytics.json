@@ -1,0 +1,124 @@
+{
+  "title": "التحليلات",
+  "subtitle": "تابع أداء واجهات البرمجة ومقاييس استخدامها. تُعرض فترات الرسوم البيانية بتوقيت UTC.",
+  "rangeLabel": "الفترة الزمنية",
+  "rangePlaceholder": "اختر فترة",
+  "ranges": {
+    "1h": "آخر ساعة",
+    "24h": "آخر 24 ساعة",
+    "7d": "آخر 7 أيام",
+    "30d": "آخر 30 يومًا"
+  },
+  "noData": "لم تُرجع أي بيانات تحليلية.",
+  "overview": {
+    "totalRequests": "إجمالي الطلبات",
+    "successCount": "{count} ناجحة",
+    "upstreamLatency": "{value} في الخادم الخلفي",
+    "activeApis": "واجهات البرمجة النشطة",
+    "activeKeys": "المفاتيح النشطة"
+  },
+  "table": {
+    "apiTitle": "الحركة حسب واجهة البرمجة",
+    "keyTitle": "الحركة حسب المفتاح",
+    "apiEmpty": "لا توجد حركة على واجهات البرمجة خلال الفترة المحددة.",
+    "keyEmpty": "لا توجد حركة على المفاتيح خلال الفترة المحددة.",
+    "columns": {
+      "api": "واجهة البرمجة",
+      "key": "المفتاح",
+      "requests": "الطلبات",
+      "errors": "الأخطاء",
+      "errorRate": "معدل الأخطاء",
+      "avgLatency": "متوسط الاستجابة"
+    }
+  },
+  "charts": {
+    "requests": {
+      "title": "الطلبات",
+      "description": "الطلبات والأخطاء عبر الزمن (بتوقيت UTC)",
+      "empty": "لم تُسجَّل أي طلبات خلال الفترة المحددة.",
+      "requestsSeries": "الطلبات",
+      "errorsSeries": "الأخطاء"
+    },
+    "latency": {
+      "title": "زمن الاستجابة",
+      "description": "متوسط زمن استجابة الطلبات عبر الزمن (بتوقيت UTC)",
+      "empty": "لم تُسجَّل أي بيانات لزمن الاستجابة خلال الفترة المحددة.",
+      "series": "متوسط زمن الاستجابة"
+    },
+    "statusCodes": {
+      "title": "رموز الحالة",
+      "description": "الاستجابات حسب رمز حالة HTTP",
+      "empty": "لم تُسجَّل أي استجابات خلال الفترة المحددة.",
+      "success": "ناجحة",
+      "clientError": "خطأ من العميل (4xx)",
+      "serverError": "خطأ من الخادم (5xx)"
+    }
+  },
+  "emptyState": {
+    "pipelineNotReady": "خط أنابيب التحليلات لا يستقبل بيانات",
+    "noDataTitle": "لا توجد بيانات",
+    "defaultDescription": "لم يُسجَّل أي شيء خلال الفترة المحددة.",
+    "pump": "خدمة Tyk Pump",
+    "pumpRunning": "قيد التشغيل",
+    "pumpNotRunning": "متوقفة",
+    "rawTable": "الجدول الخام",
+    "aggregateTable": "جدول التجميع",
+    "present": "متوفر",
+    "missing": "غير موجود",
+    "rowsRecorded": "عدد السجلات",
+    "lastRecord": "آخر سجل",
+    "never": "أبدًا",
+    "hintPumpDown": "خدمة Tyk Pump متوقفة أو لا يمكن الوصول إليها، لذلك لا تُسجَّل الطلبات الجديدة. شغّل خدمة tyk-pump.",
+    "hintTablesMissing": "لم تُنشئ خدمة Tyk Pump جداول التحليلات بعد. تأكد من تشغيل خدمة tyk-pump.",
+    "hintNoTraffic": "جداول التحليلات موجودة لكن لم يُسجَّل أي طلب بعد. مرّر بعض الحركة عبر البوابة لتعبئتها."
+  },
+  "staleNotice": {
+    "title": "خدمة Tyk Pump متوقفة",
+    "description": "لم تعد الطلبات الجديدة تُسجَّل، لذا فإن الأرقام أدناه غير محدّثة. آخر سجل: {lastRecord}. شغّل خدمة tyk-pump للاستمرار."
+  },
+  "errorState": {
+    "title": "فشل تحميل البيانات"
+  },
+  "auditLogs": {
+    "title": "سجلات التدقيق",
+    "subtitle": "تابع جميع الإجراءات والتغييرات على منصتك.",
+    "export": "تصدير CSV",
+    "exporting": "جارٍ التصدير...",
+    "exportHint": "يصدّر حتى 10,000 سجل ضمن الفترة المحددة؛ لا تُطبَّق مرشحات المورد والإجراء.",
+    "exportError": "فشل تصدير سجلات التدقيق",
+    "filters": "المرشحات",
+    "filterOptions": "خيارات التصفية",
+    "resource": "المورد",
+    "resourcePlaceholder": "apis",
+    "action": "الإجراء",
+    "actionPlaceholder": "اختر إجراءً",
+    "allActions": "جميع الإجراءات",
+    "dateFrom": "من",
+    "dateTo": "إلى",
+    "clearAll": "مسح الكل",
+    "empty": "لم يُعثر على أي سجلات تدقيق.",
+    "systemUser": "النظام",
+    "columns": {
+      "timestamp": "التوقيت",
+      "user": "المستخدم",
+      "resource": "المورد",
+      "ipAddress": "عنوان IP"
+    },
+    "actions": {
+      "CREATED": "أُنشئ",
+      "UPDATED": "تم التحديث",
+      "DELETED": "تم الحذف",
+      "REVOKED": "تم الإلغاء",
+      "ASSIGNED": "تم التعيين",
+      "UNASSIGNED": "تم إلغاء التعيين",
+      "LOGIN": "تسجيل الدخول",
+      "LOGOUT": "تسجيل الخروج",
+      "ROLE_CHANGED": "تغيير الدور",
+      "PERMISSION_GRANTED": "منح صلاحية",
+      "PERMISSION_REVOKED": "سحب صلاحية",
+      "QUOTA_EXCEEDED": "تجاوز الحصة",
+      "SYNC_SUCCEEDED": "نجحت المزامنة",
+      "SYNC_FAILED": "فشلت المزامنة"
+    }
+  }
+}

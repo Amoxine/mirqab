@@ -1,0 +1,124 @@
+{
+  "title": "Analytique",
+  "subtitle": "Suivez les performances et l'utilisation de vos API. Les intervalles des graphiques sont affichés en UTC.",
+  "rangeLabel": "Période",
+  "rangePlaceholder": "Choisir une période",
+  "ranges": {
+    "1h": "Dernière heure",
+    "24h": "Dernières 24 heures",
+    "7d": "7 derniers jours",
+    "30d": "30 derniers jours"
+  },
+  "noData": "Aucune donnée analytique renvoyée.",
+  "overview": {
+    "totalRequests": "Requêtes totales",
+    "successCount": "{count} réussies",
+    "upstreamLatency": "{value} en amont",
+    "activeApis": "API actives",
+    "activeKeys": "Clés actives"
+  },
+  "table": {
+    "apiTitle": "Trafic par API",
+    "keyTitle": "Trafic par clé",
+    "apiEmpty": "Aucun trafic d'API sur la période sélectionnée.",
+    "keyEmpty": "Aucun trafic de clé sur la période sélectionnée.",
+    "columns": {
+      "api": "API",
+      "key": "Clé",
+      "requests": "Requêtes",
+      "errors": "Erreurs",
+      "errorRate": "Taux d'erreur",
+      "avgLatency": "Latence moyenne"
+    }
+  },
+  "charts": {
+    "requests": {
+      "title": "Requêtes",
+      "description": "Requêtes et erreurs dans le temps (UTC)",
+      "empty": "Aucune requête n'a été enregistrée sur la période sélectionnée.",
+      "requestsSeries": "Requêtes",
+      "errorsSeries": "Erreurs"
+    },
+    "latency": {
+      "title": "Latence",
+      "description": "Latence moyenne des requêtes dans le temps (UTC)",
+      "empty": "Aucune donnée de latence n'a été enregistrée sur la période sélectionnée.",
+      "series": "Latence moyenne"
+    },
+    "statusCodes": {
+      "title": "Codes de statut",
+      "description": "Réponses par code de statut HTTP",
+      "empty": "Aucune réponse n'a été enregistrée sur la période sélectionnée.",
+      "success": "Succès",
+      "clientError": "Erreur client (4xx)",
+      "serverError": "Erreur serveur (5xx)"
+    }
+  },
+  "emptyState": {
+    "pipelineNotReady": "Le pipeline analytique ne reçoit pas de données",
+    "noDataTitle": "Aucune donnée",
+    "defaultDescription": "Rien n'a été enregistré sur la période sélectionnée.",
+    "pump": "Tyk Pump",
+    "pumpRunning": "En cours d'exécution",
+    "pumpNotRunning": "Arrêté",
+    "rawTable": "Table brute",
+    "aggregateTable": "Table agrégée",
+    "present": "Présente",
+    "missing": "Manquante",
+    "rowsRecorded": "Lignes enregistrées",
+    "lastRecord": "Dernier enregistrement",
+    "never": "Jamais",
+    "hintPumpDown": "Tyk Pump est arrêté ou inaccessible : les nouvelles requêtes ne sont plus enregistrées. Démarrez le service tyk-pump.",
+    "hintTablesMissing": "Tyk Pump n'a pas encore créé ses tables analytiques. Vérifiez que le service tyk-pump est bien en cours d'exécution.",
+    "hintNoTraffic": "Les tables analytiques existent mais aucune requête n'a encore été enregistrée. Envoyez du trafic via la passerelle pour les alimenter."
+  },
+  "staleNotice": {
+    "title": "Tyk Pump est arrêté",
+    "description": "Les nouvelles requêtes ne sont plus enregistrées : les chiffres ci-dessous sont donc obsolètes. Dernier enregistrement : {lastRecord}. Démarrez le service tyk-pump pour reprendre."
+  },
+  "errorState": {
+    "title": "Échec du chargement des données"
+  },
+  "auditLogs": {
+    "title": "Journaux d'audit",
+    "subtitle": "Suivez toutes les actions et modifications effectuées sur votre plateforme.",
+    "export": "Exporter en CSV",
+    "exporting": "Export en cours...",
+    "exportHint": "Exporte jusqu'à 10 000 entrées pour la période sélectionnée ; les filtres de ressource et d'action ne sont pas appliqués.",
+    "exportError": "Échec de l'export des journaux d'audit",
+    "filters": "Filtres",
+    "filterOptions": "Options de filtrage",
+    "resource": "Ressource",
+    "resourcePlaceholder": "apis",
+    "action": "Action",
+    "actionPlaceholder": "Choisir une action",
+    "allActions": "Toutes les actions",
+    "dateFrom": "Du",
+    "dateTo": "Au",
+    "clearAll": "Tout effacer",
+    "empty": "Aucun journal d'audit trouvé.",
+    "systemUser": "Système",
+    "columns": {
+      "timestamp": "Horodatage",
+      "user": "Utilisateur",
+      "resource": "Ressource",
+      "ipAddress": "Adresse IP"
+    },
+    "actions": {
+      "CREATED": "Créé",
+      "UPDATED": "Modifié",
+      "DELETED": "Supprimé",
+      "REVOKED": "Révoqué",
+      "ASSIGNED": "Attribué",
+      "UNASSIGNED": "Retiré",
+      "LOGIN": "Connexion",
+      "LOGOUT": "Déconnexion",
+      "ROLE_CHANGED": "Rôle modifié",
+      "PERMISSION_GRANTED": "Permission accordée",
+      "PERMISSION_REVOKED": "Permission révoquée",
+      "QUOTA_EXCEEDED": "Quota dépassé",
+      "SYNC_SUCCEEDED": "Synchronisation réussie",
+      "SYNC_FAILED": "Synchronisation échouée"
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "title": "Analytics",
+  "subtitle": "Monitor API performance and usage metrics. Chart time buckets are shown in UTC.",
+  "rangeLabel": "Time range",
+  "rangePlaceholder": "Select range",
+  "ranges": {
+    "1h": "Last hour",
+    "24h": "Last 24 hours",
+    "7d": "Last 7 days",
+    "30d": "Last 30 days"
+  },
+  "noData": "No analytics returned.",
+  "overview": {
+    "totalRequests": "Total requests",
+    "successCount": "{count} succeeded",
+    "upstreamLatency": "{value} upstream",
+    "activeApis": "Active APIs",
+    "activeKeys": "Active keys"
+  },
+  "table": {
+    "apiTitle": "Traffic by API",
+    "keyTitle": "Traffic by key",
+    "apiEmpty": "No API traffic in the selected range.",
+    "keyEmpty": "No key traffic in the selected range.",
+    "columns": {
+      "api": "API",
+      "key": "Key",
+      "requests": "Requests",
+      "errors": "Errors",
+      "errorRate": "Error rate",
+      "avgLatency": "Avg latency"
+    }
+  },
+  "charts": {
+    "requests": {
+      "title": "Requests",
+      "description": "Requests and errors over time (UTC)",
+      "empty": "No requests were recorded in the selected range.",
+      "requestsSeries": "Requests",
+      "errorsSeries": "Errors"
+    },
+    "latency": {
+      "title": "Latency",
+      "description": "Average request latency over time (UTC)",
+      "empty": "No latency data was recorded in the selected range.",
+      "series": "Avg latency"
+    },
+    "statusCodes": {
+      "title": "Status codes",
+      "description": "Responses by HTTP status",
+      "empty": "No responses were recorded in the selected range.",
+      "success": "Success",
+      "clientError": "Client error (4xx)",
+      "serverError": "Server error (5xx)"
+    }
+  },
+  "emptyState": {
+    "pipelineNotReady": "Analytics pipeline not receiving data",
+    "noDataTitle": "No data",
+    "defaultDescription": "Nothing was recorded in the selected range.",
+    "pump": "Tyk Pump",
+    "pumpRunning": "Running",
+    "pumpNotRunning": "Not running",
+    "rawTable": "Raw table",
+    "aggregateTable": "Aggregate table",
+    "present": "Present",
+    "missing": "Missing",
+    "rowsRecorded": "Rows recorded",
+    "lastRecord": "Last record",
+    "never": "Never",
+    "hintPumpDown": "Tyk Pump is not running or cannot be reached, so new requests are not being recorded. Start the tyk-pump service.",
+    "hintTablesMissing": "Tyk Pump has not created its analytics tables yet. Make sure the tyk-pump service is running.",
+    "hintNoTraffic": "The analytics tables exist but no requests have been recorded yet. Send traffic through the gateway to populate them."
+  },
+  "staleNotice": {
+    "title": "Tyk Pump is not running",
+    "description": "New requests are not being recorded, so the figures below are stale. Last record: {lastRecord}. Start the tyk-pump service to resume."
+  },
+  "errorState": {
+    "title": "Failed to load data"
+  },
+  "auditLogs": {
+    "title": "Audit Logs",
+    "subtitle": "Track all actions and changes across your platform.",
+    "export": "Export CSV",
+    "exporting": "Exporting...",
+    "exportHint": "Exports up to 10,000 entries for the selected date range; the resource and action filters are not applied.",
+    "exportError": "Failed to export audit logs",
+    "filters": "Filters",
+    "filterOptions": "Filter Options",
+    "resource": "Resource",
+    "resourcePlaceholder": "apis",
+    "action": "Action",
+    "actionPlaceholder": "Select action",
+    "allActions": "All Actions",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "clearAll": "Clear All",
+    "empty": "No audit logs found.",
+    "systemUser": "System",
+    "columns": {
+      "timestamp": "Timestamp",
+      "user": "User",
+      "resource": "Resource",
+      "ipAddress": "IP Address"
+    },
+    "actions": {
+      "CREATED": "Created",
+      "UPDATED": "Updated",
+      "DELETED": "Deleted",
+      "REVOKED": "Revoked",
+      "ASSIGNED": "Assigned",
+      "UNASSIGNED": "Unassigned",
+      "LOGIN": "Login",
+      "LOGOUT": "Logout",
+      "ROLE_CHANGED": "Role Changed",
+      "PERMISSION_GRANTED": "Permission Granted",
+      "PERMISSION_REVOKED": "Permission Revoked",
+      "QUOTA_EXCEEDED": "Quota Exceeded",
+      "SYNC_SUCCEEDED": "Sync Succeeded",
+      "SYNC_FAILED": "Sync Failed"
+    }
+  }
+}

@@ -1,0 +1,203 @@
+{
+  "title": "API",
+  "subtitle": "Gérez vos définitions et configurations d'API.",
+  "createButton": "Créer une API",
+  "table": {
+    "sync": "Synchro",
+    "authType": "Type d'authentification"
+  },
+  "filters": {
+    "statusLabel": "Filtrer par statut",
+    "syncLabel": "Filtrer par statut de synchro",
+    "syncPlaceholder": "Filtrer par synchro"
+  },
+  "status": {
+    "all": "Tous les statuts",
+    "active": "Active",
+    "draft": "Brouillon",
+    "disabled": "Désactivée"
+  },
+  "sync": {
+    "all": "Tous les états de synchro",
+    "synced": "Synchronisée",
+    "pending": "En attente",
+    "failed": "Échec",
+    "retrying": "Nouvelle tentative...",
+    "syncedToast": "API synchronisée avec la passerelle",
+    "syncFailedToast": "Échec de la synchronisation : {error}",
+    "syncErrorToast": "Échec de la synchronisation de l'API"
+  },
+  "empty": {
+    "filtered": "Aucune API ne correspond à ces filtres.",
+    "all": "Aucune API trouvée."
+  },
+  "actions": {
+    "openMenu": "Ouvrir le menu",
+    "disable": "Désactiver",
+    "activate": "Activer",
+    "activatedToast": "API activée",
+    "disabledToast": "API désactivée",
+    "statusErrorToast": "Échec de la mise à jour du statut de l'API"
+  },
+  "unknownGatewayError": "erreur de passerelle inconnue",
+  "backToList": "Retour aux API",
+  "notFound": {
+    "title": "API introuvable",
+    "message": "Cette API n'existe pas ou a été supprimée."
+  },
+  "loadError": {
+    "title": "Impossible de charger cette API"
+  },
+  "tabs": {
+    "overview": "Aperçu",
+    "configuration": "Configuration",
+    "keys": "Clés",
+    "clients": "Clients"
+  },
+  "overview": {
+    "syncAlert": "Échec de la synchronisation avec la passerelle : {error}",
+    "notSyncedYet": "Pas encore synchronisée"
+  },
+  "field": {
+    "slug": "Slug",
+    "listenPath": "Chemin d'écoute",
+    "upstreamUrl": "URL amont",
+    "authType": "Type d'authentification",
+    "gatewayApiId": "ID API de la passerelle",
+    "syncStatus": "Statut de synchro",
+    "lastSynced": "Dernière synchro",
+    "updated": "Mise à jour"
+  },
+  "keysTab": {
+    "empty": "Aucune clé n'a été émise pour cette API.",
+    "expires": "Expire",
+    "never": "Jamais",
+    "showingCount": "Affichage de {shown} clé(s) sur {total}."
+  },
+  "keyStatus": {
+    "active": "Active",
+    "revoked": "Révoquée",
+    "expired": "Expirée"
+  },
+  "config": {
+    "rateLimit": "Limite de débit",
+    "rateLimitValue": "{rate} req / {per} s",
+    "unlimited": "Illimité",
+    "cors": "CORS",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "allowedOrigins": "Origines autorisées",
+    "allowedMethods": "Méthodes autorisées",
+    "allowedHeaders": "En-têtes autorisés",
+    "exposedHeaders": "En-têtes exposés",
+    "none": "Aucune",
+    "credentials": "Identifiants",
+    "allowed": "Autorisés",
+    "notAllowed": "Non autorisés",
+    "maxAge": "Durée maximale",
+    "maxAgeValue": "{seconds} s",
+    "doNotTrack": "Ne pas suivre",
+    "on": "Activé",
+    "off": "Désactivé",
+    "trackingOn": "Les requêtes sont enregistrées dans les analyses",
+    "trackingOff": "Les requêtes ne sont pas enregistrées dans les analyses"
+  },
+  "form": {
+    "editTitle": "Modifier l'API",
+    "createTitle": "Créer une API",
+    "editDescription": "Les modifications sont synchronisées avec la passerelle à l'enregistrement.",
+    "createDescription": "Ajouter une nouvelle définition d'API à la passerelle.",
+    "slugPlaceholder": "mon-api",
+    "slugLockedDescription": "Le slug ne peut pas être modifié après la création.",
+    "authTypePlaceholder": "Sélectionner un type d'authentification",
+    "upstreamUrlPlaceholder": "https://api.exemple.com",
+    "listenPathPlaceholder": "/mon-api/",
+    "requestsLabel": "Requêtes",
+    "rateLimitDescription": "0 signifie illimité.",
+    "perSecondsLabel": "Par (secondes)",
+    "enableCors": "Activer CORS",
+    "enableCorsDescription": "Autoriser les navigateurs à appeler cette API depuis d'autres origines.",
+    "commaSeparated": "Séparés par des virgules.",
+    "originsPlaceholder": "https://app.exemple.com, http://localhost:3000",
+    "methodsPlaceholder": "GET, POST",
+    "headersPlaceholder": "Authorization, Content-Type",
+    "exposedHeadersPlaceholder": "X-Request-Id",
+    "allowCredentials": "Autoriser les identifiants",
+    "allowCredentialsDescription": "Autoriser les navigateurs à envoyer des cookies et des en-têtes d'authentification.",
+    "maxAgeSecondsLabel": "Durée maximale (secondes)",
+    "analyticsSection": "Analyses",
+    "doNotTrackDescription": "Ne pas enregistrer les requêtes vers cette API dans les analyses.",
+    "saving": "Enregistrement...",
+    "saveChanges": "Enregistrer les modifications",
+    "updatedToast": "API mise à jour",
+    "createdToast": "API créée",
+    "saveError": "Échec de l'enregistrement de l'API",
+    "errors": {
+      "nameTooShort": "Le nom doit comporter au moins 2 caractères",
+      "nameTooLong": "Le nom est trop long",
+      "slugInvalid": "Utilisez des lettres minuscules, des chiffres et des tirets simples",
+      "urlInvalid": "Saisissez une URL valide",
+      "urlMustStartWithScheme": "L'URL doit commencer par http:// ou https://",
+      "listenPathRequired": "Le chemin d'écoute est requis",
+      "listenPathMustStartWithSlash": "Le chemin d'écoute doit commencer par /",
+      "wholeNumberInvalid": "Saisissez un nombre entier",
+      "wholeNumberTooSmall": "Doit être au moins {min}"
+    }
+  },
+  "delete": {
+    "title": "Supprimer l'API ?",
+    "description": "Cette action supprime définitivement <bold>{name}</bold> et la retire de la passerelle. Les API avec des clés actives ne peuvent pas être supprimées ; révoquez d'abord ces clés.",
+    "deleting": "Suppression...",
+    "deletedToast": "API « {name} » supprimée",
+    "error": "Échec de la suppression de l'API"
+  },
+  "clients": {
+    "description": "Les consommateurs s'authentifient via le flux OAuth2 client_credentials.",
+    "createClient": "Créer un client",
+    "creating": "Création...",
+    "clientId": "ID client",
+    "empty": "Aucun client OAuth2 n'a été émis pour cette API.",
+    "rotate": "Renouveler",
+    "revoke": "Révoquer",
+    "createSheetTitle": "Créer un client OAuth2",
+    "createSheetDescription": "Identifiants machine pour cette API, avec des limites optionnelles par client.",
+    "nameLabel": "Nom du client",
+    "namePlaceholder": "Service de facturation partenaire",
+    "nameDescription": "À qui ces identifiants sont destinés.",
+    "rateLimitLabel": "Limite de débit (requêtes / seconde)",
+    "rateLimitDescription": "Laisser vide ou 0 pour illimité.",
+    "quotaLabel": "Quota (requêtes par période)",
+    "quotaFieldLabel": "Quota",
+    "noQuotaPlaceholder": "Aucun quota",
+    "quotaDescription": "Laisser vide pour aucun quota.",
+    "quotaPeriodLabel": "Période du quota",
+    "nameRequired": "Le nom est requis",
+    "nameTooLong": "Le nom doit comporter au maximum 100 caractères",
+    "wholeNumberError": "{label} doit être un nombre entier d'au moins {min}",
+    "createdToast": "Client OAuth2 créé",
+    "createError": "Échec de la création du client OAuth2",
+    "copied": "Copié",
+    "copyError": "Impossible de copier. Sélectionnez le texte et copiez-le manuellement.",
+    "secretDialogTitle": "Copiez ces identifiants",
+    "secretDialogDescription": "Le secret client n'est affiché qu'une seule fois et ne peut plus être récupéré ensuite. Conservez-le en lieu sûr.",
+    "clientSecret": "Secret client",
+    "tokenUrl": "Point de terminaison du jeton",
+    "getToken": "Obtenir un jeton",
+    "getTokenHint": "Envoyez l'<code1>access_token</code1> renvoyé en tant que <code2>Authorization: Bearer &lt;token&gt;</code2> lors de l'appel à cette API.",
+    "copySecret": "Copier le secret",
+    "revokeTitle": "Révoquer ce client OAuth2 ?",
+    "thisClient": "Ce client",
+    "revokeDescription": "{clientLabel} cesse de fonctionner immédiatement — sa politique de passerelle est supprimée, ce qui rejette aussi les jetons déjà émis. Cette action est irréversible.",
+    "revoking": "Révocation...",
+    "revokeClient": "Révoquer le client",
+    "revokedToast": "Client « {name} » révoqué",
+    "revokeError": "Échec de la révocation du client",
+    "secretIssuedToast": "Nouveau secret émis pour « {name} »",
+    "rotateError": "Échec du renouvellement du secret du client"
+  },
+  "authTypes": {
+    "AUTH_TOKEN": "Clé API",
+    "OAUTH": "OAuth2 (identifiants client)",
+    "NONE": "Aucune"
+  }
+}

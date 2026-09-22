@@ -1,0 +1,89 @@
+{
+  "page": {
+    "title": "Tableau de bord",
+    "subtitle": "État de santé de la passerelle, synchronisation des API et activité récente.",
+    "quickActions": "Actions rapides",
+    "manageApis": "Gérer les API",
+    "manageKeys": "Gérer les clés",
+    "manageTenants": "Gérer les locataires",
+    "traffic": "Trafic",
+    "viewAnalytics": "Voir les analyses",
+    "noAnalytics": "Aucune donnée analytique renvoyée.",
+    "noAnalyticsHealth": "Aucun état de santé analytique renvoyé.",
+    "stats": {
+      "requests": "Requêtes",
+      "requestsDescription": "Dernières 24 heures",
+      "errorRate": "Taux d'erreur",
+      "errorsDescription": "{count} erreurs",
+      "avgLatency": "Latence moyenne",
+      "upstreamDescription": "{ms} en amont",
+      "activeApis": "API actives",
+      "activeKeysDescription": "{count} clés actives"
+    }
+  },
+  "gatewayHealth": {
+    "title": "État de la passerelle",
+    "noStatus": "Aucun état de passerelle renvoyé.",
+    "reachable": "Accessible",
+    "unreachable": "Inaccessible",
+    "version": "Version",
+    "redis": "Redis",
+    "latency": "Latence",
+    "redisStatus": {
+      "pass": "Opérationnel",
+      "fail": "Défaillant",
+      "unknown": "Inconnu"
+    }
+  },
+  "recentActivity": {
+    "title": "Activité récente",
+    "viewAll": "Tout voir",
+    "empty": "Aucune activité enregistrée pour le moment.",
+    "system": "Système"
+  },
+  "syncSummary": {
+    "title": "État de synchronisation des API",
+    "noStatus": "Aucun état de synchronisation renvoyé.",
+    "emptyTitle": "Aucune API pour le moment. Créez-en une pour commencer à router du trafic.",
+    "createApi": "Créer une API",
+    "total": "Total",
+    "synced": "Synchronisées",
+    "pending": "En attente",
+    "failed": "Échouées",
+    "noFailedSyncs": "Aucune synchronisation en échec.",
+    "syncFailed": "Synchronisation échouée",
+    "lastSync": "Dernière synchronisation {time}",
+    "retrying": "Nouvelle tentative…",
+    "syncedToast": "{name} synchronisée avec la passerelle",
+    "syncFailedToast": "Échec de synchronisation pour {name}"
+  },
+  "breadcrumb": {
+    "ariaLabel": "Fil d'Ariane",
+    "home": "Tableau de bord",
+    "apis": "API",
+    "keys": "Clés API",
+    "tenants": "Locataires",
+    "analytics": "Analytique",
+    "auditLogs": "Journaux d'audit",
+    "login": "Connexion",
+    "details": "Détails"
+  },
+  "header": {
+    "logoutError": "Échec de la déconnexion",
+    "switchTenant": "Changer de locataire",
+    "noTenantSelected": "Aucun locataire sélectionné",
+    "accountSettings": "Paramètres du compte",
+    "logOut": "Se déconnecter"
+  },
+  "mobileNav": {
+    "openMenu": "Ouvrir le menu de navigation",
+    "description": "Navigation principale"
+  },
+  "dataTable": {
+    "unexpectedError": "Erreur inattendue.",
+    "pageOf": "Page {page} sur {totalPages}",
+    "totalCount": "({count} au total)",
+    "previous": "Précédent",
+    "next": "Suivant"
+  }
+}

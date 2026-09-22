@@ -1,0 +1,203 @@
+{
+  "title": "واجهات البرمجة",
+  "subtitle": "إدارة تعريفات وإعدادات واجهات البرمجة الخاصة بك.",
+  "createButton": "إنشاء واجهة برمجة",
+  "table": {
+    "sync": "المزامنة",
+    "authType": "نوع المصادقة"
+  },
+  "filters": {
+    "statusLabel": "تصفية حسب الحالة",
+    "syncLabel": "تصفية حسب حالة المزامنة",
+    "syncPlaceholder": "تصفية حسب المزامنة"
+  },
+  "status": {
+    "all": "جميع الحالات",
+    "active": "نشطة",
+    "draft": "مسودة",
+    "disabled": "معطّلة"
+  },
+  "sync": {
+    "all": "جميع حالات المزامنة",
+    "synced": "متزامنة",
+    "pending": "قيد الانتظار",
+    "failed": "فشلت",
+    "retrying": "إعادة المحاولة...",
+    "syncedToast": "تمت مزامنة واجهة البرمجة مع البوابة",
+    "syncFailedToast": "فشلت المزامنة: {error}",
+    "syncErrorToast": "فشل في مزامنة واجهة البرمجة"
+  },
+  "empty": {
+    "filtered": "لا توجد واجهات برمجة مطابقة لهذه الفلاتر.",
+    "all": "لم يتم العثور على واجهات برمجة."
+  },
+  "actions": {
+    "openMenu": "فتح القائمة",
+    "disable": "تعطيل",
+    "activate": "تفعيل",
+    "activatedToast": "تم تفعيل واجهة البرمجة",
+    "disabledToast": "تم تعطيل واجهة البرمجة",
+    "statusErrorToast": "فشل في تحديث حالة واجهة البرمجة"
+  },
+  "unknownGatewayError": "خطأ غير معروف في البوابة",
+  "backToList": "العودة إلى واجهات البرمجة",
+  "notFound": {
+    "title": "واجهة البرمجة غير موجودة",
+    "message": "هذه الواجهة غير موجودة أو تم حذفها."
+  },
+  "loadError": {
+    "title": "تعذّر تحميل هذه الواجهة"
+  },
+  "tabs": {
+    "overview": "نظرة عامة",
+    "configuration": "الإعدادات",
+    "keys": "المفاتيح",
+    "clients": "العملاء"
+  },
+  "overview": {
+    "syncAlert": "فشلت المزامنة مع البوابة: {error}",
+    "notSyncedYet": "لم تتم المزامنة بعد"
+  },
+  "field": {
+    "slug": "المعرّف المختصر",
+    "listenPath": "مسار الاستماع",
+    "upstreamUrl": "عنوان URL الأساسي",
+    "authType": "نوع المصادقة",
+    "gatewayApiId": "معرّف الواجهة في البوابة",
+    "syncStatus": "حالة المزامنة",
+    "lastSynced": "آخر مزامنة",
+    "updated": "آخر تحديث"
+  },
+  "keysTab": {
+    "empty": "لم يتم إصدار أي مفتاح لهذه الواجهة.",
+    "expires": "تنتهي صلاحيته",
+    "never": "أبدًا",
+    "showingCount": "عرض {shown} من {total} مفتاح."
+  },
+  "keyStatus": {
+    "active": "نشط",
+    "revoked": "مُلغى",
+    "expired": "منتهي الصلاحية"
+  },
+  "config": {
+    "rateLimit": "حد المعدل",
+    "rateLimitValue": "{rate} طلب / {per} ثانية",
+    "unlimited": "غير محدود",
+    "cors": "CORS",
+    "enabled": "مفعّل",
+    "disabled": "معطّل",
+    "allowedOrigins": "المصادر المسموح بها",
+    "allowedMethods": "الطرق المسموح بها",
+    "allowedHeaders": "الرؤوس المسموح بها",
+    "exposedHeaders": "الرؤوس المعروضة",
+    "none": "لا يوجد",
+    "credentials": "بيانات الاعتماد",
+    "allowed": "مسموح بها",
+    "notAllowed": "غير مسموح بها",
+    "maxAge": "أقصى مدة",
+    "maxAgeValue": "{seconds} ثانية",
+    "doNotTrack": "عدم التتبع",
+    "on": "مفعّل",
+    "off": "معطّل",
+    "trackingOn": "يتم تسجيل الطلبات في التحليلات",
+    "trackingOff": "لا يتم تسجيل الطلبات في التحليلات"
+  },
+  "form": {
+    "editTitle": "تعديل واجهة البرمجة",
+    "createTitle": "إنشاء واجهة برمجة",
+    "editDescription": "تتم مزامنة التغييرات مع البوابة عند الحفظ.",
+    "createDescription": "إضافة تعريف واجهة برمجة جديد إلى البوابة.",
+    "slugPlaceholder": "my-api",
+    "slugLockedDescription": "لا يمكن تغيير المعرّف المختصر بعد الإنشاء.",
+    "authTypePlaceholder": "اختر نوع المصادقة",
+    "upstreamUrlPlaceholder": "https://api.example.com",
+    "listenPathPlaceholder": "/my-api/",
+    "requestsLabel": "الطلبات",
+    "rateLimitDescription": "القيمة 0 تعني غير محدود.",
+    "perSecondsLabel": "لكل (بالثواني)",
+    "enableCors": "تفعيل CORS",
+    "enableCorsDescription": "السماح للمتصفحات باستدعاء هذه الواجهة من مصادر أخرى.",
+    "commaSeparated": "مفصولة بفواصل.",
+    "originsPlaceholder": "https://app.example.com, http://localhost:3000",
+    "methodsPlaceholder": "GET, POST",
+    "headersPlaceholder": "Authorization, Content-Type",
+    "exposedHeadersPlaceholder": "X-Request-Id",
+    "allowCredentials": "السماح ببيانات الاعتماد",
+    "allowCredentialsDescription": "السماح للمتصفحات بإرسال ملفات تعريف الارتباط ورؤوس المصادقة.",
+    "maxAgeSecondsLabel": "أقصى مدة (بالثواني)",
+    "analyticsSection": "التحليلات",
+    "doNotTrackDescription": "عدم تسجيل الطلبات الموجهة لهذه الواجهة في التحليلات.",
+    "saving": "جارٍ الحفظ...",
+    "saveChanges": "حفظ التغييرات",
+    "updatedToast": "تم تحديث واجهة البرمجة",
+    "createdToast": "تم إنشاء واجهة البرمجة",
+    "saveError": "فشل في حفظ واجهة البرمجة",
+    "errors": {
+      "nameTooShort": "يجب أن يتكون الاسم من حرفين على الأقل",
+      "nameTooLong": "الاسم طويل جدًا",
+      "slugInvalid": "استخدم أحرفًا صغيرة وأرقامًا وشرطات مفردة",
+      "urlInvalid": "أدخل عنوان URL صالحًا",
+      "urlMustStartWithScheme": "يجب أن يبدأ عنوان URL بـ http:// أو https://",
+      "listenPathRequired": "مسار الاستماع مطلوب",
+      "listenPathMustStartWithSlash": "يجب أن يبدأ مسار الاستماع بـ /",
+      "wholeNumberInvalid": "أدخل رقمًا صحيحًا",
+      "wholeNumberTooSmall": "يجب أن يكون على الأقل {min}"
+    }
+  },
+  "delete": {
+    "title": "حذف واجهة البرمجة؟",
+    "description": "سيؤدي هذا إلى حذف <bold>{name}</bold> نهائيًا وإزالتها من البوابة. لا يمكن حذف الواجهات التي تحتوي على مفاتيح نشطة؛ يجب إلغاء تلك المفاتيح أولًا.",
+    "deleting": "جارٍ الحذف...",
+    "deletedToast": "تم حذف واجهة البرمجة \"{name}\"",
+    "error": "فشل في حذف واجهة البرمجة"
+  },
+  "clients": {
+    "description": "يقوم المستهلكون بالمصادقة عبر منحة OAuth2 من نوع client_credentials.",
+    "createClient": "إنشاء عميل",
+    "creating": "جارٍ الإنشاء...",
+    "clientId": "معرّف العميل",
+    "empty": "لم يتم إصدار أي عميل OAuth2 لهذه الواجهة.",
+    "rotate": "تدوير",
+    "revoke": "إلغاء",
+    "createSheetTitle": "إنشاء عميل OAuth2",
+    "createSheetDescription": "بيانات اعتماد آلية لهذه الواجهة، مع حدود اختيارية لكل عميل.",
+    "nameLabel": "اسم العميل",
+    "namePlaceholder": "خدمة الفوترة الشريكة",
+    "nameDescription": "الجهة المخصصة لها بيانات الاعتماد هذه.",
+    "rateLimitLabel": "حد المعدل (طلبات / ثانية)",
+    "rateLimitDescription": "اتركه فارغًا أو 0 لغير محدود.",
+    "quotaLabel": "الحصة (طلبات لكل فترة)",
+    "quotaFieldLabel": "الحصة",
+    "noQuotaPlaceholder": "بلا حصة",
+    "quotaDescription": "اتركه فارغًا لعدم تحديد حصة.",
+    "quotaPeriodLabel": "فترة الحصة",
+    "nameRequired": "الاسم مطلوب",
+    "nameTooLong": "يجب ألا يتجاوز الاسم 100 حرف",
+    "wholeNumberError": "يجب أن يكون {label} عددًا صحيحًا لا يقل عن {min}",
+    "createdToast": "تم إنشاء عميل OAuth2",
+    "createError": "فشل في إنشاء عميل OAuth2",
+    "copied": "تم النسخ",
+    "copyError": "تعذّر النسخ. حدّد النص وانسخه يدويًا.",
+    "secretDialogTitle": "انسخ بيانات الاعتماد هذه",
+    "secretDialogDescription": "يظهر السر الخاص بالعميل مرة واحدة فقط ولا يمكن استرجاعه بعد ذلك. احتفظ به في مكان آمن.",
+    "clientSecret": "سر العميل",
+    "tokenUrl": "نقطة نهاية الرمز",
+    "getToken": "الحصول على رمز",
+    "getTokenHint": "أرسل <code1>access_token</code1> الذي تم إرجاعه كـ <code2>Authorization: Bearer &lt;token&gt;</code2> عند استدعاء هذه الواجهة.",
+    "copySecret": "نسخ السر",
+    "revokeTitle": "إلغاء هذا عميل OAuth2؟",
+    "thisClient": "هذا العميل",
+    "revokeDescription": "سيتوقف {clientLabel} عن العمل فورًا — تتم إزالة سياسته في البوابة، مما يرفض أيضًا أي رموز يحملها مسبقًا. لا يمكن التراجع عن هذا الإجراء.",
+    "revoking": "جارٍ الإلغاء...",
+    "revokeClient": "إلغاء العميل",
+    "revokedToast": "تم إلغاء العميل \"{name}\"",
+    "revokeError": "فشل في إلغاء العميل",
+    "secretIssuedToast": "تم إصدار سر جديد لـ \"{name}\"",
+    "rotateError": "فشل في تدوير سر العميل"
+  },
+  "authTypes": {
+    "AUTH_TOKEN": "مفتاح API",
+    "OAUTH": "OAuth2 (بيانات اعتماد العميل)",
+    "NONE": "بدون"
+  }
+}

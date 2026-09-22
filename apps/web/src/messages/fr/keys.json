@@ -1,0 +1,144 @@
+{
+  "list": {
+    "title": "Clés API",
+    "description": "Gérez les clés API pour l'authentification et les autorisations.",
+    "createButton": "Créer une clé",
+    "openMenu": "Ouvrir le menu",
+    "viewDetails": "Voir les détails",
+    "columns": {
+      "api": "API",
+      "expires": "Expire"
+    },
+    "never": "Jamais",
+    "filters": {
+      "statusLabel": "Filtrer par statut",
+      "allStatuses": "Tous les statuts",
+      "apiLabel": "Filtrer par API",
+      "allApis": "Toutes les API"
+    },
+    "empty": "Aucune clé API trouvée.",
+    "emptyFiltered": "Aucune clé API ne correspond à ces filtres."
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "REVOKED": "Révoquée",
+    "EXPIRED": "Expirée"
+  },
+  "actions": {
+    "revoke": "Révoquer",
+    "revoking": "Révocation en cours..."
+  },
+  "detail": {
+    "backToKeys": "Retour aux clés API",
+    "notFound": "Clé API introuvable",
+    "loadFailed": "Impossible de charger la clé API",
+    "unexpectedError": "Erreur inattendue.",
+    "description": "Détails de la clé API, limites et utilisation en direct.",
+    "editDisabledHint": "La modification est indisponible tant que la passerelle est inaccessible",
+    "detailsCard": {
+      "title": "Détails",
+      "api": "API",
+      "created": "Créée le",
+      "expires": "Expire"
+    },
+    "limitsCard": {
+      "title": "Limites",
+      "description": "Configuration en direct lue depuis la passerelle.",
+      "rateLimit": "Limite de débit",
+      "quota": "Quota",
+      "noQuota": "Aucun quota",
+      "quotaRemaining": "Quota restant",
+      "quotaPeriod": "Période du quota",
+      "quotaRenews": "Renouvellement du quota"
+    },
+    "gatewayUnreachable": "Passerelle inaccessible — limites en direct indisponibles."
+  },
+  "usage": {
+    "title": "Utilisation",
+    "description": "Trafic de cette clé et son quota en direct.",
+    "rangeLabel": "Période d'utilisation",
+    "ranges": {
+      "1h": "Dernière heure",
+      "24h": "Dernières 24 heures",
+      "7d": "7 derniers jours",
+      "30d": "30 derniers jours"
+    },
+    "loadFailed": "Impossible de charger l'utilisation.",
+    "quota": "Quota",
+    "quotaUsed": "{used} / {max} utilisés",
+    "quotaUsedAria": "Quota utilisé",
+    "quotaRemaining": "{remaining} restants",
+    "quotaResets": " · renouvellement {date}",
+    "noQuota": "Aucun quota configuré pour cette clé.",
+    "stats": {
+      "requests": "Requêtes",
+      "errors": "Erreurs",
+      "errorRate": "Taux d'erreur",
+      "avgLatencyLabel": "Latence moyenne",
+      "avgLatency": "{value} ms"
+    },
+    "noTraffic": "Aucun trafic enregistré pour cette clé sur la période sélectionnée."
+  },
+  "createdDialog": {
+    "title": "Copiez votre clé API",
+    "description": "Cette clé n'est affichée qu'une seule fois et ne pourra plus être récupérée. Conservez-la en lieu sûr.",
+    "copy": "Copier",
+    "copied": "Copiée",
+    "copyFailed": "Impossible de copier la clé. Sélectionnez-la et copiez-la manuellement."
+  },
+  "form": {
+    "createTitle": "Créer une clé API",
+    "editTitle": "Modifier la clé API",
+    "createDescription": "Générez une clé associée à une API, avec des limites optionnelles.",
+    "editDescription": "Mettez à jour le nom, l'expiration et les limites de la clé.",
+    "nameLabel": "Nom de la clé",
+    "namePlaceholder": "Clé de production",
+    "apiLabel": "API",
+    "apiLoading": "Chargement des API...",
+    "apiPlaceholder": "Sélectionner une API",
+    "noActiveApis": "Aucune API active pour l'instant. Créez et activez une API d'abord.",
+    "apiSyncHint": "L'API doit être synchronisée avec la passerelle avant de pouvoir créer des clés pour elle.",
+    "apiNotEditable": "Une clé ne peut pas être déplacée vers une autre API.",
+    "expiresLabel": "Date d'expiration (facultatif)",
+    "expiresHint": "Valide jusqu'à la fin de cette journée (UTC). Laissez vide pour aucune expiration.",
+    "rateLimitLabel": "Limite de débit (requêtes / seconde)",
+    "rateLimitPlaceholder": "Illimité",
+    "rateLimitHint": "Laissez vide ou 0 pour illimité.",
+    "quotaLabel": "Quota (requêtes par période)",
+    "quotaPlaceholder": "Aucun quota",
+    "quotaHint": "Laissez vide pour aucun quota.",
+    "quotaPeriodLabel": "Période du quota",
+    "editQuotaWarning": "La modification du quota réinitialise le quota consommé de cette clé pour la période en cours.",
+    "submitCreate": "Créer la clé",
+    "submitCreating": "Création...",
+    "submitSave": "Enregistrer les modifications",
+    "submitSaving": "Enregistrement...",
+    "createSuccess": "Clé API créée",
+    "updateSuccess": "Clé API mise à jour",
+    "createFailed": "Impossible de créer la clé API",
+    "updateFailed": "Impossible de mettre à jour la clé API",
+    "quotaPeriods": {
+      "HOURLY": "Horaire",
+      "DAILY": "Journalier",
+      "WEEKLY": "Hebdomadaire",
+      "MONTHLY": "Mensuel"
+    },
+    "everyNSeconds": "Toutes les {seconds} s",
+    "errors": {
+      "nameRequired": "Le nom est requis",
+      "nameTooLong": "Le nom doit comporter au plus 100 caractères",
+      "apiRequired": "L'API est requise",
+      "expiryMustBeFuture": "L'expiration doit être une date future",
+      "rateLimitInvalid": "La limite de débit doit être un nombre entier d’au moins 0",
+      "quotaInvalid": "Le quota doit être un nombre entier d’au moins 1"
+    }
+  },
+  "revokeDialog": {
+    "title": "Révoquer cette clé API ?",
+    "description": "{keyName} cessera de fonctionner immédiatement et sera retirée de la passerelle. Cette action est irréversible.",
+    "thisKey": "Cette clé",
+    "confirm": "Révoquer la clé",
+    "success": "Clé « {name} » révoquée",
+    "failed": "Impossible de révoquer la clé"
+  }
+}

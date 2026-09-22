@@ -1,0 +1,89 @@
+{
+  "page": {
+    "title": "Dashboard",
+    "subtitle": "Gateway health, API sync state and recent activity.",
+    "quickActions": "Quick actions",
+    "manageApis": "Manage APIs",
+    "manageKeys": "Manage Keys",
+    "manageTenants": "Manage Tenants",
+    "traffic": "Traffic",
+    "viewAnalytics": "View analytics",
+    "noAnalytics": "No analytics returned.",
+    "noAnalyticsHealth": "No analytics health returned.",
+    "stats": {
+      "requests": "Requests",
+      "requestsDescription": "Last 24 hours",
+      "errorRate": "Error rate",
+      "errorsDescription": "{count} errors",
+      "avgLatency": "Avg latency",
+      "upstreamDescription": "{ms} upstream",
+      "activeApis": "Active APIs",
+      "activeKeysDescription": "{count} active keys"
+    }
+  },
+  "gatewayHealth": {
+    "title": "Gateway health",
+    "noStatus": "No gateway status returned.",
+    "reachable": "Reachable",
+    "unreachable": "Unreachable",
+    "version": "Version",
+    "redis": "Redis",
+    "latency": "Latency",
+    "redisStatus": {
+      "pass": "Healthy",
+      "fail": "Failing",
+      "unknown": "Unknown"
+    }
+  },
+  "recentActivity": {
+    "title": "Recent activity",
+    "viewAll": "View all",
+    "empty": "No activity recorded yet.",
+    "system": "System"
+  },
+  "syncSummary": {
+    "title": "API sync status",
+    "noStatus": "No sync status returned.",
+    "emptyTitle": "No APIs yet. Create one to start routing traffic.",
+    "createApi": "Create API",
+    "total": "Total",
+    "synced": "Synced",
+    "pending": "Pending",
+    "failed": "Failed",
+    "noFailedSyncs": "No failed syncs.",
+    "syncFailed": "Sync failed",
+    "lastSync": "Last sync {time}",
+    "retrying": "Retrying…",
+    "syncedToast": "{name} synced to the gateway",
+    "syncFailedToast": "Sync failed for {name}"
+  },
+  "breadcrumb": {
+    "ariaLabel": "Breadcrumb",
+    "home": "Dashboard",
+    "apis": "APIs",
+    "keys": "API Keys",
+    "tenants": "Tenants",
+    "analytics": "Analytics",
+    "auditLogs": "Audit Logs",
+    "login": "Login",
+    "details": "Details"
+  },
+  "header": {
+    "logoutError": "Failed to log out",
+    "switchTenant": "Switch tenant",
+    "noTenantSelected": "No tenant selected",
+    "accountSettings": "Account settings",
+    "logOut": "Log out"
+  },
+  "mobileNav": {
+    "openMenu": "Open navigation menu",
+    "description": "Main navigation"
+  },
+  "dataTable": {
+    "unexpectedError": "Unexpected error.",
+    "pageOf": "Page {page} of {totalPages}",
+    "totalCount": "({count} total)",
+    "previous": "Previous",
+    "next": "Next"
+  }
+}

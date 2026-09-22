@@ -1,0 +1,144 @@
+{
+  "list": {
+    "title": "مفاتيح API",
+    "description": "إدارة مفاتيح API للمصادقة والتفويض.",
+    "createButton": "إنشاء مفتاح",
+    "openMenu": "فتح القائمة",
+    "viewDetails": "عرض التفاصيل",
+    "columns": {
+      "api": "الواجهة",
+      "expires": "تاريخ الانتهاء"
+    },
+    "never": "لا ينتهي",
+    "filters": {
+      "statusLabel": "تصفية حسب الحالة",
+      "allStatuses": "جميع الحالات",
+      "apiLabel": "تصفية حسب الواجهة",
+      "allApis": "جميع الواجهات"
+    },
+    "empty": "لا توجد مفاتيح API.",
+    "emptyFiltered": "لا توجد مفاتيح API مطابقة لهذه الفلاتر."
+  },
+  "status": {
+    "ACTIVE": "نشط",
+    "REVOKED": "مُلغى",
+    "EXPIRED": "منتهي"
+  },
+  "actions": {
+    "revoke": "إلغاء",
+    "revoking": "جارٍ الإلغاء..."
+  },
+  "detail": {
+    "backToKeys": "الرجوع إلى مفاتيح API",
+    "notFound": "مفتاح API غير موجود",
+    "loadFailed": "تعذّر تحميل مفتاح API",
+    "unexpectedError": "حدث خطأ غير متوقع.",
+    "description": "تفاصيل مفتاح API وحدوده واستخدامه الحي.",
+    "editDisabledHint": "التعديل غير متاح أثناء تعذّر الوصول إلى البوابة",
+    "detailsCard": {
+      "title": "التفاصيل",
+      "api": "الواجهة",
+      "created": "تاريخ الإنشاء",
+      "expires": "تاريخ الانتهاء"
+    },
+    "limitsCard": {
+      "title": "الحدود",
+      "description": "التكوين الحي المقروء من البوابة.",
+      "rateLimit": "حد معدل الطلبات",
+      "quota": "الحصة",
+      "noQuota": "بلا حصة",
+      "quotaRemaining": "الحصة المتبقية",
+      "quotaPeriod": "فترة الحصة",
+      "quotaRenews": "تجديد الحصة"
+    },
+    "gatewayUnreachable": "تعذّر الوصول إلى البوابة — الحدود الحية غير متوفرة."
+  },
+  "usage": {
+    "title": "الاستخدام",
+    "description": "حركة المرور لهذا المفتاح وحصته الحية.",
+    "rangeLabel": "نطاق الاستخدام",
+    "ranges": {
+      "1h": "الساعة الأخيرة",
+      "24h": "آخر 24 ساعة",
+      "7d": "آخر 7 أيام",
+      "30d": "آخر 30 يومًا"
+    },
+    "loadFailed": "تعذّر تحميل بيانات الاستخدام.",
+    "quota": "الحصة",
+    "quotaUsed": "{used} / {max} مستخدَم",
+    "quotaUsedAria": "الحصة المستخدَمة",
+    "quotaRemaining": "{remaining} متبقٍ",
+    "quotaResets": " · يتجدد {date}",
+    "noQuota": "لا توجد حصة مضبوطة لهذا المفتاح.",
+    "stats": {
+      "requests": "الطلبات",
+      "errors": "الأخطاء",
+      "errorRate": "معدل الأخطاء",
+      "avgLatencyLabel": "متوسط زمن الاستجابة",
+      "avgLatency": "{value} مللي ثانية"
+    },
+    "noTraffic": "لا توجد حركة مرور مسجّلة لهذا المفتاح في النطاق المحدد."
+  },
+  "createdDialog": {
+    "title": "نسخ مفتاح API الخاص بك",
+    "description": "يُعرض هذا المفتاح مرة واحدة فقط ولا يمكن استرجاعه بعد ذلك. احتفظ به في مكان آمن.",
+    "copy": "نسخ",
+    "copied": "تم النسخ",
+    "copyFailed": "تعذّر نسخ المفتاح. حدّده وانسخه يدويًا."
+  },
+  "form": {
+    "createTitle": "إنشاء مفتاح API",
+    "editTitle": "تعديل مفتاح API",
+    "createDescription": "أنشئ مفتاحًا مخصصًا لواجهة واحدة، مع حدود اختيارية.",
+    "editDescription": "حدّث اسم المفتاح وتاريخ انتهائه وحدوده.",
+    "nameLabel": "اسم المفتاح",
+    "namePlaceholder": "مفتاح الإنتاج",
+    "apiLabel": "الواجهة",
+    "apiLoading": "جارٍ تحميل الواجهات...",
+    "apiPlaceholder": "اختر واجهة",
+    "noActiveApis": "لا توجد واجهات نشطة حتى الآن. أنشئ واجهة وفعّلها أولًا.",
+    "apiSyncHint": "يجب مزامنة الواجهة مع البوابة قبل إمكانية إنشاء مفاتيح لها.",
+    "apiNotEditable": "لا يمكن نقل المفتاح إلى واجهة أخرى.",
+    "expiresLabel": "تاريخ الانتهاء (اختياري)",
+    "expiresHint": "يظل صالحًا حتى نهاية هذا اليوم (بالتوقيت العالمي المنسق). اتركه فارغًا لعدم الانتهاء.",
+    "rateLimitLabel": "حد معدل الطلبات (طلبات / ثانية)",
+    "rateLimitPlaceholder": "غير محدود",
+    "rateLimitHint": "اتركه فارغًا أو 0 لغير محدود.",
+    "quotaLabel": "الحصة (طلبات لكل فترة)",
+    "quotaPlaceholder": "بلا حصة",
+    "quotaHint": "اتركه فارغًا لعدم وجود حصة.",
+    "quotaPeriodLabel": "فترة الحصة",
+    "editQuotaWarning": "تغيير الحصة يعيد ضبط ما استُهلك منها لهذا المفتاح في الفترة الحالية.",
+    "submitCreate": "إنشاء المفتاح",
+    "submitCreating": "جارٍ الإنشاء...",
+    "submitSave": "حفظ التغييرات",
+    "submitSaving": "جارٍ الحفظ...",
+    "createSuccess": "تم إنشاء مفتاح API",
+    "updateSuccess": "تم تحديث مفتاح API",
+    "createFailed": "تعذّر إنشاء مفتاح API",
+    "updateFailed": "تعذّر تحديث مفتاح API",
+    "quotaPeriods": {
+      "HOURLY": "ساعي",
+      "DAILY": "يومي",
+      "WEEKLY": "أسبوعي",
+      "MONTHLY": "شهري"
+    },
+    "everyNSeconds": "كل {seconds} ثانية",
+    "errors": {
+      "nameRequired": "الاسم مطلوب",
+      "nameTooLong": "يجب ألا يتجاوز الاسم 100 حرف",
+      "apiRequired": "واجهة البرمجة مطلوبة",
+      "expiryMustBeFuture": "يجب أن يكون تاريخ الانتهاء في المستقبل",
+      "rateLimitInvalid": "يجب أن يكون حد المعدل رقمًا صحيحًا لا يقل عن 0",
+      "quotaInvalid": "يجب أن تكون الحصة رقمًا صحيحًا لا يقل عن 1"
+    }
+  },
+  "revokeDialog": {
+    "title": "هل تريد إلغاء هذا مفتاح API؟",
+    "description": "سيتوقف {keyName} عن العمل فورًا وسيُزال من البوابة. لا يمكن التراجع عن هذا الإجراء.",
+    "thisKey": "هذا المفتاح",
+    "confirm": "إلغاء المفتاح",
+    "success": "تم إلغاء المفتاح «{name}»",
+    "failed": "تعذّر إلغاء المفتاح"
+  }
+}

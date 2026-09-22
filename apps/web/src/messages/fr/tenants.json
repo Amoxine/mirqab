@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Organisations",
+    "description": "Gérez les organisations clientes et leurs abonnements.",
+    "createButton": "Créer une organisation",
+    "openMenu": "Ouvrir le menu",
+    "empty": "Aucune organisation trouvée."
+  },
+  "fields": {
+    "plan": "Forfait",
+    "slug": "Slug",
+    "updated": "Mis à jour",
+    "role": "Rôle"
+  },
+  "actions": {
+    "suspend": "Suspendre",
+    "reactivate": "Réactiver",
+    "archive": "Archiver"
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "SUSPENDED": "Suspendue",
+    "ARCHIVED": "Archivée"
+  },
+  "plan": {
+    "FREE": "Gratuit",
+    "STARTER": "Starter",
+    "PRO": "Pro",
+    "ENTERPRISE": "Enterprise"
+  },
+  "roles": {
+    "admin": "Administrateur",
+    "operator": "Opérateur",
+    "viewer": "Lecteur",
+    "super_admin": "Super administrateur"
+  },
+  "detail": {
+    "backToTenants": "Retour aux organisations",
+    "overview": "Aperçu",
+    "notFoundTitle": "Organisation introuvable",
+    "notFoundMessage": "Cette organisation n’existe pas, ou vous n’en êtes pas membre.",
+    "loadErrorTitle": "Impossible de charger cette organisation"
+  },
+  "members": {
+    "title": "Membres",
+    "invite": "Inviter",
+    "empty": "Aucun membre pour le moment.",
+    "columnUser": "Utilisateur",
+    "columnJoined": "Rejoint le",
+    "roleAriaLabel": "Rôle de {email}",
+    "removeAriaLabel": "Retirer {email}",
+    "roleUpdatedToast": "{email} est désormais {role}",
+    "roleUpdateError": "Impossible de modifier le rôle"
+  },
+  "form": {
+    "createTitle": "Créer une organisation",
+    "editTitle": "Modifier l’organisation",
+    "createDescription": "Ajoutez une nouvelle organisation cliente.",
+    "editDescription": "Mettez à jour les informations de cette organisation.",
+    "namePlaceholder": "Acme Corporation",
+    "slugPlaceholder": "acme-corp",
+    "slugImmutable": "Le slug ne peut pas être modifié après la création.",
+    "planPlaceholder": "Sélectionner un forfait",
+    "submitCreate": "Créer",
+    "submitSave": "Enregistrer les modifications",
+    "submitSaving": "Enregistrement...",
+    "createSuccess": "Organisation créée",
+    "updateSuccess": "Organisation mise à jour",
+    "saveFailed": "Impossible d’enregistrer l’organisation",
+    "errors": {
+      "nameTooShort": "Doit comporter au moins 2 caractères",
+      "slugInvalid": "Lettres minuscules, chiffres et tirets uniquement"
+    }
+  },
+  "invite": {
+    "title": "Inviter un membre",
+    "description": "Ajoutez un utilisateur Open Gateway existant à cette organisation par e-mail.",
+    "emailPlaceholder": "personne@exemple.com",
+    "rolePlaceholder": "Sélectionner un rôle",
+    "submit": "Inviter",
+    "submitting": "Invitation en cours...",
+    "successToast": "Invitation envoyée à {email}",
+    "errorToast": "Impossible d’inviter cet utilisateur",
+    "notFoundError": "Aucun utilisateur ne s’est encore connecté avec cette adresse e-mail. Il doit d’abord s’inscrire et se connecter une fois avant de pouvoir être invité.",
+    "alreadyMemberError": "Cet utilisateur est déjà membre de cette organisation.",
+    "errors": {
+      "emailRequired": "Obligatoire",
+      "emailInvalid": "Saisissez une adresse e-mail valide"
+    }
+  },
+  "remove": {
+    "title": "Retirer ce membre ?",
+    "descriptionSuffix": "perdra immédiatement l’accès à cette organisation.",
+    "confirm": "Retirer",
+    "pending": "Retrait en cours...",
+    "successToast": "{email} retiré(e)",
+    "errorToast": "Impossible de retirer ce membre"
+  },
+  "statusDialog": {
+    "suspend": {
+      "title": "Suspendre cette organisation ?",
+      "description": "Ses membres perdent immédiatement l’accès. Vous pourrez la réactiver plus tard.",
+      "confirm": "Suspendre",
+      "pending": "Suspension en cours..."
+    },
+    "reactivate": {
+      "title": "Réactiver cette organisation ?",
+      "description": "Ses membres retrouvent immédiatement l’accès.",
+      "confirm": "Réactiver",
+      "pending": "Réactivation en cours..."
+    },
+    "archive": {
+      "title": "Archiver cette organisation ?",
+      "description": "Il s’agit d’une suppression douce : l’organisation et ses données sont conservées mais elle devient inutilisable. Cette action ne peut pas être annulée depuis cette page.",
+      "confirm": "Archiver",
+      "pending": "Archivage en cours..."
+    },
+    "suspendedToast": "« {name} » suspendue",
+    "reactivatedToast": "« {name} » réactivée",
+    "archivedToast": "« {name} » archivée",
+    "errorToast": "Impossible de mettre à jour l’organisation"
+  }
+}

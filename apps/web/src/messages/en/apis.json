@@ -1,0 +1,203 @@
+{
+  "title": "APIs",
+  "subtitle": "Manage your API definitions and configurations.",
+  "createButton": "Create API",
+  "table": {
+    "sync": "Sync",
+    "authType": "Auth Type"
+  },
+  "filters": {
+    "statusLabel": "Filter by status",
+    "syncLabel": "Filter by sync status",
+    "syncPlaceholder": "Filter by sync"
+  },
+  "status": {
+    "all": "All statuses",
+    "active": "Active",
+    "draft": "Draft",
+    "disabled": "Disabled"
+  },
+  "sync": {
+    "all": "All sync states",
+    "synced": "Synced",
+    "pending": "Pending",
+    "failed": "Failed",
+    "retrying": "Retrying...",
+    "syncedToast": "API synced to the gateway",
+    "syncFailedToast": "Sync failed: {error}",
+    "syncErrorToast": "Failed to sync API"
+  },
+  "empty": {
+    "filtered": "No APIs match these filters.",
+    "all": "No APIs found."
+  },
+  "actions": {
+    "openMenu": "Open menu",
+    "disable": "Disable",
+    "activate": "Activate",
+    "activatedToast": "API activated",
+    "disabledToast": "API disabled",
+    "statusErrorToast": "Failed to update API status"
+  },
+  "unknownGatewayError": "unknown gateway error",
+  "backToList": "Back to APIs",
+  "notFound": {
+    "title": "API not found",
+    "message": "This API does not exist or was deleted."
+  },
+  "loadError": {
+    "title": "Could not load this API"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "configuration": "Configuration",
+    "keys": "Keys",
+    "clients": "Clients"
+  },
+  "overview": {
+    "syncAlert": "Gateway sync failed: {error}",
+    "notSyncedYet": "Not synced yet"
+  },
+  "field": {
+    "slug": "Slug",
+    "listenPath": "Listen path",
+    "upstreamUrl": "Upstream URL",
+    "authType": "Auth type",
+    "gatewayApiId": "Gateway API ID",
+    "syncStatus": "Sync status",
+    "lastSynced": "Last synced",
+    "updated": "Updated"
+  },
+  "keysTab": {
+    "empty": "No keys have been issued for this API.",
+    "expires": "Expires",
+    "never": "Never",
+    "showingCount": "Showing {shown} of {total} keys."
+  },
+  "keyStatus": {
+    "active": "Active",
+    "revoked": "Revoked",
+    "expired": "Expired"
+  },
+  "config": {
+    "rateLimit": "Rate limit",
+    "rateLimitValue": "{rate} req / {per} s",
+    "unlimited": "Unlimited",
+    "cors": "CORS",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "allowedOrigins": "Allowed origins",
+    "allowedMethods": "Allowed methods",
+    "allowedHeaders": "Allowed headers",
+    "exposedHeaders": "Exposed headers",
+    "none": "None",
+    "credentials": "Credentials",
+    "allowed": "Allowed",
+    "notAllowed": "Not allowed",
+    "maxAge": "Max age",
+    "maxAgeValue": "{seconds} s",
+    "doNotTrack": "Do not track",
+    "on": "On",
+    "off": "Off",
+    "trackingOn": "Requests are recorded in analytics",
+    "trackingOff": "Requests are not recorded in analytics"
+  },
+  "form": {
+    "editTitle": "Edit API",
+    "createTitle": "Create API",
+    "editDescription": "Changes are synced to the gateway on save.",
+    "createDescription": "Add a new API definition to the gateway.",
+    "slugPlaceholder": "my-api",
+    "slugLockedDescription": "The slug cannot be changed after creation.",
+    "authTypePlaceholder": "Select auth type",
+    "upstreamUrlPlaceholder": "https://api.example.com",
+    "listenPathPlaceholder": "/my-api/",
+    "requestsLabel": "Requests",
+    "rateLimitDescription": "0 means unlimited.",
+    "perSecondsLabel": "Per (seconds)",
+    "enableCors": "Enable CORS",
+    "enableCorsDescription": "Let browsers call this API from other origins.",
+    "commaSeparated": "Comma-separated.",
+    "originsPlaceholder": "https://app.example.com, http://localhost:3000",
+    "methodsPlaceholder": "GET, POST",
+    "headersPlaceholder": "Authorization, Content-Type",
+    "exposedHeadersPlaceholder": "X-Request-Id",
+    "allowCredentials": "Allow credentials",
+    "allowCredentialsDescription": "Let browsers send cookies and auth headers.",
+    "maxAgeSecondsLabel": "Max age (seconds)",
+    "analyticsSection": "Analytics",
+    "doNotTrackDescription": "Do not record requests to this API in analytics.",
+    "saving": "Saving...",
+    "saveChanges": "Save changes",
+    "updatedToast": "API updated",
+    "createdToast": "API created",
+    "saveError": "Failed to save API",
+    "errors": {
+      "nameTooShort": "Name must be at least 2 characters",
+      "nameTooLong": "Name is too long",
+      "slugInvalid": "Use lowercase letters, numbers and single hyphens",
+      "urlInvalid": "Enter a valid URL",
+      "urlMustStartWithScheme": "URL must start with http:// or https://",
+      "listenPathRequired": "Listen path is required",
+      "listenPathMustStartWithSlash": "Listen path must start with /",
+      "wholeNumberInvalid": "Enter a whole number",
+      "wholeNumberTooSmall": "Must be at least {min}"
+    }
+  },
+  "delete": {
+    "title": "Delete API?",
+    "description": "This permanently deletes <bold>{name}</bold> and removes it from the gateway. APIs with active keys cannot be deleted; revoke those keys first.",
+    "deleting": "Deleting...",
+    "deletedToast": "API \"{name}\" deleted",
+    "error": "Failed to delete API"
+  },
+  "clients": {
+    "description": "Consumers authenticate with the OAuth2 client_credentials grant.",
+    "createClient": "Create client",
+    "creating": "Creating...",
+    "clientId": "Client ID",
+    "empty": "No OAuth2 clients have been issued for this API.",
+    "rotate": "Rotate",
+    "revoke": "Revoke",
+    "createSheetTitle": "Create OAuth2 client",
+    "createSheetDescription": "Machine credentials for this API, with optional per-client limits.",
+    "nameLabel": "Client name",
+    "namePlaceholder": "Partner billing service",
+    "nameDescription": "Who these credentials are for.",
+    "rateLimitLabel": "Rate limit (requests / second)",
+    "rateLimitDescription": "Leave blank or 0 for unlimited.",
+    "quotaLabel": "Quota (requests per period)",
+    "quotaFieldLabel": "Quota",
+    "noQuotaPlaceholder": "No quota",
+    "quotaDescription": "Leave blank for no quota.",
+    "quotaPeriodLabel": "Quota period",
+    "nameRequired": "Name is required",
+    "nameTooLong": "Name must be at most 100 characters",
+    "wholeNumberError": "{label} must be a whole number of at least {min}",
+    "createdToast": "OAuth2 client created",
+    "createError": "Failed to create OAuth2 client",
+    "copied": "Copied",
+    "copyError": "Could not copy. Select the text and copy it manually.",
+    "secretDialogTitle": "Copy these credentials",
+    "secretDialogDescription": "The client secret is shown only once and cannot be retrieved later. Store it somewhere safe.",
+    "clientSecret": "Client secret",
+    "tokenUrl": "Token endpoint",
+    "getToken": "Get a token",
+    "getTokenHint": "Send the returned <code1>access_token</code1> as <code2>Authorization: Bearer &lt;token&gt;</code2> when calling this API.",
+    "copySecret": "Copy secret",
+    "revokeTitle": "Revoke this OAuth2 client?",
+    "thisClient": "This client",
+    "revokeDescription": "{clientLabel} stops working immediately — its gateway policy is removed, so tokens it already holds are rejected too. This cannot be undone.",
+    "revoking": "Revoking...",
+    "revokeClient": "Revoke client",
+    "revokedToast": "Client \"{name}\" revoked",
+    "revokeError": "Failed to revoke client",
+    "secretIssuedToast": "New secret issued for \"{name}\"",
+    "rotateError": "Failed to rotate the client secret"
+  },
+  "authTypes": {
+    "AUTH_TOKEN": "API Key",
+    "OAUTH": "OAuth2 (client credentials)",
+    "NONE": "None"
+  }
+}

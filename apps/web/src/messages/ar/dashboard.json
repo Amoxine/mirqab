@@ -1,0 +1,89 @@
+{
+  "page": {
+    "title": "لوحة التحكم",
+    "subtitle": "سلامة البوابة، حالة مزامنة واجهات البرمجة، والنشاط الأخير.",
+    "quickActions": "إجراءات سريعة",
+    "manageApis": "إدارة واجهات البرمجة",
+    "manageKeys": "إدارة المفاتيح",
+    "manageTenants": "إدارة المستأجرين",
+    "traffic": "الحركة",
+    "viewAnalytics": "عرض التحليلات",
+    "noAnalytics": "لم يتم إرجاع أي بيانات تحليلية.",
+    "noAnalyticsHealth": "لم يتم إرجاع حالة سلامة التحليلات.",
+    "stats": {
+      "requests": "الطلبات",
+      "requestsDescription": "آخر 24 ساعة",
+      "errorRate": "معدل الأخطاء",
+      "errorsDescription": "{count} أخطاء",
+      "avgLatency": "متوسط زمن الاستجابة",
+      "upstreamDescription": "{ms} في الخادم الأصلي",
+      "activeApis": "واجهات برمجة نشطة",
+      "activeKeysDescription": "{count} مفاتيح نشطة"
+    }
+  },
+  "gatewayHealth": {
+    "title": "سلامة البوابة",
+    "noStatus": "لم يتم إرجاع حالة البوابة.",
+    "reachable": "متاحة",
+    "unreachable": "غير متاحة",
+    "version": "الإصدار",
+    "redis": "Redis",
+    "latency": "زمن الاستجابة",
+    "redisStatus": {
+      "pass": "سليم",
+      "fail": "متعطل",
+      "unknown": "غير معروف"
+    }
+  },
+  "recentActivity": {
+    "title": "النشاط الأخير",
+    "viewAll": "عرض الكل",
+    "empty": "لا يوجد نشاط مسجل حتى الآن.",
+    "system": "النظام"
+  },
+  "syncSummary": {
+    "title": "حالة مزامنة واجهات البرمجة",
+    "noStatus": "لم يتم إرجاع حالة المزامنة.",
+    "emptyTitle": "لا توجد واجهات برمجة بعد. أنشئ واحدة للبدء بتوجيه الحركة.",
+    "createApi": "إنشاء واجهة برمجة",
+    "total": "الإجمالي",
+    "synced": "متزامنة",
+    "pending": "قيد الانتظار",
+    "failed": "فاشلة",
+    "noFailedSyncs": "لا توجد مزامنات فاشلة.",
+    "syncFailed": "فشلت المزامنة",
+    "lastSync": "آخر مزامنة {time}",
+    "retrying": "إعادة المحاولة…",
+    "syncedToast": "تمت مزامنة {name} مع البوابة",
+    "syncFailedToast": "فشلت مزامنة {name}"
+  },
+  "breadcrumb": {
+    "ariaLabel": "مسار التنقل",
+    "home": "لوحة التحكم",
+    "apis": "واجهات البرمجة",
+    "keys": "مفاتيح API",
+    "tenants": "المستأجرون",
+    "analytics": "التحليلات",
+    "auditLogs": "سجلات التدقيق",
+    "login": "تسجيل الدخول",
+    "details": "التفاصيل"
+  },
+  "header": {
+    "logoutError": "فشل تسجيل الخروج",
+    "switchTenant": "تبديل المستأجر",
+    "noTenantSelected": "لم يتم تحديد مستأجر",
+    "accountSettings": "إعدادات الحساب",
+    "logOut": "تسجيل الخروج"
+  },
+  "mobileNav": {
+    "openMenu": "فتح قائمة التنقل",
+    "description": "التنقل الرئيسي"
+  },
+  "dataTable": {
+    "unexpectedError": "حدث خطأ غير متوقع.",
+    "pageOf": "الصفحة {page} من {totalPages}",
+    "totalCount": "(الإجمالي {count})",
+    "previous": "السابق",
+    "next": "التالي"
+  }
+}

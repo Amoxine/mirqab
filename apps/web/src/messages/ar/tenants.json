@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "المؤسسات",
+    "description": "إدارة المؤسسات والاشتراكات.",
+    "createButton": "إنشاء مؤسسة",
+    "openMenu": "فتح القائمة",
+    "empty": "لم يتم العثور على أي مؤسسة."
+  },
+  "fields": {
+    "plan": "الخطة",
+    "slug": "المعرّف المختصر",
+    "updated": "آخر تحديث",
+    "role": "الدور"
+  },
+  "actions": {
+    "suspend": "تعليق",
+    "reactivate": "إعادة التنشيط",
+    "archive": "أرشفة"
+  },
+  "status": {
+    "ACTIVE": "نشطة",
+    "SUSPENDED": "معلّقة",
+    "ARCHIVED": "مؤرشفة"
+  },
+  "plan": {
+    "FREE": "مجانية",
+    "STARTER": "أساسية",
+    "PRO": "متقدمة",
+    "ENTERPRISE": "للمؤسسات"
+  },
+  "roles": {
+    "admin": "مسؤول",
+    "operator": "مُشغّل",
+    "viewer": "مشاهد",
+    "super_admin": "مسؤول عام"
+  },
+  "detail": {
+    "backToTenants": "الرجوع إلى المؤسسات",
+    "overview": "نظرة عامة",
+    "notFoundTitle": "المؤسسة غير موجودة",
+    "notFoundMessage": "هذه المؤسسة غير موجودة، أو أنك لست عضوًا فيها.",
+    "loadErrorTitle": "تعذّر تحميل هذه المؤسسة"
+  },
+  "members": {
+    "title": "الأعضاء",
+    "invite": "دعوة",
+    "empty": "لا يوجد أعضاء حتى الآن.",
+    "columnUser": "المستخدم",
+    "columnJoined": "تاريخ الانضمام",
+    "roleAriaLabel": "دور {email}",
+    "removeAriaLabel": "إزالة {email}",
+    "roleUpdatedToast": "أصبح {email} الآن {role}",
+    "roleUpdateError": "تعذّر تغيير الدور"
+  },
+  "form": {
+    "createTitle": "إنشاء مؤسسة",
+    "editTitle": "تعديل المؤسسة",
+    "createDescription": "أضف مؤسسة جديدة.",
+    "editDescription": "حدّث بيانات هذه المؤسسة.",
+    "namePlaceholder": "Acme Corporation",
+    "slugPlaceholder": "acme-corp",
+    "slugImmutable": "لا يمكن تغيير المعرّف المختصر بعد الإنشاء.",
+    "planPlaceholder": "اختر خطة",
+    "submitCreate": "إنشاء",
+    "submitSave": "حفظ التغييرات",
+    "submitSaving": "جارٍ الحفظ...",
+    "createSuccess": "تم إنشاء المؤسسة",
+    "updateSuccess": "تم تحديث المؤسسة",
+    "saveFailed": "تعذّر حفظ المؤسسة",
+    "errors": {
+      "nameTooShort": "يجب أن يتكون من حرفين على الأقل",
+      "slugInvalid": "أحرف صغيرة وأرقام وشرطات فقط"
+    }
+  },
+  "invite": {
+    "title": "دعوة عضو",
+    "description": "أضف مستخدمًا موجودًا في Open Gateway إلى هذه المؤسسة عبر بريده الإلكتروني.",
+    "emailPlaceholder": "person@example.com",
+    "rolePlaceholder": "اختر دورًا",
+    "submit": "دعوة",
+    "submitting": "جارٍ الدعوة...",
+    "successToast": "تمت دعوة {email}",
+    "errorToast": "تعذّرت دعوة المستخدم",
+    "notFoundError": "لم يسجّل أي مستخدم بهذا البريد الإلكتروني الدخول بعد. يجب عليه التسجيل وتسجيل الدخول مرة واحدة قبل أن تتمكن من دعوته.",
+    "alreadyMemberError": "هذا المستخدم عضو في هذه المؤسسة بالفعل.",
+    "errors": {
+      "emailRequired": "مطلوب",
+      "emailInvalid": "أدخل بريدًا إلكترونيًا صالحًا"
+    }
+  },
+  "remove": {
+    "title": "إزالة هذا العضو؟",
+    "descriptionSuffix": "سيفقد الوصول إلى هذه المؤسسة فورًا.",
+    "confirm": "إزالة",
+    "pending": "جارٍ الإزالة...",
+    "successToast": "تمت إزالة {email}",
+    "errorToast": "تعذّرت إزالة العضو"
+  },
+  "statusDialog": {
+    "suspend": {
+      "title": "تعليق هذه المؤسسة؟",
+      "description": "سيفقد أعضاؤها الوصول فورًا. يمكنك إعادة تنشيطها لاحقًا.",
+      "confirm": "تعليق",
+      "pending": "جارٍ التعليق..."
+    },
+    "reactivate": {
+      "title": "إعادة تنشيط هذه المؤسسة؟",
+      "description": "سيستعيد أعضاؤها الوصول فورًا.",
+      "confirm": "إعادة التنشيط",
+      "pending": "جارٍ إعادة التنشيط..."
+    },
+    "archive": {
+      "title": "أرشفة هذه المؤسسة؟",
+      "description": "هذا حذف مؤقت: يتم الاحتفاظ بالمؤسسة وبياناتها لكنها تصبح غير قابلة للاستخدام. لا يمكن التراجع عن هذا الإجراء من هذه الصفحة.",
+      "confirm": "أرشفة",
+      "pending": "جارٍ الأرشفة..."
+    },
+    "suspendedToast": "تم تعليق «{name}»",
+    "reactivatedToast": "تمت إعادة تنشيط «{name}»",
+    "archivedToast": "تمت أرشفة «{name}»",
+    "errorToast": "تعذّر تحديث المؤسسة"
+  }
+}
