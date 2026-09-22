@@ -190,7 +190,32 @@ export function mapToTykFormat(
   tenant: TenantGatewayScope,
   jwtSource = '',
 ): Record<string, unknown> {
-  const { rateLimit, cors, doNotTrack, jwt } = readConfig(apiDef.config);
+  const { rateLimit, cors, doNotTrack, jwt, throttle, timeoutSeconds, circuitBreaker, requestSizeLimitBytes, loadBalancing, uptimeTests } =
+    readConfig(apiDef.config);
+
+  // Classic keeps per-path middleware under `extended_paths`, so an API-WIDE timeout, size limit or
+  // circuit breaker is expressed as entries whose path matches everything. `/.*` is Tyk's own
+  // convention for that (the field is a regex, not a literal path).
+  const extendedPaths: Record<string, unknown> = {};
+  if (timeoutSeconds) {
+    extendedPaths.hard_timeouts = CATCH_ALL_METHODS.map((method) => ({ path: '/.*', method, timeout: timeoutSeconds }));
+  }
+  if (requestSizeLimitBytes) {
+    extendedPaths.size_limits = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      size_limit: requestSizeLimitBytes,
+    }));
+  }
+  if (circuitBreaker) {
+    extendedPaths.circuit_breakers = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      threshold_percent: circuitBreaker.threshold,
+      samples: circuitBreaker.sampleSize,
+      return_to_service_after: circuitBreaker.coolDownSeconds,
+    }));
+  }
 
   return {
     name: apiDef.name,
@@ -200,9 +225,27 @@ export function mapToTykFormat(
       listen_path: gatewayListenPath(tenant.slug, apiDef.listenPath),
       target_url: apiDef.proxyUrl,
       strip_listen_path: true,
+      ...(loadBalancing && loadBalancing.targets.length > 0
+        ? {
+            enable_load_balancing: true,
+            // Classic has no per-target weight field: a target is repeated `weight` times in the
+            // list, which is how Tyk expresses weighting here. OAS takes {url, weight} directly.
+            target_list: loadBalancing.targets.flatMap((t) => Array<string>(t.weight).fill(t.url)),
+          }
+        : {}),
     },
     // Tyk rejects traffic with 403 "Version information not found" without version_data.
-    version_data: { not_versioned: true, versions: { Default: { name: 'Default' } } },
+    version_data: {
+      not_versioned: true,
+      versions: {
+        Default: {
+          name: 'Default',
+          ...(Object.keys(extendedPaths).length > 0
+            ? { use_extended_paths: true, extended_paths: extendedPaths }
+            : {}),
+        },
+      },
+    },
     use_keyless: apiDef.authType === 'NONE',
     use_standard_auth: apiDef.authType === 'AUTH_TOKEN',
     // OAUTH = a Hydra-issued client_credentials JWT, verified against Hydra's signing key. JWT (O3) =
@@ -236,6 +279,23 @@ export function mapToTykFormat(
         }
       : {}),
     ...(doNotTrack === undefined ? {} : { do_not_track: doNotTrack }),
+    ...(throttle
+      ? {
+          global_rate_limit_throttle_retry_limit: throttle.retryLimit,
+          global_rate_limit_throttle_interval: throttle.intervalSeconds,
+        }
+      : {}),
+    ...(uptimeTests && uptimeTests.length > 0
+      ? {
+          uptime_tests: {
+            check_list: uptimeTests.map((t) => ({
+              url: t.url,
+              method: t.method ?? 'GET',
+              ...(t.timeoutSeconds === undefined ? {} : { timeout: t.timeoutSeconds }),
+            })),
+          },
+        }
+      : {}),
   };
 }
 
@@ -260,6 +320,24 @@ const rateLimitPer = (seconds: number): string => `${String(seconds)}s`;
 const SCHEME_NAME = { token: 'authToken', jwt: 'jwtAuth' } as const;
 
 /**
+ * Methods an API-wide middleware entry is expanded across.
+ *
+ * Both Tyk formats attach timeout / size-limit / circuit-breaker middleware PER PATH AND METHOD;
+ * neither has an "any method" form. An API-level setting is therefore one entry per method, in both
+ * mappers — emitting only GET would silently leave every write request unprotected.
+ */
+const CATCH_ALL_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
+
+/**
+ * OAS path template used for API-wide middleware. Tyk matches operations by the path template, so a
+ * single templated segment stands in for the regex a classic definition would use (`/.*`).
+ * Verified on v5.15.0: a breaker declared on this operation trips, and the gateway logs
+ * `[CIRCUIT BREAKER] Breaker tripped for path: /{wildcard}`.
+ */
+const CATCH_ALL_PATH = '/{wildcard}';
+const catchAllOperationId = (method: string): string => `catchAll${method}`;
+
+/**
  * Tyk-OAS form of the same definition `mapToTykFormat` produces, for `defFormat: OAS` APIs.
  *
  * Deliberately a SIBLING of the classic mapper rather than a replacement: pre-WP13b rows are
@@ -277,7 +355,8 @@ export function mapToTykOas(
   tenant: TenantGatewayScope,
   jwtSource = '',
 ): Record<string, unknown> {
-  const { rateLimit, cors, doNotTrack, jwt } = readConfig(apiDef.config);
+  const { rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests, circuitBreaker } =
+    readConfig(apiDef.config);
   const isOAuth = apiDef.authType === 'OAUTH';
   const isJwt = apiDef.authType === 'JWT';
   const isToken = apiDef.authType === 'AUTH_TOKEN';
@@ -337,6 +416,11 @@ export function mapToTykOas(
       debug: false,
     };
   }
+  if (requestSizeLimitBytes) {
+    // `X-Tyk-GlobalRequestSizeLimit`. The DTO caps this at the edge's own limit, so the gateway is
+    // always the smaller of the two enforcers and an oversize body is answered by Tyk.
+    globalMiddleware.requestSizeLimit = { enabled: true, value: requestSizeLimitBytes };
+  }
   if (doNotTrack !== undefined) {
     // S6 caveat 3: POLARITY INVERTS. classic `do_not_track: true` == OAS
     // `trafficLogs.enabled: false`. Copying the boolean across turns analytics back on for exactly
@@ -344,12 +428,39 @@ export function mapToTykOas(
     globalMiddleware.trafficLogs = { enabled: !doNotTrack };
   }
 
+  // An API-wide circuit breaker has no home on `upstream` or `middleware.global` — measured against
+  // the v5.15.0 schema, `circuitBreaker` exists ONLY on `X-Tyk-Operation`. So an API-level breaker
+  // is expressed the way the classic mapper expresses it, one catch-all entry per method, here as a
+  // synthesised OAS operation rather than an `extended_paths` regex. Without this an OAS api would
+  // silently have no breaker while a CLASSIC one did.
+  const operations: Record<string, unknown> = {};
+  const catchAllPaths: Record<string, unknown> = {};
+  if (circuitBreaker) {
+    const pathItem: Record<string, unknown> = {
+      parameters: [{ name: 'wildcard', in: 'path', required: true, schema: { type: 'string' } }],
+    };
+    for (const method of CATCH_ALL_METHODS) {
+      const operationId = catchAllOperationId(method);
+      pathItem[method.toLowerCase()] = { operationId, responses: { '200': { description: 'ok' } } };
+      operations[operationId] = {
+        circuitBreaker: {
+          enabled: true,
+          threshold: circuitBreaker.threshold,
+          sampleSize: circuitBreaker.sampleSize,
+          coolDownPeriod: circuitBreaker.coolDownSeconds,
+          halfOpenStateEnabled: true,
+        },
+      };
+    }
+    catchAllPaths[CATCH_ALL_PATH] = pathItem;
+  }
+
   return {
     openapi: '3.0.3',
     info: { title: apiDef.name, version: '1.0.0' },
-    // No paths are described: this product proxies whole upstreams rather than per-endpoint
-    // contracts. Per-endpoint middleware arrives with WP15a/WP15b.
-    paths: {},
+    // Empty unless an API-wide middleware needs a catch-all operation to hang off: this product
+    // proxies whole upstreams rather than describing per-endpoint contracts.
+    paths: catchAllPaths,
     ...(authenticated ? { components: { securitySchemes: componentSchemes }, security } : {}),
     'x-tyk-api-gateway': {
       info: {
@@ -375,13 +486,44 @@ export function mapToTykOas(
               },
             }
           : {}),
+        ...(timeoutSeconds ? { enforceTimeout: { enabled: true, duration: `${String(timeoutSeconds)}s` } } : {}),
+        ...(loadBalancing && loadBalancing.targets.length > 0
+          ? {
+              loadBalancing: {
+                enabled: true,
+                ...(loadBalancing.skipUnavailableHosts === undefined
+                  ? {}
+                  : { skipUnavailableHosts: loadBalancing.skipUnavailableHosts }),
+                targets: loadBalancing.targets.map((t) => ({ url: t.url, weight: t.weight })),
+              },
+            }
+          : {}),
+        ...(uptimeTests && uptimeTests.length > 0
+          ? {
+              uptimeTests: {
+                enabled: true,
+                tests: uptimeTests.map((t) => ({
+                  url: t.url,
+                  method: t.method ?? 'GET',
+                  ...(t.timeoutSeconds === undefined ? {} : { timeout: `${String(t.timeoutSeconds)}s` }),
+                })),
+              },
+            }
+          : {}),
       },
       server: {
         listenPath: { value: gatewayListenPath(tenant.slug, apiDef.listenPath), strip: true },
         // classic `use_keyless` is the inverse of this flag; a keyless API sets it false.
         authentication: authenticated ? { enabled: true, securitySchemes } : { enabled: false },
       },
-      ...(Object.keys(globalMiddleware).length > 0 ? { middleware: { global: globalMiddleware } } : {}),
+      ...(Object.keys(globalMiddleware).length > 0 || Object.keys(operations).length > 0
+        ? {
+            middleware: {
+              ...(Object.keys(globalMiddleware).length > 0 ? { global: globalMiddleware } : {}),
+              ...(Object.keys(operations).length > 0 ? { operations } : {}),
+            },
+          }
+        : {}),
     },
   };
 }
