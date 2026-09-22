@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* #0da9be only cleared 2.82:1 against white — below WCAG AA. This is the darkest shade that still
+     reads as the same teal while hitting 4.5:1 (see scripts/check-contrast.js). */
+  --color-primary: #0a8090;
+  --color-primary-foreground: #ffffff;
+  --color-primary-dark: #087f90;
+  --color-primary-light: #dff8fb;
+
+  --color-secondary: #1f2937;
+  --color-secondary-foreground: #f9fafb;
+
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-danger: #dc2626;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+
+  --color-background: #f8fafc;
+  --color-foreground: #111827;
+  --color-surface: #ffffff;
+  --color-card: #ffffff;
+  --color-card-foreground: #111827;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #111827;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #0a8090;
+
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+}
+
+/* next-themes (`attribute="class"`) toggles this on <html>. Same specificity as the :root the @theme
+   block above emits, so it must come after that block in source order to win the cascade. Primary is
+   left unset here on purpose: it already clears 4.5:1 against white in the block above, so the same
+   pair works unchanged in dark mode too (see scripts/check-contrast.js). */
+.dark {
+  --color-background: #0f172a;
+  --color-foreground: #f1f5f9;
+  --color-surface: #1e293b;
+
+  --color-secondary: #1e293b;
+  --color-secondary-foreground: #f1f5f9;
+
+  --color-card: #1e293b;
+  --color-card-foreground: #f1f5f9;
+  --color-popover: #1e293b;
+  --color-popover-foreground: #f1f5f9;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #334155;
+  --color-accent-foreground: #f1f5f9;
+  --color-border: #334155;
+  --color-input: #334155;
+
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  }
+
+  .gradient-surface {
+    background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-background) 100%);
+  }
+}
