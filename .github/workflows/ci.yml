@@ -17,7 +17,6 @@ env:
   JWT_SECRET: test-secret-for-ci-only
   TYK_ADMIN_URL: http://localhost:8080/tyk
   TYK_ADMIN_SECRET: test-secret
-  TYK_ORG_ID: test-org
 
 jobs:
   ci:

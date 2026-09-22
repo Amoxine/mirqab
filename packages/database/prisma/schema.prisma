@@ -1,0 +1,305 @@
+// This is your Prisma schema file.
+// Open Gateway — SaaS Admin Dashboard for Tyk OSS
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum TenantPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum ApiStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+enum ApiSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum ApiHealthStatus {
+  HEALTHY
+  DEGRADED
+  DOWN
+  UNKNOWN
+}
+
+enum ApiAuthType {
+  NONE
+  AUTH_TOKEN
+  JWT
+  OAUTH
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum QuotaPeriod {
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  REVOKED
+  ASSIGNED
+  UNASSIGNED
+  LOGIN
+  LOGOUT
+  ROLE_CHANGED
+  PERMISSION_GRANTED
+  PERMISSION_REVOKED
+  QUOTA_EXCEEDED
+  SYNC_SUCCEEDED
+  SYNC_FAILED
+}
+
+// ─── MODELS ─────────────────────────────────────────────────────────────────
+
+model User {
+  id         String     @id @default(uuid())
+  email      String     @unique
+  name       String
+  password   String?
+  status     UserStatus @default(ACTIVE)
+  /// The Kratos identity this row shadows, set by the migration script (WP5). Kratos generates the
+  /// id and refuses a supplied one, so it cannot equal `id` — and it is NOT the token subject
+  /// either: Hydra's `sub` is `id`, which is what every FK and guard already keys on.
+  kratosIdentityId String? @unique @map("kratos_identity_id")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  userTenants UserTenant[]
+  apiKeys     ApiKey[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id   String @id @default(uuid())
+  name String
+  slug String @unique
+  /// The tenant's Tyk organisation. Every definition, policy and key this tenant owns is stamped
+  /// with it, which is what makes `POST /tyk/org/keys {is_inactive:true}` cut off exactly one
+  /// tenant: Tyk's OrganizationMonitor keys off the API *definition's* `org_id`, not the key's
+  /// (verified on 5.15.0 — a key minted in a live org is still refused by a cut-off API).
+  /// Derived once at creation as `og-<id>` (`tykOrgIdFor`); never recomputed, so it survives a
+  /// rename. Enforcement needs `enforce_org_quotas` + `enforce_org_data_age` on the gateway —
+  /// with either missing, the cutoff call returns 200 and does nothing.
+  tykOrgId  String       @unique @map("tyk_org_id")
+  status    TenantStatus @default(ACTIVE)
+  plan      TenantPlan   @default(FREE)
+  config    Json?
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  userTenants    UserTenant[]
+  apiDefinitions ApiDefinition[]
+  apiKeys        ApiKey[]
+  roles          Role[]
+  auditLogs      AuditLog[]
+
+  @@map("tenants")
+}
+
+model UserTenant {
+  userId    String   @map("user_id")
+  tenantId  String   @map("tenant_id")
+  role      String   @default("viewer")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tenantId])
+  @@index([userId, tenantId])
+  @@index([tenantId])
+  @@map("user_tenants")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+
+  @@unique([name, tenantId])
+  @@index([tenantId])
+  @@map("roles")
+}
+
+model Permission {
+  id       String   @id @default(uuid())
+  name     String
+  resource String
+  action   String
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model ApiDefinition {
+  id           String          @id @default(uuid())
+  tenantId     String          @map("tenant_id")
+  name         String
+  slug         String
+  tykApiId     String?         @map("tyk_api_id")
+  proxyUrl     String          @map("proxy_url")
+  listenPath   String          @map("listen_path")
+  authType     ApiAuthType     @default(NONE) @map("auth_type")
+  status       ApiStatus       @default(DRAFT)
+  config       Json?
+  syncStatus   ApiSyncStatus   @default(PENDING) @map("sync_status")
+  syncError    String?         @map("sync_error")
+  lastSyncedAt DateTime?       @map("last_synced_at")
+  healthStatus ApiHealthStatus @default(UNKNOWN) @map("health_status")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys ApiKey[]
+
+  @@unique([tenantId, slug])
+  // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
+  // `/{tenant.slug}{listenPath}` (`gatewayListenPath`), and slugs are globally unique, so two tenants
+  // can both own `/payments/` without either being able to capture or break the other's traffic.
+  // Global uniqueness was the old defence against that and is gone: it let the first tenant to claim
+  // a path squat it for everyone.
+  @@unique([tenantId, listenPath])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("api_definitions")
+}
+
+model ApiKey {
+  id        String       @id @default(uuid())
+  tenantId  String       @map("tenant_id")
+  userId    String       @map("user_id")
+  name      String
+  tykKeyId  String?      @map("tyk_key_id")
+  keyHash   String?      @map("key_hash")
+  status    ApiKeyStatus @default(ACTIVE)
+  expiresAt DateTime?    @map("expires_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiDef   ApiDefinition? @relation(fields: [apiDefId], references: [id], onDelete: SetNull)
+  apiDefId String?       @map("api_def_id")
+  quotas   Quota[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([apiDefId])
+  @@map("api_keys")
+}
+
+model Quota {
+  id        String      @id @default(uuid())
+  apiKeyId  String      @map("api_key_id")
+  limit     Int
+  used      Int         @default(0)
+  period    QuotaPeriod @default(MONTHLY)
+  resetAt   DateTime    @map("reset_at")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId])
+  @@index([resetAt])
+  @@map("quotas")
+}
+
+model AuditLog {
+  id        BigInt      @id @default(autoincrement())
+  tenantId  String?     @map("tenant_id")
+  userId    String?     @map("user_id")
+  action    AuditAction
+  resource  String
+  details   Json?
+  ipAddress String?     @map("ip_address")
+  corrId    String?     @map("correlation_id")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+  @@index([resource])
+  @@map("audit_logs")
+}
+
+// tyk_analytics / tyk_aggregated (Tyk Pump-owned tables) are deliberately NOT modeled here.
+// They're read via raw SQL only (apps/api/.../pump-query.builder.ts uses $queryRaw against
+// public.tyk_analytics/tyk_aggregated with to_regclass presence checks). Modeling them previously
+// was based on a misunderstanding: `prisma migrate diff --from-empty` emits CREATE TABLE DDL for
+// them regardless of `@@ignore` (which only drops a model from the generated Client, not from
+// diff/migrate), so the next `migrate dev` would write that DDL into a migration and fail
+// `migrate deploy` wherever Pump already created these tables. Do not re-add them.
+//
+// Consequence of leaving them unmodeled: `prisma migrate status` stays clean (it only compares
+// migration history to the schema), but a bare `prisma migrate dev` diffs the schema against the
+// live DB and WILL see these two tables as drift, then offer to reset the database — never accept
+// that, it destroys Pump's data. If schema.prisma needs a real change, use
+// `prisma migrate dev --create-only`, hand-edit the generated migration to touch only what you
+// actually changed, then `prisma migrate deploy` (same convention already used elsewhere in this
+// project, see .omc/plans/autopilot-impl.md). Never run `migrate reset` / `db push --force-reset`.

@@ -157,6 +157,15 @@ services:
       TYK_GW_ANALYTICSCONFIG_ENABLEDETAILEDRECORDING: "false"
       TYK_GW_ANALYTICSCONFIG_STORAGEEXPIRATIONTIME: "3600"
       TYK_GW_HASHKEYS: "true"
+      # Org-scoped cutoff (WP12c). Every definition, policy and key is stamped with its tenant's
+      # `Tenant.tykOrgId`, so `POST /tyk/org/keys/<org> {is_inactive:true}` disables exactly one
+      # tenant. BOTH of these are required to make that work, and the failure mode when either is
+      # missing is silent: the call still answers 200 {"status":"ok"} and the keys keep working.
+      # Verified on v5.15.0 — neither flag alone has any effect; with both, the cutoff lands in
+      # under 5 s. An org that has no org-session at all is unaffected, so enabling these does not
+      # retroactively restrict anything.
+      TYK_GW_ENFORCEORGQUOTAS: "true"
+      TYK_GW_ENFORCEORGDATAAGE: "true"
       # Policies — the rate / quota / access-rights record a JWT is mapped to — live as one JSON file
       # per policy in this directory, written by the API through POST /tyk/policies. Without
       # POLICYPATH the gateway answers 500 "Failed to create file!". ALLOWEXPLICITPOLICYID has to be
@@ -266,7 +275,11 @@ services:
       TYK_ADMIN_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
       # /hello is served by the control API port too, so the health probe points at 8081.
       TYK_GATEWAY_URL: http://tyk-gateway:8081
-      TYK_ORG_ID: org123
+      # TYK_ORG_ID is deliberately gone (WP12c). It was one org for every tenant, which made
+      # `POST /tyk/org/keys {is_inactive:true}` an all-tenants kill switch and `/tyk/certs?org_id`
+      # meaningless. The org is now per tenant (`Tenant.tykOrgId`, read via `loadTenantScope`); any
+      # code reaching for this env var again is a regression — `grep -rn TYK_ORG_ID apps/api/src`
+      # must stay empty.
       # Upstream hosts an API may never proxy to, on top of the built-in denylist (loopback,
       # link-local / metadata, the service names above). Comma separated.
       PROXY_DENY_HOSTS: ""

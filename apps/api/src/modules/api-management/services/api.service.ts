@@ -24,6 +24,7 @@ import { TykClientService } from '../../tyk-integration/services/tyk-client.serv
 import { OAuthClientService } from '../../oauth-clients/services/oauth-client.service';
 import { fetchAccessTokenSigningKey } from './hydra-signing-key';
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
+import { loadTenantScope, type TenantGatewayScope } from '../../tyk-integration/services/tenant-scope';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -137,16 +138,29 @@ function jwtFieldsForBringYourOwnJwks(apiDefId: string, jwksUrl: string, identit
 }
 
 /**
+ * What the gateway actually routes on: `/{tenantSlug}{listenPath}` (O10). `listenPath` always starts
+ * with `/`, so a tenant's `/payments/` becomes `/acme/payments/` and a root `/` becomes `/acme/`.
+ * Tenant slugs are globally unique, so two tenants' paths can never collide — which is what lets
+ * `ApiDefinition.listenPath` be unique per tenant instead of globally.
+ */
+export const gatewayListenPath = (tenantSlug: string, listenPath: string): string =>
+  `/${tenantSlug}${listenPath}`;
+
+/**
  * The one policy every valid JWT for this API is mapped to (see `jwtFieldsForBringYourOwnJwks`).
  * Unlimited on top of whatever the API's own `global_rate_limit` already applies — the same
  * no-extra-limit baseline `buildTykPolicy` uses when an OAuth2 client sets none (`oauth-client-mapper.ts`).
  * Per-subject limits are a plans/policies feature (WP18), not this bug fix's job.
  */
-export function buildJwtPolicy(apiDef: Pick<ApiDefinition, 'id' | 'name'>, tykApiId: string): Record<string, unknown> {
+export function buildJwtPolicy(
+  apiDef: Pick<ApiDefinition, 'id' | 'name'>,
+  tykApiId: string,
+  tykOrgId: string,
+): Record<string, unknown> {
   return {
     id: jwtPolicyId(apiDef.id),
     name: `${apiDef.name} — JWT`,
-    org_id: process.env.TYK_ORG_ID ?? '',
+    org_id: tykOrgId,
     active: true,
     state: 'active',
     rate: 0,
@@ -168,15 +182,19 @@ function toJsonObject(config: ApiConfigDto): Prisma.InputJsonObject {
  * unconditional. `jwtSource` (the base64 PEM from `fetchAccessTokenSigningKey`) is required for an
  * `authType: OAUTH` api and ignored for every other auth type.
  */
-export function mapToTykFormat(apiDef: ApiDefinition, jwtSource = ''): Record<string, unknown> {
+export function mapToTykFormat(
+  apiDef: ApiDefinition,
+  tenant: TenantGatewayScope,
+  jwtSource = '',
+): Record<string, unknown> {
   const { rateLimit, cors, doNotTrack, jwt } = readConfig(apiDef.config);
 
   return {
     name: apiDef.name,
     api_id: apiDef.tykApiId ?? `og-${apiDef.id}`,
-    org_id: process.env.TYK_ORG_ID ?? '',
+    org_id: tenant.tykOrgId,
     proxy: {
-      listen_path: apiDef.listenPath,
+      listen_path: gatewayListenPath(tenant.slug, apiDef.listenPath),
       target_url: apiDef.proxyUrl,
       strip_listen_path: true,
     },
@@ -234,11 +252,13 @@ export function toSyncError(err: unknown): string {
 }
 
 /**
- * Listen paths are unique across the whole gateway (B1), so the message must not say which tenant
- * holds the path. Prefix overlaps (`/a/` next to `/a/b/`) are allowed: Tyk routes by longest match.
+ * Listen paths are unique **within a tenant** (O10): the gateway sees `/{tenantSlug}{listenPath}`,
+ * so another tenant holding the same path is not a clash and must not be reported as one. The
+ * message can therefore name the path — it can only ever be this tenant's own.
+ * Prefix overlaps (`/a/` next to `/a/b/`) are allowed: Tyk routes by longest match.
  */
 const listenPathTaken = (listenPath: string): string =>
-  `Listen path "${listenPath}" is already registered on the gateway. Listen paths are unique across all tenants.`;
+  `Listen path "${listenPath}" is already used by another API in this tenant.`;
 
 const slugTaken = (slug: string): string => `API with slug "${slug}" already exists in this tenant`;
 
@@ -304,7 +324,7 @@ export class ApiService {
       throw new BadRequestException('authType "JWT" requires config.jwt: { jwksUrl, issuer }');
     }
 
-    await this.assertListenPathFree(dto.listenPath);
+    await this.assertListenPathFree(dto.listenPath, tenantId);
 
     // Create in our database
     let apiDef: ApiRow;
@@ -400,7 +420,7 @@ export class ApiService {
     }
 
     if (dto.listenPath && dto.listenPath !== existing.listenPath) {
-      await this.assertListenPathFree(dto.listenPath);
+      await this.assertListenPathFree(dto.listenPath, tenantId);
     }
 
     const { config, ...fields } = dto;
@@ -496,12 +516,13 @@ export class ApiService {
   }
 
   /**
-   * Refuse a listen path another API already owns, in any tenant (B1). Deliberately not tenant-scoped,
-   * and the exact stored string is compared — the DTO already enforces the leading slash.
+   * Refuse a listen path another API **in this tenant** already owns (O10). Another tenant holding
+   * the same path is fine: the gateway routes on `/{tenantSlug}{listenPath}`, so the two cannot
+   * collide. The exact stored string is compared — the DTO already enforces the leading slash.
    */
-  private async assertListenPathFree(listenPath: string): Promise<void> {
+  private async assertListenPathFree(listenPath: string, tenantId: string): Promise<void> {
     const clash = await prisma.apiDefinition.findFirst({
-      where: { listenPath },
+      where: { listenPath, tenantId },
       select: { id: true },
     });
 
@@ -553,8 +574,13 @@ export class ApiService {
   private async syncToTyk(apiDef: ApiDefinition): Promise<ApiRow> {
     let tykApiId: string;
 
+    // Read once here rather than threading a tenant through every caller: the org and slug must be
+    // identical across the definition and its JWT policy, and one query per sync is cheaper than the
+    // chance of two call sites drifting apart. `tenantId` is a non-null FK, so this always resolves.
+    const tenant = await loadTenantScope(apiDef.tenantId);
+
     try {
-      const tykDef = mapToTykFormat(apiDef, await this.oauthSigningKey(apiDef.authType));
+      const tykDef = mapToTykFormat(apiDef, tenant, await this.oauthSigningKey(apiDef.authType));
 
       if (apiDef.tykApiId) {
         // Update existing
@@ -570,7 +596,7 @@ export class ApiService {
       // access_rights, so it is written second. Same try/catch as the def write: a policy failure is
       // a sync failure, not a silently-half-authorized API.
       if (apiDef.authType === 'JWT') {
-        await this.tykClient.upsertPolicy(buildJwtPolicy(apiDef, tykApiId));
+        await this.tykClient.upsertPolicy(buildJwtPolicy(apiDef, tykApiId, tenant.tykOrgId));
       }
     } catch (err) {
       const syncError = toSyncError(err);

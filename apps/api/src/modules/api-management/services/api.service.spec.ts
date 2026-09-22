@@ -17,6 +17,8 @@ import { ApiService, toSyncError } from './api.service';
 
 jest.mock('@open-gateway/database', () => ({
   prisma: {
+    // WP12c: every gateway write resolves the tenant's org through `loadTenantScope`.
+    tenant: { findUniqueOrThrow: jest.fn().mockResolvedValue({ tykOrgId: 'og-tenant-1', slug: 'tenant-1' }) },
     apiDefinition: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -108,6 +110,9 @@ describe('ApiService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // Re-armed here because `resetAllMocks` clears return values: every gateway write resolves
+    // the tenant's org through `loadTenantScope` (WP12c).
+    (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({ tykOrgId: 'og-tenant-1', slug: 'tenant-1' });
   });
 
   describe('findOne', () => {
@@ -289,7 +294,7 @@ describe('ApiService', () => {
     });
   });
 
-  describe('listen path uniqueness (B1)', () => {
+  describe('listen path uniqueness (per tenant, O10 — was global under B1)', () => {
     const dto = { name: 'Orders', slug: 'orders', proxyUrl: 'http://orders:4000', listenPath: '/orders/' };
     const p2002 = (target: string[]) =>
       new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
@@ -298,20 +303,31 @@ describe('ApiService', () => {
         meta: { target },
       });
 
-    it('409s on create when another tenant already owns the listen path, without naming that tenant', async () => {
+    it('409s on create when this tenant already owns the listen path', async () => {
       const { service, tyk } = setup();
       db.findUnique.mockResolvedValue(null);
-      // Global lookup: the clash belongs to a different tenant and is still a conflict.
-      db.findFirst.mockResolvedValue({ id: 'other-api' });
+      db.findFirst.mockResolvedValue({ id: 'sibling-api' });
 
       const attempt = service.create(dto, TENANT);
 
       await expect(attempt).rejects.toBeInstanceOf(ConflictException);
-      await expect(attempt).rejects.toThrow(/\/orders\/.*already registered/);
-      await expect(attempt).rejects.not.toThrow(/tenant-2|other-api/);
-      expect(firstArg(db.findFirst).where).toEqual({ listenPath: '/orders/' });
+      await expect(attempt).rejects.toThrow(/\/orders\/.*already used by another API in this tenant/);
       expect(db.create).not.toHaveBeenCalled();
       expect(tyk.createApi).not.toHaveBeenCalled();
+    });
+
+    // O10 reverses B1: the lookup MUST carry tenantId, or another tenant's identical path still
+    // 409s and the squatting this WP removes comes straight back.
+    it('scopes the clash lookup to this tenant, so another tenant may hold the same path', async () => {
+      const { service } = setup();
+      db.findUnique.mockResolvedValue(null);
+      db.findFirst.mockResolvedValue(null);
+      db.create.mockResolvedValue(row());
+      db.update.mockResolvedValue(row());
+
+      await expect(service.create(dto, TENANT)).resolves.toMatchObject({ listenPath: '/orders/' });
+      expect(firstArg(db.findFirst).where).toEqual({ listenPath: '/orders/', tenantId: TENANT });
+      await flush();
     });
 
     it('creates the API when the listen path is free', async () => {
