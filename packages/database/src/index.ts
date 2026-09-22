@@ -28,6 +28,7 @@ export type {
   ApiSyncStatus,
   ApiHealthStatus,
   ApiAuthType,
+  ApiDefFormat,
   ApiKeyStatus,
   QuotaPeriod,
   AuditAction,

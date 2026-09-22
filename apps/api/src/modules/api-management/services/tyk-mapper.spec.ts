@@ -24,6 +24,8 @@ function apiDef(overrides: Partial<ApiDefinition> = {}): ApiDefinition {
     config: null,
     syncStatus: 'PENDING',
     syncState: null,
+    defFormat: 'CLASSIC',
+    oasDocument: null,
     syncError: null,
     lastSyncedAt: null,
     healthStatus: 'UNKNOWN',

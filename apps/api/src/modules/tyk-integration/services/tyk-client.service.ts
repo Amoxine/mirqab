@@ -228,6 +228,51 @@ export class TykClientService {
     return results.map(({ outcome }) => outcome);
   }
 
+  /**
+   * Create or replace an OAS-format definition on every node (WP13b).
+   *
+   * `/tyk/apis/oas` is a separate collection from `/tyk/apis`: a POST there stores the OAS document
+   * as-is and the gateway derives the classic definition from it. An OAS api is therefore NOT
+   * addressable through `/tyk/apis/{id}` for writes — which is why this is its own method rather
+   * than a flag on `createApi`.
+   *
+   * POST is an upsert keyed by `x-tyk-api-gateway.info.id`, so this one method covers create and
+   * update; re-posting the same id replaces the stored document (verified on v5.15.0).
+   */
+  async upsertOasApi(tykDef: Record<string, unknown>): Promise<NodeOutcome[]> {
+    this.logger.debug('Upserting OAS API in Tyk');
+
+    return this.fanOut(async (nodeUrl) => {
+      const body = await this.request('/apis/oas', { method: 'POST', body: JSON.stringify(tykDef) }, nodeUrl);
+      await this.reloadNode(nodeUrl);
+      return body;
+    });
+  }
+
+  /** Read an OAS definition from one node. Used by the drift hash for `defFormat: OAS` rows. */
+  async getOasApiFromNode(apiId: string, nodeUrl: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(
+      `/apis/oas/${encodeURIComponent(apiId)}`,
+      {},
+      nodeUrl,
+    );
+  }
+
+  /** Remove an OAS definition from every node. */
+  async deleteOasApi(apiId: string): Promise<NodeOutcome[]> {
+    this.logger.debug(`Deleting OAS API ${apiId} from Tyk`);
+
+    return this.fanOut(async (nodeUrl) => {
+      const body = await this.request(
+        `/apis/oas/${encodeURIComponent(apiId)}`,
+        { method: 'DELETE' },
+        nodeUrl,
+      );
+      await this.reloadNode(nodeUrl);
+      return body;
+    });
+  }
+
   /** Read a definition from one specific node — the drift check's per-node fetch. */
   async getApiFromNode(apiId: string, nodeUrl: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>(`/apis/${encodeURIComponent(apiId)}`, {}, nodeUrl);

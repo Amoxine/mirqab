@@ -71,6 +71,15 @@ enum QuotaPeriod {
   MONTHLY
 }
 
+/// How an API definition is expressed on the gateway. CLASSIC is Tyk's original definition format;
+/// OAS is an OpenAPI 3.0 document carrying the `x-tyk-api-gateway` extension.
+/// New rows default to OAS; every row that existed before WP13b was labelled CLASSIC by the
+/// migration and keeps serving from its classic definition until it is explicitly re-synced.
+enum ApiDefFormat {
+  CLASSIC
+  OAS
+}
+
 enum AuditAction {
   CREATED
   UPDATED
@@ -214,6 +223,14 @@ model ApiDefinition {
   /// Rebuilt from the current node list every tick, never merged: a node dropped from
   /// `TYK_ADMIN_URLS` must disappear, or a decommissioned node pins `inSync:false` forever.
   syncState    Json?           @map("sync_state")
+  /// Which mapper produces this API's gateway definition (WP13b). The DB default is OAS, but the
+  /// migration stamped every pre-existing row CLASSIC first — a one-step `DEFAULT 'OAS'` would have
+  /// relabelled live classic APIs as OAS without touching the gateway, i.e. silent data corruption.
+  defFormat    ApiDefFormat    @default(OAS) @map("def_format")
+  /// The OAS document last pushed for this API, stored so a drift check and the UI can show what
+  /// was actually sent rather than re-deriving it. Null for CLASSIC rows and for OAS rows that have
+  /// never synced.
+  oasDocument  Json?           @map("oas_document")
   lastSyncedAt DateTime?       @map("last_synced_at")
   healthStatus ApiHealthStatus @default(UNKNOWN) @map("health_status")
   createdAt    DateTime        @default(now()) @map("created_at")

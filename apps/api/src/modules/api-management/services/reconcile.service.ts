@@ -2,7 +2,7 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { createHash } from 'node:crypto';
 import { prisma } from '@open-gateway/database';
-import { AuditAction } from '@prisma/client';
+import { ApiDefFormat, AuditAction } from '@prisma/client';
 import { TykClientService } from '../../tyk-integration/services/tyk-client.service';
 
 /** One node's view of a definition. `hash` is null when the node could not be read. */
@@ -150,12 +150,17 @@ export class ReconcileService implements OnModuleInit {
    * A merge would leave a node that has been removed from `TYK_ADMIN_URLS` in the map forever,
    * pinning `inSync:false` and alerting on a machine that no longer exists.
    */
-  async reconcileOne(apiDefId: string, tykApiId: string): Promise<SyncState> {
+  async reconcileOne(apiDefId: string, tykApiId: string, defFormat: ApiDefFormat = ApiDefFormat.CLASSIC): Promise<SyncState> {
     const nodes: Record<string, NodeView> = {};
+    // An OAS api lives in a different collection and is NOT readable through /tyk/apis/{id}, so
+    // reading the wrong one would report every OAS api as missing on every node.
+    const isOas = defFormat === ApiDefFormat.OAS;
 
     for (const nodeUrl of this.tykClient.nodes) {
       try {
-        const doc = await this.tykClient.getApiFromNode(tykApiId, nodeUrl);
+        const doc = isOas
+          ? await this.tykClient.getOasApiFromNode(tykApiId, nodeUrl)
+          : await this.tykClient.getApiFromNode(tykApiId, nodeUrl);
         nodes[nodeUrl] = { present: true, hash: definitionHash(doc) };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -191,13 +196,13 @@ export class ReconcileService implements OnModuleInit {
   async reconcileAll(): Promise<void> {
     const defs = await prisma.apiDefinition.findMany({
       where: { tykApiId: { not: null } },
-      select: { id: true, tykApiId: true },
+      select: { id: true, tykApiId: true, defFormat: true },
     });
 
     for (const def of defs) {
       if (!def.tykApiId) continue;
       try {
-        await this.reconcileOne(def.id, def.tykApiId);
+        await this.reconcileOne(def.id, def.tykApiId, def.defFormat);
       } catch (err) {
         // One bad definition must not stop the sweep.
         this.logger.warn(

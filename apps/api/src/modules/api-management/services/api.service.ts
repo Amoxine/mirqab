@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  ApiDefFormat,
   ApiKeyStatus,
   ApiStatus,
   ApiSyncStatus,
@@ -235,6 +236,153 @@ export function mapToTykFormat(
         }
       : {}),
     ...(doNotTrack === undefined ? {} : { do_not_track: doNotTrack }),
+  };
+}
+
+/**
+ * Duration form Tyk-OAS wants for a rate-limit window.
+ *
+ * S6 caveat 1: the classic field `global_rate_limit.per` is a NUMBER OF SECONDS, while OAS's
+ * `X-Tyk-RateLimit.per` is a duration STRING matching `^(\d+h)?(\d+m)?(\d+s)?$`. Emitting the raw
+ * number is silently rejected by the schema, so the two formats are not interchangeable.
+ */
+const rateLimitPer = (seconds: number): string => `${String(seconds)}s`;
+
+/**
+ * Security-scheme key used in BOTH `components.securitySchemes` and the Tyk extension.
+ *
+ * S6 structural caveat: OAS requires the scheme to be declared TWICE and referenced by the same
+ * name — once as a normal OpenAPI security scheme, once inside
+ * `x-tyk-api-gateway.server.authentication.securitySchemes` — plus listed in the root `security`
+ * array. A classic definition needs none of that; an OAS definition missing any of the three simply
+ * does not authenticate (verified during S6).
+ */
+const SCHEME_NAME = { token: 'authToken', jwt: 'jwtAuth' } as const;
+
+/**
+ * Tyk-OAS form of the same definition `mapToTykFormat` produces, for `defFormat: OAS` APIs.
+ *
+ * Deliberately a SIBLING of the classic mapper rather than a replacement: pre-WP13b rows are
+ * labelled CLASSIC by the migration and keep being served from their classic definition until
+ * something re-syncs them, so both mappers have to stay correct at the same time.
+ *
+ * Every one of the 13 named top-level keys the classic mapper emits has an equivalent here, and
+ * `tyk-oas-mapper.spec.ts` asserts that key by key. The four places the two formats are NOT a
+ * straight rename are called out inline below, because each one fails silently rather than loudly:
+ * a wrong polarity or a number-where-a-string-is-expected produces a definition the gateway accepts
+ * and then behaves differently from the classic one.
+ */
+export function mapToTykOas(
+  apiDef: ApiDefinition,
+  tenant: TenantGatewayScope,
+  jwtSource = '',
+): Record<string, unknown> {
+  const { rateLimit, cors, doNotTrack, jwt } = readConfig(apiDef.config);
+  const isOAuth = apiDef.authType === 'OAUTH';
+  const isJwt = apiDef.authType === 'JWT';
+  const isToken = apiDef.authType === 'AUTH_TOKEN';
+
+  // ── authentication, declared in both places OAS requires ────────────────
+  const securitySchemes: Record<string, unknown> = {};
+  const componentSchemes: Record<string, unknown> = {};
+  const security: Record<string, string[]>[] = [];
+
+  if (isToken) {
+    securitySchemes[SCHEME_NAME.token] = {
+      enabled: true,
+      // classic `auth.auth_header_name` -> per-scheme `header.name` (it is per scheme in OAS, not
+      // one global setting).
+      header: { enabled: true, name: 'Authorization' },
+    };
+    componentSchemes[SCHEME_NAME.token] = { type: 'apiKey', in: 'header', name: 'Authorization' };
+    security.push({ [SCHEME_NAME.token]: [] });
+  }
+
+  if (isOAuth || isJwt) {
+    securitySchemes[SCHEME_NAME.jwt] = {
+      enabled: true,
+      header: { enabled: true, name: 'Authorization' },
+      signingMethod: 'rsa',
+      // OAUTH pins Hydra's base64 PEM; JWT (O3) points at the tenant's own JWKS URL. Tyk's `source`
+      // accepts either, exactly as the classic `jwt_source` does.
+      source: isOAuth ? jwtSource : (jwt?.jwksUrl ?? ''),
+      identityBaseField: isOAuth ? 'sub' : (jwt?.identityField ?? 'sub'),
+      // OAUTH maps each token to the policy whose id IS its client id; JWT has no per-consumer
+      // client, so every valid token gets the one default policy instead. This asymmetry is why
+      // OAUTH emits 5 jwt_* fields classically and JWT emits only 4 — `policyFieldName` is
+      // OAUTH-only.
+      ...(isOAuth ? { policyFieldName: 'client_id' } : {}),
+      defaultPolicies: isOAuth ? [] : [jwtPolicyId(apiDef.id)],
+    };
+    componentSchemes[SCHEME_NAME.jwt] = { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' };
+    security.push({ [SCHEME_NAME.jwt]: [] });
+  }
+
+  const authenticated = Object.keys(securitySchemes).length > 0;
+
+  // ── middleware.global ───────────────────────────────────────────────────
+  const globalMiddleware: Record<string, unknown> = {};
+  if (cors) {
+    globalMiddleware.cors = {
+      // classic `CORS.enable` -> OAS `cors.enabled`; the rest are the same nine fields renamed
+      // from snake_case to camelCase.
+      enabled: cors.enable,
+      allowedOrigins: cors.allowedOrigins,
+      allowedMethods: cors.allowedMethods,
+      allowedHeaders: cors.allowedHeaders,
+      exposedHeaders: cors.exposedHeaders,
+      allowCredentials: cors.allowCredentials,
+      maxAge: cors.maxAge,
+      optionsPassthrough: false,
+      debug: false,
+    };
+  }
+  if (doNotTrack !== undefined) {
+    // S6 caveat 3: POLARITY INVERTS. classic `do_not_track: true` == OAS
+    // `trafficLogs.enabled: false`. Copying the boolean across turns analytics back on for exactly
+    // the APIs that asked not to be tracked.
+    globalMiddleware.trafficLogs = { enabled: !doNotTrack };
+  }
+
+  return {
+    openapi: '3.0.3',
+    info: { title: apiDef.name, version: '1.0.0' },
+    // No paths are described: this product proxies whole upstreams rather than per-endpoint
+    // contracts. Per-endpoint middleware arrives with WP15a/WP15b.
+    paths: {},
+    ...(authenticated ? { components: { securitySchemes: componentSchemes }, security } : {}),
+    'x-tyk-api-gateway': {
+      info: {
+        id: apiDef.tykApiId ?? `og-${apiDef.id}`,
+        name: apiDef.name,
+        orgId: tenant.tykOrgId,
+        // classic `active` -> `info.state.active`
+        state: { active: apiDef.status === ApiStatus.ACTIVE },
+        // S6 caveat 4: `version_data.not_versioned` has NO OAS equivalent. `X-Tyk-Versioning`
+        // requires a `location` and models real versioning, so an unversioned API omits
+        // `info.versioning` entirely rather than emitting a placeholder. WP16 adds versioning.
+      },
+      upstream: {
+        url: apiDef.proxyUrl,
+        ...(rateLimit
+          ? {
+              rateLimit: {
+                // S6 caveat 2: POLARITY INVERTS AGAIN. Classic has `disabled`; OAS has `enabled`,
+                // and there is no `disabled` field to fall back on.
+                enabled: rateLimit.rate !== 0,
+                rate: rateLimit.rate,
+                per: rateLimitPer(rateLimit.per),
+              },
+            }
+          : {}),
+      },
+      server: {
+        listenPath: { value: gatewayListenPath(tenant.slug, apiDef.listenPath), strip: true },
+        // classic `use_keyless` is the inverse of this flag; a keyless API sets it false.
+        authentication: authenticated ? { enabled: true, securitySchemes } : { enabled: false },
+      },
+      ...(Object.keys(globalMiddleware).length > 0 ? { middleware: { global: globalMiddleware } } : {}),
+    },
   };
 }
 
@@ -591,16 +739,27 @@ export class ApiService {
     // chance of two call sites drifting apart. `tenantId` is a non-null FK, so this always resolves.
     const tenant = await loadTenantScope(apiDef.tenantId);
 
-    try {
-      const tykDef = mapToTykFormat(apiDef, tenant, await this.oauthSigningKey(apiDef.authType));
+    let oasDocument: Prisma.InputJsonValue | undefined;
 
-      if (apiDef.tykApiId) {
+    try {
+      const signingKey = await this.oauthSigningKey(apiDef.authType);
+
+      if (apiDef.defFormat === ApiDefFormat.OAS) {
+        // `/tyk/apis/oas` POST is an upsert keyed by the document's own `info.id`, so create and
+        // update are the same call — unlike the classic pair, which needs POST then PUT-by-id.
+        const oasDef = mapToTykOas(apiDef, tenant, signingKey);
+        tykApiId = apiDef.tykApiId ?? `og-${apiDef.id}`;
+        nodes = await this.tykClient.upsertOasApi(oasDef);
+        // Stored so drift and the UI can show what was actually sent, rather than re-deriving it
+        // from a row that may have changed since.
+        oasDocument = oasDef as Prisma.InputJsonValue;
+      } else if (apiDef.tykApiId) {
         // Update existing
-        nodes = (await this.tykClient.updateApi(apiDef.tykApiId, tykDef)).nodes;
+        nodes = (await this.tykClient.updateApi(apiDef.tykApiId, mapToTykFormat(apiDef, tenant, signingKey))).nodes;
         tykApiId = apiDef.tykApiId;
       } else {
         // Create new
-        const created = await this.tykClient.createApi(tykDef);
+        const created = await this.tykClient.createApi(mapToTykFormat(apiDef, tenant, signingKey));
         tykApiId = created.apiId;
         nodes = created.nodes;
       }
@@ -635,6 +794,7 @@ export class ApiService {
         where: { id: apiDef.id },
         data: {
           tykApiId,
+          ...(oasDocument === undefined ? {} : { oasDocument }),
           syncStatus: failed.length > 0 ? ApiSyncStatus.FAILED : ApiSyncStatus.SYNCED,
           syncError:
             failed.length > 0
@@ -673,7 +833,7 @@ export class ApiService {
       return { inSync: false, differences: ['never synced to the gateway'], perNode: {} };
     }
 
-    const state = await this.reconcile.reconcileOne(apiDef.id, apiDef.tykApiId);
+    const state = await this.reconcile.reconcileOne(apiDef.id, apiDef.tykApiId, apiDef.defFormat);
     const hashes = Object.values(state.nodes)
       .map((n) => n.hash)
       .filter((h): h is string => h !== null);
