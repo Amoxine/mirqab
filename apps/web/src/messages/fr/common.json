@@ -1,0 +1,14 @@
+{
+  "cancel": "Annuler",
+  "close": "Fermer",
+  "delete": "Supprimer",
+  "edit": "Modifier",
+  "create": "Créer",
+  "done": "Terminé",
+  "retry": "Réessayer",
+  "actions": "Actions",
+  "status": "Statut",
+  "name": "Nom",
+  "email": "E-mail",
+  "createdAt": "Créé le"
+}

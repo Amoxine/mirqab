@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://test:test@localhost:5432/test?schema=public
+  REDIS_URL: redis://localhost:6379
+  JWT_SECRET: test-secret-for-ci-only
+  TYK_ADMIN_URL: http://localhost:8080/tyk
+  TYK_ADMIN_SECRET: test-secret
+  TYK_ORG_ID: test-org
+
+jobs:
+  ci:
+    name: CI Pipeline
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # WP12b guard (DoD-OWNER 8): blocking, and ahead of every other step this WP adds below —
+      # a broken workflow file should fail before anything else even tries to run.
+      - name: actionlint
+        shell: bash
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # --audit-level=high, not critical: as of 2026-09-20 `pnpm audit --prod` finds 24 high-severity
+      # advisories in real production paths (multer via @nestjs/platform-express, sharp/PostCSS via
+      # next, js-yaml/nanoid/path-to-regexp/lodash/brace-expansion/DeepmergeTS transitively) — this
+      # is known, tracked dependency debt, not a WP0 regression, and continue-on-error keeps it from
+      # masking every other step's signal by staying permanently red. The one CRITICAL finding this
+      # repo had (tar via bcrypt's node-pre-gyp, pulled in by apps/api's bcrypt) was fixed, not
+      # silenced: bcrypt had zero importers in apps/api/src and was removed from its package.json.
+      # bcrypt itself is still a (dev)dependency of packages/database, which genuinely needs it —
+      # prisma/seed.ts hashes the seeded admin's password with bcrypt because Kratos's identity
+      # import verifies a hash by its own prefix (see docs/security.md's Password Policy section),
+      # so it must stay in bcrypt's own format. `--prod` doesn't flag it there since it's a
+      # devDependency of that package, not apps/api's.
+      - name: Audit dependencies (prod, high+)
+        run: pnpm audit --prod --audit-level=high
+        continue-on-error: true
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run database migrations
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test?schema=public
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # WP12b guards row: three CI-blocking checks with no package to run them through, so they're
+      # plain scripts under infra/scripts/. jsx-no-literals (the guards row's third check) needs no
+      # separate step — it's a rule inside the `pnpm lint` config above.
+      - name: Guard — docs reference only paths that exist
+        run: ./infra/scripts/check-docs-paths.sh
+
+      - name: Guard — locale key sets match across en/fr/ar
+        run: node infra/scripts/check-locale-keys.mjs
+
+      - name: Guard — every dashboard page is permission-gated
+        run: ./infra/scripts/check-page-gates.sh
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # API auth regression (see apps/api/test/e2e/auth.e2e.spec.ts for current scope and why it
+      # shrank mid-implementation). Uses @playwright/test's `request` fixture, no browser: it boots
+      # the just-built apps/api/dist/main.js itself, so no `playwright install` step is needed here.
+      - name: E2E tests (API auth flows)
+        run: pnpm --filter @open-gateway/api test:e2e
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7

@@ -1,0 +1,514 @@
+name: Open Gateway Infrastructure
+#
+# Full stack: Postgres, Redis, Tyk OSS Gateway, NestJS API, Next.js web.
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# Only the open-source Tyk Gateway is used (no Tyk Dashboard). The API manages the gateway through
+# its REST API: TYK_ADMIN_URL=<gateway>/tyk, secret = TYK_GW_SECRET (header x-tyk-authorization).
+#
+# Secrets live in infra/.env (git-ignored, written by install.sh):
+#   JWT_SECRET               required — the stack refuses to start without it
+#   DB_PASS                  required — the shared Postgres password (app DB + Hydra/Kratos/Keto DSNs)
+#   HYDRA_SECRETS_SYSTEM     required — Hydra
+#   HYDRA_SECRETS_COOKIE     required — Hydra
+#   KRATOS_SECRETS_DEFAULT   required — Kratos
+#   KRATOS_SECRETS_COOKIE    required — Kratos
+#   KRATOS_SECRETS_CIPHER    required — Kratos (must be exactly 32 characters)
+#   TYK_GW_SECRET            falls back to a well-known dev value below; that default is only safe
+#                            because the gateway's control API (/tyk/*) is NOT published to the host
+#                            (see TYK_GW_CONTROLAPIPORT). Set it for anything reachable by someone else.
+#
+# Published ports: 33000 web, 33001 api, 33005 gateway DATA plane, 33010 Hydra public, 33012 Kratos
+# public. Postgres (33002), Redis (33003), Hydra admin (33011), Kratos admin (33013) and Keto
+# read/write (33014/33015) are bound to 127.0.0.1 — every one of those Ory admin APIs is
+# UNAUTHENTICATED. The gateway control API (8081) and pump health (8083) are not published at all.
+#
+# Ory (Hydra/Kratos/Keto) is the auth system: the API's JwtStrategy validates only Hydra-issued
+# JWTs, and the old local login/register/refresh routes are gone. WP7 owns removing the now-dead
+# code paths and updating docs to match — this stack has already cut over.
+#
+# Two networks, not one, and this split is load-bearing for security, not just tidiness:
+# `ory-internal` carries postgres + hydra/kratos/keto (all three admin APIs unauthenticated).
+# `tyk-gateway`/`tyk-pump` are deliberately NOT on it — proxy_url.validator.ts's SSRF denylist
+# blocks those services by hostname, but a hostname denylist cannot block a raw container IP
+# (RFC1918 has to stay allowed for legitimate self-hosted upstreams), so an attacker who sets
+# `proxyUrl` to Hydra's actual IP would otherwise still reach it through the gateway. Putting the
+# Ory containers on a network the gateway has no route to closes that at the layer a DTO check
+# never can: even a raw-IP request from tyk-gateway now has nowhere to go. `api`/`web` (which
+# legitimately call Hydra/Kratos/Keto) and `postgres` (which every Ory service's DSN points at)
+# are on both networks.
+#
+# tyk-gateway/tyk-pump still reach redis/postgres/api/web on `open-gateway-network` by raw IP —
+# that's fine ONLY because none of those trust network origin for authz: redis has no password but
+# actively drops HTTP-shaped connections (it's not proxyable), postgres isn't HTTP either, and
+# api/web require a real JWT on everything but a couple of public routes. The invariant this split
+# actually rests on: never add a service to `open-gateway-network` that is unauthenticated OR
+# trusts which network a request came from — that's what put Hydra/Kratos/Keto here in the first
+# place, and the SSRF denylist can catch a stale hostname but structurally cannot catch this.
+#
+services:
+  # ─── PostgreSQL ────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: open-gateway-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: opengateway
+      POSTGRES_PASSWORD: ${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}
+      POSTGRES_DB: opengateway
+    ports:
+      # Loopback only: the database must not be reachable from the LAN.
+      - "127.0.0.1:33002:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opengateway -d opengateway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - open-gateway-network
+      - ory-internal
+
+  # ─── Redis ─────────────────────────────────────────────
+  # WP12b (R3): was `allkeys-lru`, which can evict live API keys and quota counters under an
+  # analytics burst — the gateway's `session-` / `quota-` keys and its analytics buffer are just
+  # different key prefixes in the same keyspace, and `maxmemory-policy` is server-wide, so a second
+  # DB index can't give them different eviction rules.
+  #
+  # The intended fix was a second Redis instance for the analytics buffer with its own `allkeys-lru`,
+  # freeing this one for `noeviction`. **Spike S4(c) (`.omc/research`, 2026-09-21) proved that split
+  # is a no-op on Tyk OSS 5.15.0**: `TYK_GW_ANALYTICSSTORAGE_*` / `ENABLESEPARATEANALYTICSSTORE` exist
+  # in the binary but the gateway never dials that host (verified: a second Redis sat at `DBSIZE 0`
+  # across a full traffic run). There is nothing to repoint `pump.conf` at either — pump reads
+  # whatever Redis the gateway actually wrote to, which is only ever this one.
+  #
+  # Degrade path taken (documented caveat, not silently dropped): single Redis, `noeviction`. This
+  # does not stop the Redis from filling — it changes WHAT HAPPENS when it does: `allkeys-lru` failed
+  # silently (a live key just stops authenticating, no error anywhere); `noeviction` fails loudly (an
+  # OOM write error, visible in the gateway's own logs) instead of quietly deauthorizing working keys.
+  # That is the whole trade, and it is only safe if sized ahead of the analytics buffer's actual
+  # footprint, which this compose file cannot see. `storage_expiration_time` (`:135`) already TTLs
+  # analytics keys at 1h and pump drains the buffer every `purge_delay: 10s` (`pump/pump.conf:8`), so
+  # steady-state usage should stay well under the cap below; a sustained burst that outruns pump's
+  # drain rate is the failure mode a `used_memory` alert (WP20) needs to catch before Redis starts
+  # rejecting writes. Do NOT "fix" this back to `allkeys-lru` to make that alert unnecessary — that
+  # reintroduces the original bug (S4(c) is why isolation instead of noeviction isn't on the table).
+  redis:
+    image: redis:7-alpine
+    container_name: open-gateway-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+    ports:
+      # Loopback only: Redis has no password and holds gateway keys + analytics.
+      - "127.0.0.1:33003:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - open-gateway-network
+
+  # ─── Tyk gateway volume owner (one-shot) ───────────────
+  # v5.15.0 is distroless and runs as uid 65532, but /opt/tyk-gateway/apps ships as root:root 0755,
+  # so `POST /tyk/apis` fails with "file object creation failed, write error" until the volume is
+  # chowned. Runs to completion before the gateway starts.
+  #
+  # The `.keep` file is what makes the chown stick: Docker copies the image's directory content into a
+  # volume only while that volume is EMPTY, so chowning an empty volume was immediately undone by
+  # root-owned app_sample.json landing on top of it on a fresh machine. Verified on v5.15.0:
+  # chown-only -> /apps back to 0:0 and uid 65532 gets EACCES; chown + .keep -> stays 65532, writable.
+  tyk-gateway-init:
+    image: alpine:3
+    container_name: open-gateway-tyk-init
+    command: ["sh", "-c", "for d in /apps /policies; do chown -R 65532:65532 $$d && chmod 0755 $$d && touch $$d/.keep && chown 65532:65532 $$d/.keep; done"]
+    volumes:
+      - tyk_apps:/apps
+      - tyk_policies:/policies
+    networks:
+      - open-gateway-network
+
+  # ─── Tyk OSS Gateway ───────────────────────────────────
+  # API definitions are stored as files in /opt/tyk-gateway/apps (volume survives recreation).
+  tyk-gateway:
+    image: tykio/tyk-gateway:v5.15.0
+    container_name: open-gateway-tyk-gateway
+    restart: unless-stopped
+    environment:
+      TYK_GW_LISTENPORT: "8080"
+      # Control API (/tyk/*) on its own port, which is deliberately NOT published: on the shared data
+      # port anyone who could reach a published API could also reach the admin API. Verified on
+      # v5.15.0: with this set, :8080 answers 404 for /tyk/* AND for /hello — both move to :8081.
+      TYK_GW_CONTROLAPIPORT: "8081"
+      TYK_GW_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
+      TYK_GW_USEDBAPPCONFIGS: "false"
+      TYK_GW_STORAGE_TYPE: redis
+      TYK_GW_STORAGE_HOST: redis
+      TYK_GW_STORAGE_PORT: "6379"
+      TYK_GW_ALLOWINSECURECONFIGS: "true"
+      # Analytics: buffer records in Redis (empty TYPE) for tyk-pump to purge into Postgres.
+      TYK_GW_ENABLEANALYTICS: "true"
+      TYK_GW_ANALYTICSCONFIG_TYPE: ""
+      TYK_GW_ANALYTICSCONFIG_ENABLEDETAILEDRECORDING: "false"
+      TYK_GW_ANALYTICSCONFIG_STORAGEEXPIRATIONTIME: "3600"
+      TYK_GW_HASHKEYS: "true"
+      # Policies — the rate / quota / access-rights record a JWT is mapped to — live as one JSON file
+      # per policy in this directory, written by the API through POST /tyk/policies. Without
+      # POLICYPATH the gateway answers 500 "Failed to create file!". ALLOWEXPLICITPOLICYID has to be
+      # on: an OAuth2 client's policy id IS its client id, which is how Tyk maps its tokens
+      # (see apps/api/src/modules/oauth-clients/services/oauth-client-mapper.ts).
+      TYK_GW_POLICIES_POLICYSOURCE: file
+      TYK_GW_POLICIES_POLICYPATH: /opt/tyk-gateway/policies
+      TYK_GW_POLICIES_ALLOWEXPLICITPOLICYID: "true"
+    ports:
+      # Data plane only. 8081 (control API) stays inside the compose network.
+      - "33005:8080"
+    volumes:
+      - tyk_apps:/opt/tyk-gateway/apps
+      - tyk_policies:/opt/tyk-gateway/policies
+    depends_on:
+      redis:
+        condition: service_healthy
+      tyk-gateway-init:
+        condition: service_completed_successfully
+    # No healthcheck: the image is distroless — no shell, no wget, no curl. Dependents use
+    # service_started; the API degrades gracefully (circuit breaker + syncStatus=FAILED + retry).
+    networks:
+      - open-gateway-network
+
+  # ─── Tyk Pump (analytics → Postgres) ───────────────────
+  tyk-pump:
+    image: tykio/tyk-pump-docker-pub:v1.17.0
+    container_name: open-gateway-tyk-pump
+    restart: unless-stopped
+    environment:
+      # Overrides pump.conf's connection_string (which carries no real password) with the actual
+      # DB_PASS. Verified working: TYK_PMP_PUMPS_<NAME>_META_CONNECTIONSTRING, <NAME> = the pump.conf
+      # key uppercased with NO underscore (see docs/ANALYTICS-PIPELINE.md) — "postgres"/"postgresaggregate"
+      # both qualify.
+      TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING: "host=postgres port=5432 user=opengateway password=${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)} dbname=opengateway sslmode=disable"
+      TYK_PMP_PUMPS_POSTGRESAGGREGATE_META_CONNECTIONSTRING: "host=postgres port=5432 user=opengateway password=${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)} dbname=opengateway sslmode=disable"
+    volumes:
+      - ./pump/pump.conf:/opt/tyk-pump/pump.conf:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    # No compose healthcheck — distroless image (no shell/curl to run one). The pump's own
+    # /health endpoint (pump.conf: health_check_endpoint_*, port 8083) is not published to the host;
+    # the API probes it over this network via PUMP_HEALTH_URL to report "pump not running", and the
+    # sidecar below gives `docker compose ps`/`up --wait` a real container-level health signal too.
+    networks:
+      - open-gateway-network
+
+  # ─── Gateway + Pump healthcheck sidecar ────────────────
+  # Both tyk-gateway and tyk-pump are distroless (no shell, no curl/wget), so neither can run a
+  # `HEALTHCHECK` of its own — the reason both were healthcheck-less until now. This sidecar has no
+  # job beyond polling their in-network health endpoints (neither is published to the host) and
+  # surfacing the result as its own compose health state.
+  tyk-healthcheck:
+    image: curlimages/curl:8.15.0
+    container_name: open-gateway-tyk-healthcheck
+    entrypoint: ["sh", "-c", "sleep infinity"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://tyk-gateway:8081/hello && curl -sf http://tyk-pump:8083/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      - tyk-gateway
+      - tyk-pump
+    networks:
+      - open-gateway-network
+
+  # ─── NestJS API ────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: open-gateway-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/opengateway?schema=public
+      REDIS_URL: redis://redis:6379
+      # No default on purpose: a committed JWT secret means every stack signs tokens with a key that
+      # is public. install.sh writes one into infra/.env; `export JWT_SECRET=...` also works.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (install.sh generates infra/.env; or openssl rand -hex 32)}
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      # Ory. In-network URLs for every call the API makes; the ISSUER is the browser-facing one
+      # because that is the `iss` Hydra stamps into a token (urls.self.issuer in hydra.yml), and
+      # JwtStrategy verifies the claim against it while fetching JWKS from the in-network host.
+      ORY_HYDRA_PUBLIC_URL: http://hydra:4444
+      ORY_HYDRA_ADMIN_URL: http://hydra:4445
+      ORY_HYDRA_ISSUER: http://localhost:33010/
+      ORY_KRATOS_PUBLIC_URL: http://kratos:4433
+      ORY_KRATOS_ADMIN_URL: http://kratos:4434
+      # Keto answers tenant membership (read 4466 = check, write 4467 = tuples).
+      ORY_KETO_READ_URL: http://keto:4466
+      ORY_KETO_WRITE_URL: http://keto:4467
+      CORS_ORIGINS: http://localhost:33000
+      # Behind TLS / a reverse proxy set these in infra/.env (see docs/deployment.md): COOKIE_SECURE=true
+      # for Secure session cookies, TRUST_PROXY_HOPS=<number of proxies> so rate limits are per client.
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+      # Control API port (see TYK_GW_CONTROLAPIPORT above), reachable only inside this network.
+      TYK_ADMIN_URL: http://tyk-gateway:8081/tyk
+      TYK_ADMIN_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
+      # /hello is served by the control API port too, so the health probe points at 8081.
+      TYK_GATEWAY_URL: http://tyk-gateway:8081
+      TYK_ORG_ID: org123
+      # Upstream hosts an API may never proxy to, on top of the built-in denylist (loopback,
+      # link-local / metadata, the service names above). Comma separated.
+      PROXY_DENY_HOSTS: ""
+      # Pump liveness probe for GET /api/analytics/health (unset = reported as not running)
+      PUMP_HEALTH_URL: http://tyk-pump:8083/health
+    ports:
+      - "33001:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      tyk-gateway:
+        condition: service_started
+      # Every authenticated request needs both: Hydra's JWKS to verify the token, Keto to confirm
+      # the caller's tenant membership. Booting ahead of them means 500s until they catch up.
+      hydra:
+        condition: service_healthy
+      keto:
+        condition: service_healthy
+      # The API doesn't call Kratos directly today, but it's part of the same auth cutover — wait
+      # for it too rather than relying on restart: unless-stopped to paper over a startup race.
+      kratos:
+        condition: service_started
+    networks:
+      - open-gateway-network
+      - ory-internal
+
+  # ─── Next.js Web ───────────────────────────────────────
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      # NEXT_PUBLIC_* is inlined at build time (see the Dockerfile), so it must be repeated here as a
+      # build arg, not only below as a runtime var. Keep both in sync.
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:33001/api
+        NEXT_PUBLIC_KRATOS_URL: http://localhost:33012
+        NEXT_PUBLIC_HYDRA_URL: http://localhost:33010
+        NEXT_PUBLIC_APP_URL: http://localhost:33000
+    container_name: open-gateway-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:33001/api
+      # The app's own public origin — read server-side only (hydra-admin.ts), so it's a plain
+      # runtime var, not NEXT_PUBLIC_*. Load-bearing for the open-redirect fix's origin check
+      # (sanitizeReturnTo): a deployment to a different origin that forgets this falls back to
+      # localhost:33000 and silently flattens every return_to to '/' instead of erroring.
+      APP_URL: http://localhost:33000
+      # Browser-facing — the browser talks to Kratos/Hydra directly, same as it does the API above.
+      NEXT_PUBLIC_KRATOS_URL: http://localhost:33012
+      NEXT_PUBLIC_HYDRA_URL: http://localhost:33010
+      # This container's OWN outbound calls (login-challenge handling, token exchange) — in-network,
+      # unlike the NEXT_PUBLIC_* pair above. Hydra admin is loopback-only on the host but reachable
+      # here at hydra:4445 because this container shares hydra/kratos's compose network.
+      HYDRA_PUBLIC_URL: http://hydra:4444
+      HYDRA_ADMIN_URL: http://hydra:4445
+      KRATOS_INTERNAL_URL: http://kratos:4433
+      # This app talks to Postgres directly in one place: /oauth2/login provisions the local `User`
+      # row for a Kratos identity (the row whose id becomes the Hydra token subject). Without this
+      # the whole login flow 500s on `Environment variable not found: DATABASE_URL`.
+      DATABASE_URL: postgresql://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/opengateway?schema=public
+    ports:
+      - "33000:3000"
+    depends_on:
+      - api
+    networks:
+      - open-gateway-network
+      - ory-internal
+
+  # ─── Ory database bootstrap (one-shot) ─────────────────
+  # Hydra/Kratos/Keto each get their own database in the existing postgres container, kept apart
+  # from the `opengateway` app database. This is a job rather than a docker-entrypoint-initdb.d
+  # script because that directory only runs when the postgres volume is first initialised — which
+  # already happened on every existing install. init-db.sql is idempotent, so it is safe every boot.
+  ory-db-init:
+    image: postgres:16-alpine
+    container_name: open-gateway-ory-db-init
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init-db.sql"]
+    environment:
+      PGHOST: postgres
+      PGUSER: opengateway
+      PGPASSWORD: ${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}
+      PGDATABASE: opengateway
+    volumes:
+      - ./ory/init-db.sql:/init-db.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ory-internal
+
+  # ─── Ory Hydra (OAuth2/OIDC) ───────────────────────────
+  # Hydra holds no users: it redirects to the login/consent app (urls.* in hydra.yml, built by WP3)
+  # and issues JWT access tokens that Tyk validates offline against /.well-known/jwks.json.
+  hydra-migrate:
+    image: oryd/hydra:v26.2.0
+    container_name: open-gateway-hydra-migrate
+    command: migrate sql -e --yes
+    environment:
+      DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/hydra?sslmode=disable
+    depends_on:
+      ory-db-init:
+        condition: service_completed_successfully
+    networks:
+      - ory-internal
+
+  hydra:
+    image: oryd/hydra:v26.2.0
+    container_name: open-gateway-hydra
+    restart: unless-stopped
+    # --dev permits the plain-HTTP issuer this stack uses. Drop it once there is TLS in front.
+    command: serve all --dev -c /etc/config/hydra.yml
+    environment:
+      DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM: ${HYDRA_SECRETS_SYSTEM:?set HYDRA_SECRETS_SYSTEM (install.sh generates infra/.env; or openssl rand -hex 32)}
+      SECRETS_COOKIE: ${HYDRA_SECRETS_COOKIE:?set HYDRA_SECRETS_COOKIE (install.sh generates infra/.env; or openssl rand -hex 32)}
+    volumes:
+      - ./ory/hydra/hydra.yml:/etc/config/hydra.yml:ro
+    ports:
+      # Public OAuth2 endpoints — the browser and API consumers need these.
+      - "33010:4444"
+      # Admin API: UNAUTHENTICATED (client CRUD, consent grants). Loopback only, like postgres/redis.
+      - "127.0.0.1:33011:4445"
+    healthcheck:
+      # Unlike the Tyk image, the non-distroless Ory images ship busybox wget.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4445/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+    networks:
+      - ory-internal
+
+  # ─── Ory Kratos (identity / self-service) ──────────────
+  # Headless: it returns flow state as JSON and renders nothing. WP3 builds every screen.
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    container_name: open-gateway-kratos-migrate
+    command: migrate sql -e --yes
+    environment:
+      DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/kratos?sslmode=disable
+    depends_on:
+      ory-db-init:
+        condition: service_completed_successfully
+    networks:
+      - ory-internal
+
+  kratos:
+    image: oryd/kratos:v26.2.0
+    container_name: open-gateway-kratos
+    restart: unless-stopped
+    command: serve all --dev -c /etc/config/kratos/kratos.yml
+    environment:
+      DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/kratos?sslmode=disable
+      SECRETS_DEFAULT: ${KRATOS_SECRETS_DEFAULT:?set KRATOS_SECRETS_DEFAULT (install.sh generates infra/.env; or openssl rand -hex 32)}
+      SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?set KRATOS_SECRETS_COOKIE (install.sh generates infra/.env; or openssl rand -hex 32)}
+      # Must be exactly 32 characters — Kratos refuses to start otherwise (openssl rand -hex 16).
+      SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?set KRATOS_SECRETS_CIPHER (install.sh generates infra/.env; or openssl rand -hex 16)}
+      # No mail server in this stack; see the courier note in kratos.yml. Point this at a real SMTP
+      # server to make recovery/verification codes actually deliverable.
+      COURIER_SMTP_CONNECTION_URI: ${KRATOS_SMTP_URI:-smtps://placeholder:placeholder@localhost:1025/?skip_ssl_verify=true}
+      SESSION_COOKIE_SECURE: ${KRATOS_COOKIE_SECURE:-false}
+    volumes:
+      - ./ory/kratos:/etc/config/kratos:ro
+    ports:
+      # Public self-service API — called from the browser (CORS is configured in kratos.yml).
+      - "33012:4433"
+      # Admin API: UNAUTHENTICATED (identity CRUD, recovery links). Loopback only.
+      - "127.0.0.1:33013:4434"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4434/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    networks:
+      - ory-internal
+
+  # ─── Ory Keto (relation-tuple authorization) ───────────
+  keto-migrate:
+    image: oryd/keto:v26.2.0
+    container_name: open-gateway-keto-migrate
+    command: migrate up --yes -c /etc/config/keto/keto.yml
+    environment:
+      DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/keto?sslmode=disable
+    volumes:
+      - ./ory/keto:/etc/config/keto:ro
+    depends_on:
+      ory-db-init:
+        condition: service_completed_successfully
+    networks:
+      - ory-internal
+
+  keto:
+    image: oryd/keto:v26.2.0
+    container_name: open-gateway-keto
+    restart: unless-stopped
+    command: serve -c /etc/config/keto/keto.yml
+    environment:
+      DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/keto?sslmode=disable
+    volumes:
+      - ./ory/keto:/etc/config/keto:ro
+    ports:
+      # Both APIs are UNAUTHENTICATED — loopback only. The API reaches them over this network at
+      # http://keto:4466 (check/read) and http://keto:4467 (write).
+      - "127.0.0.1:33014:4466"
+      - "127.0.0.1:33015:4467"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4466/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      keto-migrate:
+        condition: service_completed_successfully
+    networks:
+      - ory-internal
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  tyk_apps:
+    driver: local
+  tyk_policies:
+    driver: local
+
+networks:
+  open-gateway-network:
+    driver: bridge
+  # No `internal: true` — postgres and the Ory admin APIs still need their published loopback-only
+  # ports for host-side tooling (psql, the migrate-users-to-kratos.ts script, etc). The isolation
+  # this buys is that tyk-gateway/tyk-pump were never added to it, not that it can't reach the host.
+  ory-internal:
+    driver: bridge

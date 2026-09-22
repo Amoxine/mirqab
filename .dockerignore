@@ -1,0 +1,38 @@
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+dist
+out
+.turbo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test
+coverage
+
+# Prisma — migrations MUST ship in the API image (`prisma migrate deploy` runs against them at
+# container start); only the local sqlite dev artifact is excluded.
+packages/database/prisma/dev.db
+
+# Docker
+docker-compose.override.yml
