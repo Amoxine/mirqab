@@ -70,8 +70,8 @@ This script performs all steps below automatically:
 8. Seeds the database with default data (`pnpm db:seed`)
 
 After setup completes, access:
-- **Web App:** http://localhost:33000
-- **API Server:** http://localhost:33001/api
+- **Web App:** https://localhost:33000
+- **API Server:** https://localhost:33001/api
 - **Prisma Studio:** http://localhost:33004
 
 ### Manual Setup
@@ -110,10 +110,10 @@ pnpm db:seed
 # Start ALL services in parallel (watch mode via Turborepo)
 pnpm dev
 
-# Start ONLY Next.js frontend (http://localhost:33000)
+# Start ONLY Next.js frontend (https://localhost:33000)
 pnpm --filter @open-gateway/web dev
 
-# Start ONLY NestJS backend (http://localhost:33001)
+# Start ONLY NestJS backend (https://localhost:33001)
 pnpm --filter @open-gateway/api dev
 
 # Open Prisma Studio for database browsing (http://localhost:33004)
@@ -957,7 +957,7 @@ pnpm db:seed
 Ensure `CORS_ORIGINS` in `apps/api/.env.local` includes your frontend URL:
 
 ```env
-CORS_ORIGINS=http://localhost:33000
+CORS_ORIGINS=https://localhost:33000
 ```
 
 ### JWT Auth Errors

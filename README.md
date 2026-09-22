@@ -142,11 +142,14 @@ bash install.sh --debug             # Enable trace mode for troubleshooting
 bash install.sh --verbose           # Show full command output
 ```
 
-**Access the application:**
-- **Web App**: http://localhost:33000
-- **API**: http://localhost:33001/api/health
+**Access the application:** every application port is HTTPS, terminated by the Caddy edge, which is
+the only container that publishes one. It signs with its own internal CA, so install that root once
+per client machine or every request needs `-k` — [`infra/edge/README.md`](infra/edge/README.md).
+
+- **Web App**: https://localhost:33000
+- **API**: https://localhost:33001/api/health
 - **Prisma Studio**: http://localhost:33004
-- **Tyk Gateway** (open-source, no Tyk Dashboard): http://localhost:33005/`<listen-path>` — API traffic only.
+- **Tyk Gateway** (open-source, no Tyk Dashboard): https://localhost:33005/`<listen-path>` — API traffic only.
   The gateway's control API (`/tyk/*`) **and** `/hello` run on port 8081, which is not published to the
   host; only the API container reaches them. Postgres (33002) and Redis (33003) are bound to `127.0.0.1`.
 
@@ -443,11 +446,11 @@ open-gateway/
 | `JWT_EXPIRES_IN` | No | `15m` | Leftover, unread by any code path today. The real access-token TTL is Hydra's `ttl.access_token` (1h, `infra/ory/hydra/hydra.yml`) |
 | `JWT_REFRESH_EXPIRES_IN` | No | `7d` | Leftover, unread by any code path today. The real refresh-token TTL is Hydra's `ttl.refresh_token` (720h) |
 | `ORY_HYDRA_PUBLIC_URL` | **Yes** | `http://hydra:4444` | Where the API fetches Hydra's JWKS from (in-network URL) |
-| `ORY_HYDRA_ISSUER` | **Yes** | `http://localhost:33010/` | The `iss` claim Hydra stamps into every token (the browser-facing URL) — **not** the same as `ORY_HYDRA_PUBLIC_URL` above |
+| `ORY_HYDRA_ISSUER` | **Yes** | `https://localhost:33010/` | The `iss` claim Hydra stamps into every token (the browser-facing URL) — **not** the same as `ORY_HYDRA_PUBLIC_URL` above |
 | `ORY_HYDRA_ADMIN_URL` | No | - | Hydra's admin API, used for OAuth2 client management (data-plane `client_credentials` clients) |
 | `ORY_KRATOS_PUBLIC_URL` / `ORY_KRATOS_ADMIN_URL` | No | - | Kratos public/admin API base URLs |
 | `ORY_KETO_READ_URL` / `ORY_KETO_WRITE_URL` | **Yes** | `http://keto:4466` / `http://keto:4467` | Tenant-membership checks (`ketoCheck`) and tuple writes |
-| `CORS_ORIGINS` | No | `http://localhost:33000` | Comma-separated allowed origins |
+| `CORS_ORIGINS` | No | `https://localhost:33000` | Comma-separated allowed origins |
 | `TYK_ADMIN_URL` | **Yes** | - | Tyk **Gateway** REST API base URL, i.e. `<gateway>/tyk` on its control port (`http://tyk-gateway:8081/tyk` in compose). Only the open-source gateway is supported, not the Tyk Dashboard |
 | `TYK_ADMIN_SECRET` | **Yes** | - | Gateway secret (`TYK_GW_SECRET` on the gateway), sent as `x-tyk-authorization` |
 | `TYK_GATEWAY_URL` | No | - | Base URL used for the `/hello` health probe. With a control port configured, `/hello` is served there, so this points at the control port too (`http://tyk-gateway:8081`) |
@@ -461,10 +464,10 @@ open-gateway/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `NEXT_PUBLIC_APP_URL` | No | `http://localhost:33000` | Base URL for the web app |
-| `NEXT_PUBLIC_API_URL` | **Yes** | - | Backend API base URL (e.g., `http://localhost:33001/api`) |
-| `NEXT_PUBLIC_KRATOS_URL` | **Yes** | `http://localhost:33012` | Browser-facing Kratos URL — the browser calls Kratos directly for login/register/recovery |
-| `NEXT_PUBLIC_HYDRA_URL` | **Yes** | `http://localhost:33010` | Browser-facing Hydra URL, for the OAuth2 authorize redirect |
+| `NEXT_PUBLIC_APP_URL` | No | `https://localhost:33000` | Base URL for the web app |
+| `NEXT_PUBLIC_API_URL` | **Yes** | - | Backend API base URL (e.g., `https://localhost:33001/api`) |
+| `NEXT_PUBLIC_KRATOS_URL` | **Yes** | `https://localhost:33012` | Browser-facing Kratos URL — the browser calls Kratos directly for login/register/recovery |
+| `NEXT_PUBLIC_HYDRA_URL` | **Yes** | `https://localhost:33010` | Browser-facing Hydra URL, for the OAuth2 authorize redirect |
 | `HYDRA_PUBLIC_URL` / `HYDRA_ADMIN_URL` / `KRATOS_INTERNAL_URL` | **Yes** | in-network defaults | This Next.js server's own outbound calls (login-challenge handling, token exchange) — distinct from the `NEXT_PUBLIC_*` pair above, which the browser uses |
 | `COOKIE_SECURE` | No | `NODE_ENV === 'production'` | Overrides the `Secure` flag on the session cookies **this app sets** — the NestJS API no longer sets any auth cookie itself |
 

@@ -26,6 +26,14 @@ const DENIED_HOSTS = new Set([
   // "only reachable inside the compose network" is the whole of their protection, and an API
   // proxying to one of them punches a hole straight through it (Kratos admin mints recovery links
   // for any identity, Hydra admin owns every OAuth2 client, Keto admin writes tenant membership).
+  //
+  // `edge` (WP26b) is the TLS terminator and the only service that publishes a port. Proxying to
+  // it is worse than reaching any single service: its five listeners fan back out to web, api,
+  // tyk-gateway, hydra and kratos, so one allowed upstream would re-enter the whole stack — and
+  // the request would arrive at the edge from the gateway, which then stamps
+  // `X-Forwarded-For: <gateway>` over it. The container name `open-gateway-edge` is already
+  // covered by DENIED_HOST_PREFIX below; this is the short compose alias.
+  'edge',
   'postgres',
   'redis',
   'tyk-gateway',

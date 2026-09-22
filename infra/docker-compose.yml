@@ -18,10 +18,15 @@ name: Open Gateway Infrastructure
 #                            because the gateway's control API (/tyk/*) is NOT published to the host
 #                            (see TYK_GW_CONTROLAPIPORT). Set it for anything reachable by someone else.
 #
-# Published ports: 33000 web, 33001 api, 33005 gateway DATA plane, 33010 Hydra public, 33012 Kratos
-# public. Postgres (33002), Redis (33003), Hydra admin (33011), Kratos admin (33013) and Keto
-# read/write (33014/33015) are bound to 127.0.0.1 — every one of those Ory admin APIs is
-# UNAUTHENTICATED. The gateway control API (8081) and pump health (8083) are not published at all.
+# Published ports (WP26b): the `edge` service is the ONLY thing that publishes an application port.
+# It terminates TLS and runs the WAF on 33000 web, 33001 api, 33005 gateway DATA plane, 33010 Hydra
+# public and 33012 Kratos public — the same port numbers as before, now HTTPS. web/api/tyk-gateway/
+# hydra/kratos carry `expose:` instead of `ports:`; that is load-bearing, not tidiness, because a LAN
+# client that can still reach Tyk directly on 33005 forges its own X-Forwarded-For and defeats the
+# per-client rate limits and (WP15c) the IP deny list. Postgres (33002), Redis (33003), Hydra admin
+# (33011), Kratos admin (33013) and Keto read/write (33014/33015) are bound to 127.0.0.1 — every one
+# of those Ory admin APIs is UNAUTHENTICATED and none of them is routed through the edge. The gateway
+# control API (8081) and pump health (8083) are not published at all.
 #
 # Ory (Hydra/Kratos/Keto) is the auth system: the API's JwtStrategy validates only Hydra-issued
 # JWTs, and the old local login/register/refresh routes are gone. WP7 owns removing the now-dead
@@ -47,6 +52,53 @@ name: Open Gateway Infrastructure
 # place, and the SSRF denylist can catch a stale hostname but structurally cannot catch this.
 #
 services:
+  # ─── Edge: TLS termination + WAF (WP26b) ───────────────
+  # The only service that publishes an application port. Custom Caddy build (infra/edge/Dockerfile)
+  # with OWASP Coraza + CRS 4 linked in; route table and WAF config in infra/edge/Caddyfile.
+  #
+  # On both networks because it fronts web/api/tyk-gateway (open-gateway-network) and hydra/kratos
+  # (ory-internal). That does not weaken the split documented above: the edge routes only surfaces
+  # that were already published, never an admin API, and it trusts nothing about which network a
+  # request arrived on. api and web already straddle both networks for the same reason.
+  edge:
+    build:
+      context: ./edge
+    image: open-gateway-edge:wp26b
+    container_name: open-gateway-edge
+    restart: unless-stopped
+    environment:
+      # The host's LAN address, so `tls internal` also issues for https://<lan-ip>:<port>. Unset,
+      # the listeners still answer on localhost. install.sh writes it into infra/.env.
+      EDGE_LAN_IP: ${EDGE_LAN_IP:-127.0.0.1}
+    ports:
+      - "33000:33000"
+      - "33001:33001"
+      - "33005:33005"
+      - "33010:33010"
+      - "33012:33012"
+    volumes:
+      - ./edge/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Named volume, not bind mount: it holds the internal CA's private key, and losing it mints a
+      # new root that invalidates every client which installed the old one.
+      - caddy_data:/data
+    healthcheck:
+      # Unlike the Tyk images this one is alpine-based, so it can run its own probe. Caddy's admin
+      # API is loopback-inside-the-container only; it is never published.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/apps/http/servers"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      - web
+      - api
+      - tyk-gateway
+      - hydra
+      - kratos
+    networks:
+      - open-gateway-network
+      - ory-internal
+
   # ─── PostgreSQL ────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
@@ -174,9 +226,10 @@ services:
       TYK_GW_POLICIES_POLICYSOURCE: file
       TYK_GW_POLICIES_POLICYPATH: /opt/tyk-gateway/policies
       TYK_GW_POLICIES_ALLOWEXPLICITPOLICYID: "true"
-    ports:
-      # Data plane only. 8081 (control API) stays inside the compose network.
-      - "33005:8080"
+    expose:
+      # Data plane only, and reachable only through the edge (WP26b) — 33005 is now the edge's
+      # HTTPS listener, not this container's. 8081 (control API) stays inside the network either way.
+      - "8080"
     volumes:
       - tyk_apps:/opt/tyk-gateway/apps
       - tyk_policies:/opt/tyk-gateway/policies
@@ -259,17 +312,21 @@ services:
       # JwtStrategy verifies the claim against it while fetching JWKS from the in-network host.
       ORY_HYDRA_PUBLIC_URL: http://hydra:4444
       ORY_HYDRA_ADMIN_URL: http://hydra:4445
-      ORY_HYDRA_ISSUER: http://localhost:33010/
+      ORY_HYDRA_ISSUER: https://localhost:33010/
       ORY_KRATOS_PUBLIC_URL: http://kratos:4433
       ORY_KRATOS_ADMIN_URL: http://kratos:4434
       # Keto answers tenant membership (read 4466 = check, write 4467 = tuples).
       ORY_KETO_READ_URL: http://keto:4466
       ORY_KETO_WRITE_URL: http://keto:4467
-      CORS_ORIGINS: http://localhost:33000
-      # Behind TLS / a reverse proxy set these in infra/.env (see docs/deployment.md): COOKIE_SECURE=true
-      # for Secure session cookies, TRUST_PROXY_HOPS=<number of proxies> so rate limits are per client.
-      COOKIE_SECURE: ${COOKIE_SECURE:-}
-      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+      CORS_ORIGINS: https://localhost:33000
+      # WP26b: the edge is now the only publisher and there is exactly one proxy hop in front of this
+      # container, so both of these flipped from their old "no TLS" defaults. TRUST_PROXY_HOPS is a
+      # COUNT, never `true` — `0` made main.ts ignore X-Forwarded-For entirely, which behind the edge
+      # collapses every per-IP rate limit into one bucket keyed on the edge's own address. `1` makes
+      # req.ip the last XFF entry, which the Caddyfile guarantees is the real client (it REPLACES the
+      # header with {remote_host} rather than appending to whatever the client sent).
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       # Control API port (see TYK_GW_CONTROLAPIPORT above), reachable only inside this network.
       TYK_ADMIN_URL: http://tyk-gateway:8081/tyk
       TYK_ADMIN_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
@@ -285,8 +342,8 @@ services:
       PROXY_DENY_HOSTS: ""
       # Pump liveness probe for GET /api/analytics/health (unset = reported as not running)
       PUMP_HEALTH_URL: http://tyk-pump:8083/health
-    ports:
-      - "33001:4000"
+    expose:
+      - "4000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -316,23 +373,23 @@ services:
       # NEXT_PUBLIC_* is inlined at build time (see the Dockerfile), so it must be repeated here as a
       # build arg, not only below as a runtime var. Keep both in sync.
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:33001/api
-        NEXT_PUBLIC_KRATOS_URL: http://localhost:33012
-        NEXT_PUBLIC_HYDRA_URL: http://localhost:33010
-        NEXT_PUBLIC_APP_URL: http://localhost:33000
+        NEXT_PUBLIC_API_URL: https://localhost:33001/api
+        NEXT_PUBLIC_KRATOS_URL: https://localhost:33012
+        NEXT_PUBLIC_HYDRA_URL: https://localhost:33010
+        NEXT_PUBLIC_APP_URL: https://localhost:33000
     container_name: open-gateway-web
     restart: unless-stopped
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://localhost:33001/api
+      NEXT_PUBLIC_API_URL: https://localhost:33001/api
       # The app's own public origin — read server-side only (hydra-admin.ts), so it's a plain
       # runtime var, not NEXT_PUBLIC_*. Load-bearing for the open-redirect fix's origin check
       # (sanitizeReturnTo): a deployment to a different origin that forgets this falls back to
       # localhost:33000 and silently flattens every return_to to '/' instead of erroring.
-      APP_URL: http://localhost:33000
+      APP_URL: https://localhost:33000
       # Browser-facing — the browser talks to Kratos/Hydra directly, same as it does the API above.
-      NEXT_PUBLIC_KRATOS_URL: http://localhost:33012
-      NEXT_PUBLIC_HYDRA_URL: http://localhost:33010
+      NEXT_PUBLIC_KRATOS_URL: https://localhost:33012
+      NEXT_PUBLIC_HYDRA_URL: https://localhost:33010
       # This container's OWN outbound calls (login-challenge handling, token exchange) — in-network,
       # unlike the NEXT_PUBLIC_* pair above. Hydra admin is loopback-only on the host but reachable
       # here at hydra:4445 because this container shares hydra/kratos's compose network.
@@ -343,8 +400,8 @@ services:
       # row for a Kratos identity (the row whose id becomes the Hydra token subject). Without this
       # the whole login flow 500s on `Environment variable not found: DATABASE_URL`.
       DATABASE_URL: postgresql://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/opengateway?schema=public
-    ports:
-      - "33000:3000"
+    expose:
+      - "3000"
     depends_on:
       - api
     networks:
@@ -392,18 +449,24 @@ services:
     image: oryd/hydra:v26.2.0
     container_name: open-gateway-hydra
     restart: unless-stopped
-    # --dev permits the plain-HTTP issuer this stack uses. Drop it once there is TLS in front.
-    command: serve all --dev -c /etc/config/hydra.yml
+    # WP26b dropped `--dev`: the edge terminates TLS, so the issuer is https and Hydra no longer
+    # needs the plain-HTTP escape hatch. Without --dev Hydra refuses any request that did not arrive
+    # over TLS unless the terminating proxy's address is whitelisted — that is
+    # `serve.tls.allow_termination_from` in hydra.yml, and the two changes only work together.
+    command: serve all -c /etc/config/hydra.yml
     environment:
       DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/hydra?sslmode=disable
       SECRETS_SYSTEM: ${HYDRA_SECRETS_SYSTEM:?set HYDRA_SECRETS_SYSTEM (install.sh generates infra/.env; or openssl rand -hex 32)}
       SECRETS_COOKIE: ${HYDRA_SECRETS_COOKIE:?set HYDRA_SECRETS_COOKIE (install.sh generates infra/.env; or openssl rand -hex 32)}
     volumes:
       - ./ory/hydra/hydra.yml:/etc/config/hydra.yml:ro
+    expose:
+      # Public OAuth2 endpoints — published as https://localhost:33010 by the edge (WP26b).
+      - "4444"
     ports:
-      # Public OAuth2 endpoints — the browser and API consumers need these.
-      - "33010:4444"
-      # Admin API: UNAUTHENTICATED (client CRUD, consent grants). Loopback only, like postgres/redis.
+      # Admin API: UNAUTHENTICATED (client CRUD, consent grants). Loopback only, like postgres/redis,
+      # and deliberately NOT routed through the edge — a site for it would put an unauthenticated
+      # admin API on the LAN.
       - "127.0.0.1:33011:4445"
     healthcheck:
       # Unlike the Tyk image, the non-distroless Ory images ship busybox wget.
@@ -449,10 +512,13 @@ services:
       SESSION_COOKIE_SECURE: ${KRATOS_COOKIE_SECURE:-false}
     volumes:
       - ./ory/kratos:/etc/config/kratos:ro
+    expose:
+      # Public self-service API — published as https://localhost:33012 by the edge (WP26b) and
+      # called from the browser (CORS is configured in kratos.yml).
+      - "4433"
     ports:
-      # Public self-service API — called from the browser (CORS is configured in kratos.yml).
-      - "33012:4433"
-      # Admin API: UNAUTHENTICATED (identity CRUD, recovery links). Loopback only.
+      # Admin API: UNAUTHENTICATED (identity CRUD, recovery links). Loopback only, and not routed
+      # through the edge — its `admin.base_url` in kratos.yml stays plain HTTP on 33013 for that reason.
       - "127.0.0.1:33013:4434"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4434/health/ready"]
@@ -515,6 +581,9 @@ volumes:
   tyk_apps:
     driver: local
   tyk_policies:
+    driver: local
+  # Caddy's internal CA (pki/authorities/local/*) plus its cert store. See the edge service above.
+  caddy_data:
     driver: local
 
 networks:

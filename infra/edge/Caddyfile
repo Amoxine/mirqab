@@ -1,0 +1,142 @@
+# Open Gateway edge — TLS termination + WAF (WP26b).
+#
+# One Caddy, five HTTPS listeners on the port numbers the stack already published. Nothing else
+# publishes any more (`expose:` in docker-compose.yml), which is what closes the bypass where a LAN
+# client reached Tyk directly on 33005 and forged its own X-Forwarded-For.
+#
+# Base URLs after the cutover are yesterday's URLs with http -> https and the SAME port:
+#   https://localhost:33000  web        https://localhost:33010  Hydra public
+#   https://localhost:33001  api        https://localhost:33012  Kratos public
+#   https://localhost:33005  gateway data plane
+#
+# One issuance mode, `tls internal`: Caddy's own CA signs for `localhost` and for the host's LAN IP.
+# No hostname is invented, so there is no DNS and no *.lan question. Export the root once and trust
+# it on each client (see infra/edge/README.md) — after that `curl` needs no -k.
+#
+# NOT routed here, deliberately, and a request for any of them through the edge gets a 404 from
+# Caddy's default handler: the Tyk control API (8081), Prometheus (9090, arrives with WP20) and the
+# Ory admin APIs (33011/33013, loopback-only and unauthenticated). Adding a site for any of those
+# publishes an unauthenticated admin surface to the LAN.
+#
+# This file is operator configuration. It has no UI, no API route and no permission — an edge route
+# table a tenant admin can edit is a tenant admin who can re-point the control plane.
+{
+	# Mandatory for coraza-caddy: the WAF must evaluate before any other handler runs.
+	order coraza_waf first
+
+	# What makes https://<lan-ip>:<port> work at all. A client dialling an IP literal sends NO SNI
+	# (RFC 6066 allows host names only — curl, openssl and browsers all omit it), and without a
+	# default Caddy has nothing to select a certificate by: the handshake dies with
+	# "tlsv1 alert internal error". Harmless for `localhost`, which always arrives with SNI set.
+	# This is a GLOBAL option, not a `tls` subdirective — `tls internal { default_sni ... }` is a
+	# startup error ("unknown subdirective").
+	default_sni {$EDGE_LAN_IP:127.0.0.1}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ── Shared site body ───────────────────────────────────────────────────────────
+# args[0] = in-network upstream host:port.
+(edge_site) {
+	tls internal
+
+	coraza_waf {
+		load_owasp_crs
+		directives `
+		Include @coraza.conf-recommended
+		Include @crs-setup.conf.example
+
+		# Paranoia level 1 — CRS's own default, set explicitly so a CRS bump cannot move it.
+		SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=1"
+
+		# EDGE_BODY_LIMIT = 10 MB (10485760 bytes). One constant for both directives, because
+		# Coraza parses a non-file body fully into memory and its own default is ~128 MB.
+		# WP15a caps every per-API request-size limit at <= this number at write time, so the
+		# gateway is always the smaller enforcer and the edge never silently pre-empts it.
+		# Changing this number means changing WP15a's DTO bound in the same commit.
+		SecRequestBodyLimit 10485760
+		SecRequestBodyNoFilesLimit 10485760
+
+		Include @owasp_crs/*.conf
+
+		# Detect-first rollout. The WAF evaluates every rule and logs every hit but blocks
+		# nothing. The flip to "SecRuleEngine On" happens at WP20's exit — after a week of
+		# clean DetectionOnly on real traffic AND once WP20's block-rate counter exists,
+		# because a WAF block never reaches Tyk and is otherwise invisible. Do not flip it
+		# here, and do not add a toggle that defaults to blocking.
+		# (No backticks in this block: one would close the directives string above.)
+		SecRuleEngine DetectionOnly
+
+		# Two separate outputs, and WP20 needs to know which is which in this build.
+		# (Still no backticks anywhere in this block — one closes the directives string.)
+		#
+		#   - Per-rule DETECTIONS go to Caddy's own logger, "http.handlers.waf", one JSON line
+		#     per matched rule carrying [id], [msg], [severity], [tag "paranoia-level/N"] and
+		#     the matched data. Verified on coraza-caddy 2.6.1 / CRS 4.25.0: a request whose
+		#     id parameter is a classic OR-1-equals-1 string yields 942100 (libinjection SQLi,
+		#     severity critical) and 949110 (Inbound Anomaly Score Exceeded) while STILL
+		#     returning 200, because the engine is DetectionOnly. This is the feed to scrape.
+		#
+		#   - The AUDIT record below is the per-transaction envelope. In "json" format this
+		#     build emits "messages": null and an empty "highest_severity" even for a
+		#     transaction it interrupted; the rule detail only survives in "native" format. So
+		#     the audit record is good for "is_interrupted" once blocking is on, and useless
+		#     for rule ids — do not build WP20's block-rate counter on its "messages" field.
+		SecAuditEngine RelevantOnly
+		SecAuditLogType Serial
+		SecAuditLog /dev/stdout
+		SecAuditLogFormat json
+		SecAuditLogParts ABIJDEFHZ
+		`
+	}
+
+	reverse_proxy {args[0]} {
+		# REPLACE, not append. Caddy's default appends the peer to whatever the client sent, so
+		# a forged X-Forwarded-For would survive into the header the API reads. The API runs
+		# `trust proxy = TRUST_PROXY_HOPS` (=1), which takes the LAST entry — this directive is
+		# what makes that entry the real client instead of the client's own claim.
+		#
+		# `caddy validate` prints "Unnecessary header_up X-Forwarded-For" here. That lint is
+		# wrong for this case and the line is load-bearing: `caddy adapt` shows the directive
+		# produces `{"set": {"X-Forwarded-For": ["{http.request.remote.host}"]}}` — a set, not
+		# the default `add`. Deleting it restores the append and reopens the spoof.
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
+# ── Sites ──────────────────────────────────────────────────────────────────────
+# EDGE_LAN_IP is the host's LAN address (infra/.env). Unset, the site still answers on loopback.
+
+localhost:33000, {$EDGE_LAN_IP:127.0.0.1}:33000 {
+	import edge_site web:3000
+}
+
+localhost:33001, {$EDGE_LAN_IP:127.0.0.1}:33001 {
+	import edge_site api:4000
+}
+
+# Tyk DATA plane only. The control API is a separate port (8081) inside the network.
+localhost:33005, {$EDGE_LAN_IP:127.0.0.1}:33005 {
+	import edge_site tyk-gateway:8080
+}
+
+localhost:33010, {$EDGE_LAN_IP:127.0.0.1}:33010 {
+	import edge_site hydra:4444
+}
+
+localhost:33012, {$EDGE_LAN_IP:127.0.0.1}:33012 {
+	import edge_site kratos:4433
+}
+
+# Catch-all. Caddy's default for a request whose Host matches no site above is an EMPTY 200 — nothing
+# is proxied, but the status code reads like success, which makes "is Prometheus / the Tyk control
+# API / an Ory admin port reachable through the edge?" ambiguous to assert. This answers 404 instead.
+# It proxies nothing; adding an upstream here would create the accidental catch-all route the WP
+# exists to prevent. Caddy orders the host-matched routes above ahead of this one.
+https://:33000, https://:33001, https://:33005, https://:33010, https://:33012 {
+	tls internal
+	respond 404
+}

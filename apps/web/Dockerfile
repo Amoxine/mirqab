@@ -53,10 +53,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* vars are inlined into the client bundle at BUILD time, not read at container start —
 # a value only set on `docker run`/compose `environment:` never reaches client-side code. These must
 # come in as build args. Defaults match today's docker-compose.yml so an arg-less build is unchanged.
-ARG NEXT_PUBLIC_API_URL=http://localhost:33001/api
-ARG NEXT_PUBLIC_KRATOS_URL=http://localhost:33012
-ARG NEXT_PUBLIC_HYDRA_URL=http://localhost:33010
-ARG NEXT_PUBLIC_APP_URL=http://localhost:33000
+ARG NEXT_PUBLIC_API_URL=https://localhost:33001/api
+ARG NEXT_PUBLIC_KRATOS_URL=https://localhost:33012
+ARG NEXT_PUBLIC_HYDRA_URL=https://localhost:33010
+ARG NEXT_PUBLIC_APP_URL=https://localhost:33000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_KRATOS_URL=$NEXT_PUBLIC_KRATOS_URL \
     NEXT_PUBLIC_HYDRA_URL=$NEXT_PUBLIC_HYDRA_URL \

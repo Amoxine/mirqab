@@ -1,0 +1,109 @@
+# Ory Kratos v26.2.0 — identity and self-service flows.
+#
+# Kratos is HEADLESS: it serves flow state as JSON (`ui.nodes`) and never renders a page. Every
+# screen under selfservice.flows.*.ui_url is hand-built in apps/web by WP3.
+#
+# Secrets come from the environment (SECRETS_DEFAULT / SECRETS_COOKIE / SECRETS_CIPHER).
+#
+# WP26b put a TLS-terminating edge in front, so every browser-facing URL below is https on the same
+# port it used before. Kratos keeps `--dev` (only Hydra's was dropped, per WP26b): the edge speaks
+# plain HTTP to kratos:4433 inside the network, and --dev is what lets Kratos accept that.
+
+serve:
+  public:
+    base_url: https://localhost:33012/
+    cors:
+      # The browser calls Kratos public directly from the dashboard origin, so CORS is required —
+      # without it every self-service fetch from apps/web fails preflight.
+      enabled: true
+      allowed_origins:
+        - https://localhost:33000
+      allowed_methods: [POST, GET, PUT, PATCH, DELETE]
+      allowed_headers: [Authorization, Cookie, Content-Type, X-Session-Token]
+      exposed_headers: [Content-Type, Set-Cookie]
+      allow_credentials: true
+  admin:
+    # Unauthenticated API — compose publishes it on loopback only.
+    base_url: http://localhost:33013/
+
+# NOTE: `oauth2_provider.url` is deliberately NOT set. Setting it makes Kratos accept Hydra login
+# requests itself, with the Kratos identity id as the token subject — but this app's subject is the
+# Postgres `User.id` (apps/api/src/modules/auth/strategies/jwt.strategy.ts, and the ApiKey.userId /
+# AuditLog.userId FKs). The Hydra handshake therefore never hands Kratos a `login_challenge`; it
+# rides in `return_to` instead, so apps/web's /oauth2/login route does the accept. See that file.
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+hashers:
+  # Argon2id per the project's password rule. Verified on v26.2.0: identities imported with a
+  # legacy bcrypt `hashed_password` still authenticate while this is set to argon2 — Kratos picks
+  # the verifier from the stored hash's prefix, so WP5 needs no password reset.
+  algorithm: argon2
+  argon2:
+    memory: 128MB
+    iterations: 3
+    parallelism: 4
+    salt_length: 16
+    key_length: 32
+
+selfservice:
+  default_browser_return_url: https://localhost:33000/
+  allowed_return_urls:
+    - https://localhost:33000
+  methods:
+    password:
+      enabled: true
+    code:
+      enabled: true
+  flows:
+    login:
+      ui_url: https://localhost:33000/auth/login
+      lifespan: 10m
+    registration:
+      ui_url: https://localhost:33000/auth/register
+      lifespan: 10m
+    settings:
+      ui_url: https://localhost:33000/auth/settings
+      privileged_session_max_age: 15m
+      required_aal: highest_available
+    recovery:
+      enabled: true
+      ui_url: https://localhost:33000/auth/recovery
+      use: code
+    verification:
+      enabled: true
+      ui_url: https://localhost:33000/auth/verification
+      use: code
+    logout:
+      after:
+        default_browser_return_url: https://localhost:33000/auth/login
+
+session:
+  lifespan: 24h
+  cookie:
+    same_site: Lax
+    # Behind TLS set KRATOS_COOKIE_SECURE=true in infra/.env (compose passes it as
+    # SESSION_COOKIE_SECURE); it must stay false while the stack is plain HTTP.
+    persistent: true
+
+courier:
+  # There is no mail server in this stack, so delivery fails and recovery/verification CODES never
+  # reach a mailbox. Two ways out, neither needing a container here:
+  #   - set KRATOS_SMTP_URI in infra/.env to a real (or local) SMTP server — compose passes it as
+  #     COURIER_SMTP_CONNECTION_URI, which overrides the placeholder below;
+  #   - mint links server-side via the admin API (POST /admin/recovery/link) — what WP5 would use.
+  # Ory config files do NOT expand ${VARS}; env vars override config by key name, so the URI is set
+  # in docker-compose.yml, not here.
+  smtp:
+    connection_uri: smtps://placeholder:placeholder@localhost:1025/?skip_ssl_verify=true
+    from_address: no-reply@open-gateway.local
+    from_name: Open Gateway
+
+log:
+  level: info
+  format: json
+  leak_sensitive_values: false

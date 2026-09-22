@@ -1,0 +1,85 @@
+# Ory Hydra v26.2.0 — OAuth2/OIDC provider.
+#
+# Hydra has NO user database. It delegates login to the app at urls.login / urls.consent, built by
+# WP3 in apps/web (apps/web/src/app/oauth2/{login,consent,logout}/route.ts), which authenticates
+# against Kratos. client_credentials (the Tyk data plane, WP4) and authorization_code both work.
+#
+# Secrets come from the environment (SECRETS_SYSTEM / SECRETS_COOKIE), never this file.
+#
+# WP26b dropped `--dev` from the compose command: the Caddy edge terminates TLS, so the issuer below
+# is https and the local-development escape hatch is no longer needed.
+
+serve:
+  tls:
+    # Required now that --dev is gone. Without --dev Hydra rejects any request that did not arrive
+    # over TLS; this tells it to accept `X-Forwarded-Proto: https` from a proxy in these ranges.
+    # Broad on purpose — a Docker bridge subnet is assigned dynamically, so the edge's address is not
+    # knowable here. The real boundary is not this list: port 4444 is `expose:`-only, so the only
+    # peers that can reach it at all are the containers on `ory-internal`.
+    allow_termination_from:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+
+urls:
+  self:
+    # The issuer clients and Tyk see. In-network services fetch JWKS at http://hydra:4444 instead,
+    # but the `iss` claim is always this value, so token validators must expect it.
+    issuer: https://localhost:33010/
+  # Built by WP3. Hydra redirects the browser here; these routes must not require an existing session.
+  login: https://localhost:33000/oauth2/login
+  consent: https://localhost:33000/oauth2/consent
+  logout: https://localhost:33000/oauth2/logout
+  error: https://localhost:33000/oauth2/error
+  post_logout_redirect: https://localhost:33000/
+
+strategies:
+  # JWT, not opaque: Tyk validates access tokens offline against Hydra's JWKS (no introspection hop).
+  # Verified on v26.2.0 — client_credentials yields an RS256 JWT signed by a key in /.well-known/jwks.json.
+  access_token: jwt
+
+ttl:
+  access_token: 1h
+  refresh_token: 720h
+  id_token: 1h
+  auth_code: 10m
+
+oauth2:
+  # Claims Hydra may lift out of `ext` onto the top level of an access token, so Tyk can read them
+  # with jwt_policy_field_name / jwt_identity_base_field (neither traverses into `ext`).
+  # Nothing sets these today (see token_hook below); the list is kept so enabling a hook later is a
+  # one-file change, and permitting a claim nobody emits has no effect.
+  allowed_top_level_claims:
+    - pol
+    - tid
+  #
+  # NOT USED, deliberately. WP4 mapped the data plane WITHOUT a token hook: Hydra already puts
+  # `client_id` in every client_credentials token, so a Tyk policy whose id IS the OAuth2 client id
+  # is reachable through `jwt_policy_field_name: client_id` with no claim injection at all (see
+  # apps/api/src/modules/oauth-clients/services/oauth-client-mapper.ts). That avoids the failure mode
+  # this comment used to warn about — an unreachable hook makes Hydra FAIL every token issuance,
+  # dashboard login included.
+  #
+  # If a hook is ever needed, two things verified on v5.15.0 / v26.2.0 constrain it:
+  #   - the policy claim must be a STRING. Tyk rejects an array with "No policies could be
+  #     determined from token", so `{"pol": "<tyk-policy-id>"}`, never `{"pol": ["..."]}`.
+  #   - the endpoint has to answer 204 (or 200 with an empty session) for clients it knows nothing
+  #     about, or the dashboard's own authorization_code flow stops issuing tokens.
+  # Request/response shape: {"session":..., "request":{"client_id":...}} ->
+  #   {"session":{"access_token":{"pol":"<tyk-policy-id>","tid":"<tenant-id>"}}}
+  # token_hook:
+  #   url: http://api:4000/api/internal/hydra/token-hook
+  #
+  exclude_not_before_claim: false
+  grant:
+    jwt:
+      iat_optional: false
+      jti_optional: false
+      max_ttl: 720h
+
+secrets: {}
+
+log:
+  level: info
+  format: json
+  leak_sensitive_values: false
