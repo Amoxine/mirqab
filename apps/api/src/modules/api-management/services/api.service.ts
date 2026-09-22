@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
+  GoneException,
   HttpException,
   Injectable,
   Logger,
@@ -20,6 +21,7 @@ import {
 import { prisma } from '@open-gateway/database';
 import { CreateApiDto } from '../dto/create-api.dto';
 import { UpdateApiDto } from '../dto/update-api.dto';
+import { CreateApiVersionDto } from '../dto/create-api-version.dto';
 import type { ApiConfig, ApiConfigDto } from '../dto/api-config.dto';
 import { TykClientService } from '../../tyk-integration/services/tyk-client.service';
 import { OAuthClientService } from '../../oauth-clients/services/oauth-client.service';
@@ -55,8 +57,34 @@ export interface ApiDetail {
   healthStatus: ApiHealthStatus;
   config: ApiConfig;
   keyCount: number;
+  /** WP16: null on a plain API and on a family's default; set on a child, pointing at its default. */
+  parentApiId: string | null;
+  /** WP16: this row's own version name, or null if it has never been part of a version family. */
+  versionName: string | null;
+  /** WP16: when this (non-default) version was retired. `GET /apis/:id` answers 410 + `Sunset` once set. */
+  retiredAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * A retired API version (WP16): deliberately, permanently gone — 410, not 404 — with an RFC 8594
+ * `Sunset` header carrying when. `AllExceptionsFilter` adds that header itself, duck-typed off
+ * `sunsetAt` alone (common/ shouldn't import a feature module's exception class).
+ *
+ * Not Tyk's own `info.expiration`: live-verified against v5.15.0 that an expired version answers
+ * 403 "API has expired, please check documentation or contact administrator" with no `Sunset`
+ * header at all — not this product's contract. This is purely our management API's own answer to
+ * `GET /apis/:id` on a retired row; the gateway's data-plane behaviour for a retired version is
+ * separate (its sibling entry drops out of `info.versioning` on the next sync — see `mapToTykOas`).
+ */
+export class RetiredVersionException extends GoneException {
+  constructor(
+    readonly sunsetAt: Date,
+    name: string,
+  ) {
+    super(`API version "${name}" was retired and is no longer available.`);
+  }
 }
 
 const SYNC_ERROR_MAX = 500;
@@ -150,6 +178,22 @@ export const gatewayListenPath = (tenantSlug: string, listenPath: string): strin
   `/${tenantSlug}${listenPath}`;
 
 /**
+ * A version row's own `listenPath` (WP16). Never routed to directly: traffic reaches a version only
+ * through the DEFAULT's listen path plus the `x-api-version` header (see `mapToTykOas`'s
+ * `info.versioning`). It exists purely because every Tyk OAS definition — including a version's, its
+ * own full definition — needs a `server.listenPath.value`, and `api_definitions` needs it unique
+ * within the tenant (`@@unique([tenantId, listenPath])`).
+ */
+const versionListenPath = (parentListenPath: string, versionName: string): string =>
+  `${parentListenPath.replace(/\/$/, '')}/__version-${versionName}`;
+
+/** This family's own name for the default/base version, applied the moment its first child is created. */
+export const DEFAULT_VERSION_NAME = 'v1';
+
+/** Header clients select a version with (WP16). Fixed rather than configurable — one convention product-wide. */
+export const VERSION_HEADER = 'x-api-version';
+
+/**
  * The one policy every valid JWT for this API is mapped to (see `jwtFieldsForBringYourOwnJwks`).
  * Unlimited on top of whatever the API's own `global_rate_limit` already applies — the same
  * no-extra-limit baseline `buildTykPolicy` uses when an OAuth2 client sets none (`oauth-client-mapper.ts`).
@@ -194,11 +238,15 @@ export function mapToTykFormat(
     readConfig(apiDef.config);
 
   // Classic keeps per-path middleware under `extended_paths`, so an API-WIDE timeout, size limit or
-  // circuit breaker is expressed as entries whose path matches everything. `/.*` is Tyk's own
-  // convention for that (the field is a regex, not a literal path).
+  // circuit breaker is expressed as a single entry whose path matches everything. `/.*` is Tyk's
+  // own convention for that (the field is a regex, not a literal path).
   const extendedPaths: Record<string, unknown> = {};
   if (timeoutSeconds) {
-    extendedPaths.hard_timeouts = CATCH_ALL_METHODS.map((method) => ({ path: '/.*', method, timeout: timeoutSeconds }));
+    extendedPaths.hard_timeouts = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      timeout: timeoutSeconds,
+    }));
   }
   if (requestSizeLimitBytes) {
     extendedPaths.size_limits = CATCH_ALL_METHODS.map((method) => ({
@@ -280,10 +328,7 @@ export function mapToTykFormat(
       : {}),
     ...(doNotTrack === undefined ? {} : { do_not_track: doNotTrack }),
     ...(throttle
-      ? {
-          global_rate_limit_throttle_retry_limit: throttle.retryLimit,
-          global_rate_limit_throttle_interval: throttle.intervalSeconds,
-        }
+      ? { global_rate_limit_throttle_retry_limit: throttle.retryLimit, global_rate_limit_throttle_interval: throttle.intervalSeconds }
       : {}),
     ...(uptimeTests && uptimeTests.length > 0
       ? {
@@ -337,6 +382,12 @@ const CATCH_ALL_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const CATCH_ALL_PATH = '/{wildcard}';
 const catchAllOperationId = (method: string): string => `catchAll${method}`;
 
+/** One entry of a versioned base's `info.versioning.versions` array (WP16) — a child's own name and Tyk id. */
+export interface ApiVersionChild {
+  versionName: string;
+  tykApiId: string;
+}
+
 /**
  * Tyk-OAS form of the same definition `mapToTykFormat` produces, for `defFormat: OAS` APIs.
  *
@@ -349,15 +400,22 @@ const catchAllOperationId = (method: string): string => `catchAll${method}`;
  * straight rename are called out inline below, because each one fails silently rather than loudly:
  * a wrong polarity or a number-where-a-string-is-expected produces a definition the gateway accepts
  * and then behaves differently from the classic one.
+ *
+ * `versions` (WP16): non-empty only when `apiDef` is the DEFAULT of a family with at least one
+ * active (non-retired) child — the caller (`ApiService.syncToTykWithNodes`) is the one place that
+ * knows the current sibling set, so this stays a pure function of its arguments rather than
+ * querying the database itself.
  */
 export function mapToTykOas(
   apiDef: ApiDefinition,
   tenant: TenantGatewayScope,
   jwtSource = '',
+  versions: readonly ApiVersionChild[] = [],
 ): Record<string, unknown> {
   const { rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests, circuitBreaker } =
     readConfig(apiDef.config);
   const isOAuth = apiDef.authType === 'OAUTH';
+
   const isJwt = apiDef.authType === 'JWT';
   const isToken = apiDef.authType === 'AUTH_TOKEN';
 
@@ -417,8 +475,8 @@ export function mapToTykOas(
     };
   }
   if (requestSizeLimitBytes) {
-    // `X-Tyk-GlobalRequestSizeLimit`. The DTO caps this at the edge's own limit, so the gateway is
-    // always the smaller of the two enforcers and an oversize body is answered by Tyk.
+    // `X-Tyk-GlobalRequestSizeLimit`. Capped by the DTO at the edge's own limit, so this is always
+    // the smaller of the two enforcers and the 413 comes from the gateway.
     globalMiddleware.requestSizeLimit = { enabled: true, value: requestSizeLimitBytes };
   }
   if (doNotTrack !== undefined) {
@@ -430,9 +488,9 @@ export function mapToTykOas(
 
   // An API-wide circuit breaker has no home on `upstream` or `middleware.global` — measured against
   // the v5.15.0 schema, `circuitBreaker` exists ONLY on `X-Tyk-Operation`. So an API-level breaker
-  // is expressed the way the classic mapper expresses it, one catch-all entry per method, here as a
-  // synthesised OAS operation rather than an `extended_paths` regex. Without this an OAS api would
-  // silently have no breaker while a CLASSIC one did.
+  // is expressed the same way the classic mapper expresses it: one catch-all entry per method,
+  // here as a synthesised OAS operation rather than an `extended_paths` regex. Without this an OAS
+  // api would silently have no breaker while a CLASSIC one did.
   const operations: Record<string, unknown> = {};
   const catchAllPaths: Record<string, unknown> = {};
   if (circuitBreaker) {
@@ -471,7 +529,28 @@ export function mapToTykOas(
         state: { active: apiDef.status === ApiStatus.ACTIVE },
         // S6 caveat 4: `version_data.not_versioned` has NO OAS equivalent. `X-Tyk-Versioning`
         // requires a `location` and models real versioning, so an unversioned API omits
-        // `info.versioning` entirely rather than emitting a placeholder. WP16 adds versioning.
+        // `info.versioning` entirely rather than emitting a placeholder.
+        //
+        // WP16: only the DEFAULT of a family with at least one active child gets this block. A
+        // CHILD version def never has its own `info.versioning` — live-verified against v5.15.0
+        // that the gateway rejects one (`location is required`) the moment ANY field is set on it,
+        // even `{enabled:true, name:'v2'}` alone, and routing only ever consults the default's.
+        // `versions` is an ARRAY of `{name, id}` on this Tyk version, not the map the docs/most
+        // examples show — confirmed against the live schema (`X-Tyk-VersionToID` in the gateway's
+        // embedded OAS schema), and POSTing a map answers 400
+        // "Invalid type. Expected: array, given: object".
+        ...(apiDef.parentApiId === null && apiDef.versionName !== null && versions.length > 0
+          ? {
+              versioning: {
+                enabled: true,
+                name: apiDef.versionName,
+                default: apiDef.versionName,
+                location: 'header',
+                key: VERSION_HEADER,
+                versions: versions.map((v) => ({ name: v.versionName, id: v.tykApiId })),
+              },
+            }
+          : {}),
       },
       upstream: {
         url: apiDef.proxyUrl,
@@ -486,7 +565,9 @@ export function mapToTykOas(
               },
             }
           : {}),
-        ...(timeoutSeconds ? { enforceTimeout: { enabled: true, duration: `${String(timeoutSeconds)}s` } } : {}),
+        ...(timeoutSeconds
+          ? { enforceTimeout: { enabled: true, duration: `${String(timeoutSeconds)}s` } }
+          : {}),
         ...(loadBalancing && loadBalancing.targets.length > 0
           ? {
               loadBalancing: {
@@ -586,6 +667,9 @@ function toApiDetail(row: ApiRow): ApiDetail {
     healthStatus: row.healthStatus,
     config: readConfig(row.config),
     keyCount: row._count.apiKeys,
+    parentApiId: row.parentApiId,
+    versionName: row.versionName,
+    retiredAt: row.retiredAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -646,6 +730,73 @@ export class ApiService {
     return toApiDetail(apiDef);
   }
 
+  /**
+   * `POST /apis/:id/versions` (WP16): a genuinely separate OAS definition — its own `proxyUrl`,
+   * auth, config — selected by clients sending `x-api-version: <versionName>` to the DEFAULT's
+   * listen path. `slug` and `listenPath` are derived rather than user-supplied: nothing routes to
+   * a version's own listen path directly (`versionListenPath`), so asking a caller to invent one
+   * would only invite a value nobody ever uses.
+   *
+   * Awaits the child's own sync before returning: the default's next sync needs the child's
+   * `tykApiId` to put in `info.versioning.versions`, so the child has to exist on the gateway first.
+   */
+  async createVersion(id: string, dto: CreateApiVersionDto, tenantId: string): Promise<ApiDetail> {
+    const parent = await this.findRow(id, tenantId);
+
+    if (parent.parentApiId !== null) {
+      throw new BadRequestException('Cannot create a version of a version; create it on the default API.');
+    }
+    if (parent.defFormat !== ApiDefFormat.OAS) {
+      throw new BadRequestException('API versioning requires the OAS format; this API is CLASSIC.');
+    }
+    // O3, same guard as `create`/`update`.
+    if (dto.authType === 'JWT' && !dto.config?.jwt) {
+      throw new BadRequestException('authType "JWT" requires config.jwt: { jwksUrl, issuer }');
+    }
+
+    const childListenPath = versionListenPath(parent.listenPath, dto.versionName);
+    const childSlug = `${parent.slug}-${dto.versionName}`;
+
+    let child: ApiRow;
+    try {
+      child = await prisma.apiDefinition.create({
+        data: {
+          tenantId,
+          parentApiId: parent.id,
+          versionName: dto.versionName,
+          name: `${parent.name} (${dto.versionName})`,
+          slug: childSlug,
+          proxyUrl: dto.proxyUrl,
+          listenPath: childListenPath,
+          authType: dto.authType ?? parent.authType,
+          config: dto.config ? toJsonObject(dto.config) : {},
+          status: ApiStatus.ACTIVE,
+          defFormat: ApiDefFormat.OAS,
+          syncStatus: ApiSyncStatus.PENDING,
+        },
+        include: withActiveKeyCount,
+      });
+    } catch (err) {
+      // A duplicate `versionName` always produces a duplicate derived slug too (childSlug encodes
+      // it), so asConflict's slug-vs-listen-path split already lands on the right message.
+      throw asConflict(err, childSlug, childListenPath);
+    }
+
+    // The family's own version name is assigned once, on its first child — an API that never gains
+    // one keeps it null forever and mapToTykOas keeps omitting `info.versioning` for it.
+    if (parent.versionName === null) {
+      await prisma.apiDefinition.update({
+        where: { id: parent.id },
+        data: { versionName: DEFAULT_VERSION_NAME },
+      });
+    }
+
+    await this.syncToTyk(child);
+    await this.resyncParent(parent.id);
+
+    return toApiDetail(await this.findRow(child.id, tenantId));
+  }
+
   async findAll(
     tenantId: string,
     page = 1,
@@ -696,7 +847,13 @@ export class ApiService {
   }
 
   async findOne(id: string, tenantId: string): Promise<ApiDetail> {
-    return toApiDetail(await this.findRow(id, tenantId));
+    const row = await this.findRow(id, tenantId);
+    // WP16: `update()` always stamps `retiredAt` in the same write that sets RETIRED, so it is
+    // never null here in practice — the check just satisfies the type rather than trusting that blind.
+    if (row.status === ApiStatus.RETIRED && row.retiredAt) {
+      throw new RetiredVersionException(row.retiredAt, row.name);
+    }
+    return toApiDetail(row);
   }
 
   async update(id: string, dto: UpdateApiDto, tenantId: string): Promise<ApiDetail> {
@@ -734,6 +891,21 @@ export class ApiService {
       throw new BadRequestException('authType "JWT" requires config.jwt: { jwksUrl, issuer }');
     }
 
+    // WP16: RETIRED is a version-lifecycle state, not a generic one — retiring the default would
+    // leave the family's `x-api-version` routing (and every key still pointed at it) with nothing
+    // to serve, so only a child can take it. `retiredAt` is this row's Sunset-header timestamp
+    // (GET /apis/:id, ApiManagementController.findOne) and is cleared on any move away from RETIRED.
+    if (dto.status === ApiStatus.RETIRED) {
+      if (existing.parentApiId === null) {
+        throw new BadRequestException(
+          'Only a non-default version can be retired. Disable or delete the default API instead.',
+        );
+      }
+      data.retiredAt = new Date();
+    } else if (dto.status !== undefined && existing.status === ApiStatus.RETIRED) {
+      data.retiredAt = null;
+    }
+
     let updated: ApiRow;
     try {
       updated = await prisma.apiDefinition.update({
@@ -748,12 +920,30 @@ export class ApiService {
     // Sync changes to Tyk
     this.syncInBackground(updated);
 
+    // WP16: a retire/un-retire also changes what the DEFAULT should be serving — it must drop or
+    // re-add this child in `info.versioning.versions` on its own next sync.
+    if (existing.parentApiId && dto.status !== undefined) {
+      await this.resyncParent(existing.parentApiId);
+    }
+
     return toApiDetail(updated);
   }
 
   /** Hard delete (D16): refused while ACTIVE keys reference the API; removes the gateway definition first. */
   async remove(id: string, tenantId: string): Promise<{ message: string }> {
     const apiDef = await this.findRow(id, tenantId);
+
+    // WP16: the default's `info.versioning` config is what routes every version, and every version
+    // row FK-references it (`onDelete: Restrict`, so the database would refuse this anyway) — refuse
+    // it here first, with a message that says why, rather than surfacing a raw FK-violation 500.
+    if (apiDef.parentApiId === null) {
+      const versionCount = await prisma.apiDefinition.count({ where: { parentApiId: apiDef.id } });
+      if (versionCount > 0) {
+        throw new ConflictException(
+          `Cannot delete the default version: ${String(versionCount)} version(s) still exist. Delete or retire them first.`,
+        );
+      }
+    }
 
     if (apiDef._count.apiKeys > 0) {
       throw new ConflictException(
@@ -795,6 +985,11 @@ export class ApiService {
     }
 
     await prisma.apiDefinition.delete({ where: { id } });
+
+    // WP16: a deleted child must disappear from the default's `info.versioning.versions` too.
+    if (apiDef.parentApiId) {
+      await this.resyncParent(apiDef.parentApiId);
+    }
 
     return { message: 'API deleted' };
   }
@@ -846,6 +1041,12 @@ export class ApiService {
     });
   }
 
+  /** Re-push a family's default after one of its versions changed (WP16), fire-and-forget like every other sync. */
+  private async resyncParent(parentApiId: string): Promise<void> {
+    const parent = await prisma.apiDefinition.findUnique({ where: { id: parentApiId } });
+    if (parent) this.syncInBackground(parent);
+  }
+
   /**
    * The signing key an OAUTH api pins, re-read on every sync so `POST /apis/:id/sync` is the
    * operator's way to pick up a rotated Hydra key. A failure is a gateway error, so it lands on the
@@ -887,9 +1088,24 @@ export class ApiService {
       const signingKey = await this.oauthSigningKey(apiDef.authType);
 
       if (apiDef.defFormat === ApiDefFormat.OAS) {
+        // WP16: only a default (never a child — see mapToTykOas) can have `info.versioning`, and
+        // only when it actually has an active version to route to. RETIRED children are excluded so
+        // a retired version drops out of `versions` on the default's very next sync.
+        const versions: ApiVersionChild[] =
+          apiDef.parentApiId === null
+            ? (
+                await prisma.apiDefinition.findMany({
+                  where: { parentApiId: apiDef.id, status: { not: ApiStatus.RETIRED } },
+                  select: { versionName: true, tykApiId: true },
+                })
+              ).filter(
+                (v): v is { versionName: string; tykApiId: string } => v.versionName !== null && v.tykApiId !== null,
+              )
+            : [];
+
         // `/tyk/apis/oas` POST is an upsert keyed by the document's own `info.id`, so create and
         // update are the same call — unlike the classic pair, which needs POST then PUT-by-id.
-        const oasDef = mapToTykOas(apiDef, tenant, signingKey);
+        const oasDef = mapToTykOas(apiDef, tenant, signingKey, versions);
         tykApiId = apiDef.tykApiId ?? `og-${apiDef.id}`;
         nodes = await this.tykClient.upsertOasApi(oasDef);
         // Stored so drift and the UI can show what was actually sent, rather than re-deriving it

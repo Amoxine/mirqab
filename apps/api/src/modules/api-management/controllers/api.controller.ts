@@ -23,6 +23,7 @@ import type { NodeOutcome } from '../../tyk-integration/services/tyk-client.serv
 import type { SyncState } from '../services/reconcile.service';
 import { CreateApiDto } from '../dto/create-api.dto';
 import { UpdateApiDto } from '../dto/update-api.dto';
+import { CreateApiVersionDto } from '../dto/create-api-version.dto';
 import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
@@ -50,6 +51,26 @@ export class ApiManagementController {
     return this.apiService.create(dto, tenantId);
   }
 
+  @Post(':id/versions')
+  @Permissions('api:create')
+  @ApiOperation({
+    summary: 'Create an OAS child version of an API',
+    description:
+      'A genuinely separate definition — its own proxyUrl/auth/config — selected via the ' +
+      '`x-api-version` header against the default\'s listen path. OAS-format APIs only.',
+  })
+  @ApiResponse({ status: 201, description: 'Version created' })
+  @ApiResponse({ status: 400, description: 'The API is CLASSIC-format, or is itself a version' })
+  @Audit('api:created', 'ApiDefinition')
+  @HttpCode(HttpStatus.CREATED)
+  async createVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateApiVersionDto,
+    @CurrentTenant() tenantId: string,
+  ): Promise<ApiDetail> {
+    return this.apiService.createVersion(id, dto, tenantId);
+  }
+
   @Get()
   @Permissions('api:read')
   @ApiOperation({ summary: 'List API definitions with pagination' })
@@ -70,10 +91,14 @@ export class ApiManagementController {
   @Get(':id')
   @Permissions('api:read')
   @ApiOperation({ summary: 'Get a single API definition' })
+  @ApiResponse({ status: 410, description: 'A retired API version (WP16); carries a Sunset header' })
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTenant() tenantId: string,
   ): Promise<ApiDetail> {
+    // WP16: a retired version answers 410 (RetiredVersionException, thrown by the service) — a
+    // deliberate, permanent removal, not a 404. AllExceptionsFilter adds the RFC 8594 Sunset header
+    // from the exception's own `sunsetAt`.
     return this.apiService.findOne(id, tenantId);
   }
 

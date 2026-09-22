@@ -12,9 +12,10 @@ import { prisma } from '@open-gateway/database';
 import type { TykClientService } from '../../tyk-integration/services/tyk-client.service';
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
 import { UpdateApiDto } from '../dto/update-api.dto';
+import { CreateApiVersionDto } from '../dto/create-api-version.dto';
 import type { OAuthClientService } from '../../oauth-clients/services/oauth-client.service';
 import type { ReconcileService } from './reconcile.service';
-import { ApiService, toSyncError } from './api.service';
+import { ApiService, RetiredVersionException, toSyncError } from './api.service';
 
 jest.mock('@open-gateway/database', () => ({
   prisma: {
@@ -57,6 +58,9 @@ function row(overrides: Record<string, unknown> = {}) {
     syncError: null,
     lastSyncedAt: null,
     healthStatus: 'UNKNOWN',
+    parentApiId: null,
+    versionName: null,
+    retiredAt: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),
     _count: { apiKeys: 0 },
@@ -70,6 +74,7 @@ interface TykMock {
   deleteApi: Fn;
   upsertPolicy: Fn;
   deletePolicy: Fn;
+  upsertOasApi: Fn;
 }
 
 function setup() {
@@ -79,6 +84,8 @@ function setup() {
     deleteApi: jest.fn().mockResolvedValue(undefined),
     upsertPolicy: jest.fn().mockResolvedValue(undefined),
     deletePolicy: jest.fn().mockResolvedValue(undefined),
+    // WP16: createVersion/syncToTykWithNodes' OAS branch.
+    upsertOasApi: jest.fn().mockResolvedValue([]),
   };
   // WP13a: both write paths now report per-node outcomes. Armed here rather than at the mock
   // declaration because `resetAllMocks()` in beforeEach wipes return values.
@@ -155,6 +162,31 @@ describe('ApiService', () => {
       db.findFirst.mockResolvedValue(row({ config: null }));
       expect((await service.findOne(ID, TENANT)).config).toEqual({});
     });
+
+    it('answers a retired version with RetiredVersionException carrying the sunset date (WP16)', async () => {
+      const { service } = setup();
+      const retiredAt = new Date('2026-01-01T00:00:00Z');
+      db.findFirst.mockResolvedValue(row({ status: 'RETIRED', retiredAt, name: 'Orders (v2)' }));
+
+      await expect(service.findOne(ID, TENANT)).rejects.toBeInstanceOf(RetiredVersionException);
+
+      try {
+        await service.findOne(ID, TENANT);
+        throw new Error('expected findOne to reject');
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(RetiredVersionException);
+        const retired = err as RetiredVersionException;
+        expect(retired.sunsetAt).toEqual(retiredAt);
+        expect(retired.getStatus()).toBe(410);
+      }
+    });
+
+    it('returns an ACTIVE (not RETIRED) version normally, even with parentApiId set', async () => {
+      const { service } = setup();
+      db.findFirst.mockResolvedValue(row({ status: 'ACTIVE', parentApiId: 'default-1', versionName: 'v2' }));
+
+      await expect(service.findOne(ID, TENANT)).resolves.toMatchObject({ status: 'ACTIVE', versionName: 'v2' });
+    });
   });
 
   describe('findAll', () => {
@@ -223,6 +255,123 @@ describe('ApiService', () => {
         ConflictException,
       );
       expect(db.update).not.toHaveBeenCalled();
+    });
+
+    describe('retiring a version (WP16)', () => {
+      it('refuses to retire the default (no parentApiId)', async () => {
+        const { service } = setup();
+        db.findFirst.mockResolvedValue(row({ parentApiId: null }));
+
+        await expect(
+          service.update(ID, plainToInstance(UpdateApiDto, { status: 'RETIRED' }), TENANT),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(db.update).not.toHaveBeenCalled();
+      });
+
+      it('stamps retiredAt when a child moves to RETIRED, and re-syncs the default', async () => {
+        const { service, tyk } = setup();
+        db.findFirst.mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2' }));
+        db.update.mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2', status: 'RETIRED' }));
+        // resyncParent's own fetch + its sibling query — defFormat: 'OAS' so it actually exercises
+        // mapToTykOas/upsertOasApi rather than falling through to the classic path.
+        db.findUnique.mockResolvedValue(row({ parentApiId: null, versionName: 'v1', defFormat: 'OAS' }));
+        db.findMany.mockResolvedValue([]);
+
+        await service.update('child-1', plainToInstance(UpdateApiDto, { status: 'RETIRED' }), TENANT);
+        await flush();
+
+        const data = firstArg(db.update).data;
+        expect(data.status).toBe('RETIRED');
+        expect(data.retiredAt).toBeInstanceOf(Date);
+        // resyncParent re-fetches and re-pushes the DEFAULT, not the child that was just patched.
+        expect(db.findUnique).toHaveBeenCalledWith({ where: { id: ID } });
+        // The now-retired child excluded itself (db.findMany's own `where` filters `status: {not: RETIRED}`
+        // at the query level, so an empty mock return here already proves it dropped out).
+        expect(tyk.upsertOasApi).toHaveBeenCalled();
+        const pushed = (tyk.upsertOasApi.mock.calls[0] as Record<string, unknown>[])[0];
+        expect(pushed).toHaveProperty('x-tyk-api-gateway');
+      });
+
+      it('clears retiredAt when a version moves back off RETIRED', async () => {
+        const { service } = setup();
+        db.findFirst.mockResolvedValue(
+          row({ id: 'child-1', parentApiId: ID, versionName: 'v2', status: 'RETIRED', retiredAt: new Date(0) }),
+        );
+        db.update.mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2', status: 'ACTIVE' }));
+        db.findUnique.mockResolvedValue(row({ parentApiId: null, versionName: 'v1' }));
+        db.findMany.mockResolvedValue([]);
+
+        await service.update('child-1', plainToInstance(UpdateApiDto, { status: 'ACTIVE' }), TENANT);
+        await flush();
+
+        expect(firstArg(db.update).data).toMatchObject({ status: 'ACTIVE', retiredAt: null });
+      });
+    });
+  });
+
+  describe('createVersion (WP16)', () => {
+    const versionDto = plainToInstance(CreateApiVersionDto, {
+      versionName: 'v2',
+      proxyUrl: 'http://orders-v2:4000',
+    });
+
+    it('refuses on a CLASSIC-format API', async () => {
+      const { service } = setup();
+      db.findFirst.mockResolvedValue(row({ parentApiId: null, defFormat: 'CLASSIC' }));
+
+      await expect(service.createVersion(ID, versionDto, TENANT)).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses to create a version of a version', async () => {
+      const { service } = setup();
+      db.findFirst.mockResolvedValue(row({ parentApiId: 'some-other-default', defFormat: 'OAS' }));
+
+      await expect(service.createVersion(ID, versionDto, TENANT)).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses authType: JWT with no jwt config, same O3 guard as create/update', async () => {
+      const { service } = setup();
+      db.findFirst.mockResolvedValue(row({ parentApiId: null, defFormat: 'OAS' }));
+      const jwtDto = plainToInstance(CreateApiVersionDto, {
+        versionName: 'v2',
+        proxyUrl: 'http://orders-v2:4000',
+        authType: 'JWT',
+      });
+
+      await expect(service.createVersion(ID, jwtDto, TENANT)).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.create).not.toHaveBeenCalled();
+    });
+
+    it('creates the child with a derived slug/listenPath, defaults the parent to v1, and syncs both', async () => {
+      const { service, tyk } = setup();
+      const parent = row({ id: ID, parentApiId: null, versionName: null, slug: 'orders', listenPath: '/orders/', defFormat: 'OAS' });
+      db.findFirst
+        .mockResolvedValueOnce(parent) // the parent lookup at the top of createVersion
+        .mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2', defFormat: 'OAS' })); // the final re-read
+      db.create.mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2', defFormat: 'OAS' }));
+      db.update.mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2', defFormat: 'OAS' }));
+      db.findUnique.mockResolvedValue(row({ id: ID, parentApiId: null, versionName: 'v1', defFormat: 'OAS' }));
+      db.findMany.mockResolvedValue([{ versionName: 'v2', tykApiId: 'og-11111111' }]);
+
+      const detail = await service.createVersion(ID, versionDto, TENANT);
+      await flush();
+
+      expect(firstArg(db.create).data).toMatchObject({
+        parentApiId: ID,
+        versionName: 'v2',
+        slug: 'orders-v2',
+        listenPath: '/orders/__version-v2',
+        proxyUrl: 'http://orders-v2:4000',
+        defFormat: 'OAS',
+      });
+      // The parent had no versionName yet — createVersion assigns the default's own.
+      expect(db.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: ID }, data: { versionName: 'v1' } }),
+      );
+      expect(detail.id).toBe('child-1');
+      expect(tyk.upsertOasApi).toHaveBeenCalled();
     });
   });
 
@@ -405,6 +554,34 @@ describe('ApiService', () => {
   });
 
   describe('remove', () => {
+    it('409s deleting the default while versions exist, and the API is never touched (WP16)', async () => {
+      const { service, tyk } = setup();
+      db.findFirst.mockResolvedValue(row({ parentApiId: null, versionName: 'v1' }));
+      db.count.mockResolvedValue(2);
+
+      const attempt = service.remove(ID, TENANT);
+
+      await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+      await expect(attempt).rejects.toThrow(/2 version\(s\)/);
+      expect(db.count).toHaveBeenCalledWith({ where: { parentApiId: ID } });
+      expect(tyk.deleteApi).not.toHaveBeenCalled();
+      expect(db.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes a version (not the default) without the version-count guard, and re-syncs the default', async () => {
+      const { service } = setup();
+      db.findFirst.mockResolvedValue(row({ id: 'child-1', parentApiId: ID, versionName: 'v2' }));
+      db.delete.mockResolvedValue(row());
+      db.findUnique.mockResolvedValue(row({ parentApiId: null, versionName: 'v1' }));
+      db.findMany.mockResolvedValue([]);
+
+      await expect(service.remove('child-1', TENANT)).resolves.toEqual({ message: 'API deleted' });
+      await flush();
+
+      expect(db.count).not.toHaveBeenCalled();
+      expect(db.findUnique).toHaveBeenCalledWith({ where: { id: ID } });
+    });
+
     it('refuses while OAuth2 clients still use the API', async () => {
       const { service, oauthClients, tyk } = setup();
       db.findFirst.mockResolvedValue(row({ authType: 'OAUTH', tykApiId: 'gw-1' }));

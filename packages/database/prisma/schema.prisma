@@ -36,6 +36,10 @@ enum ApiStatus {
   DRAFT
   ACTIVE
   DISABLED
+  /// A non-default API version (WP16) that has been sunset. Set only on a row with `parentApiId` —
+  /// the default/base version is deleted, not retired (see ApiDefinition.parentApiId). `retiredAt`
+  /// carries the timestamp the `Sunset` header on `GET /apis/:id` (410) is built from.
+  RETIRED
 }
 
 enum ApiSyncStatus {
@@ -233,11 +237,34 @@ model ApiDefinition {
   oasDocument  Json?           @map("oas_document")
   lastSyncedAt DateTime?       @map("last_synced_at")
   healthStatus ApiHealthStatus @default(UNKNOWN) @map("health_status")
+  /// WP16: null on a plain, never-versioned API and on the default/base of a version family (it IS
+  /// the parent). Set only on a CHILD version row, pointing at that family's default. A child is a
+  /// full `ApiDefinition` row with its own `tykApiId`/`oasDocument` — Tyk OAS versioning models each
+  /// version as its own complete definition, referenced by id from the base's
+  /// `x-tyk-api-gateway.info.versioning.versions` (mapToTykOas).
+  /// `onDelete: Restrict`, not Cascade: deleting the default while versions exist must answer 409
+  /// (ApiService.remove), never silently take the versions with it.
+  parentApiId  String?         @map("parent_api_id")
+  /// WP16: this row's own version identifier (e.g. "v1", "v2"), selected via the `x-api-version`
+  /// header. Null for a plain, never-versioned API. Set on BOTH the default (its own name, echoed
+  /// into `info.versioning.name`/`default`) and every child, once the family's first child is
+  /// created (ApiService.createVersion defaults the parent to "v1" at that point, not before — an
+  /// API that never gains a version keeps this null and mapToTykOas keeps omitting `info.versioning`
+  /// entirely, matching WP13b's S6 caveat 4: it has no OAS equivalent to a no-op placeholder).
+  versionName  String?         @map("version_name")
+  /// WP16: set when a (non-default) version is retired. `GET /apis/:id` on such a row answers 410
+  /// with a `Sunset` header built from this timestamp, and the next sync of the default drops this
+  /// version from `info.versioning.versions` — Tyk's own `expiration` field is NOT used for this: it
+  /// answers 403 "API has expired" with no `Sunset` header (live-verified on v5.15.0), not the 410
+  /// this product's contract requires.
+  retiredAt    DateTime?       @map("retired_at")
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  apiKeys ApiKey[]
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys  ApiKey[]
+  parentApi ApiDefinition? @relation("ApiVersions", fields: [parentApiId], references: [id], onDelete: Restrict)
+  versions ApiDefinition[] @relation("ApiVersions")
 
   @@unique([tenantId, slug])
   // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
@@ -246,8 +273,12 @@ model ApiDefinition {
   // Global uniqueness was the old defence against that and is gone: it let the first tenant to claim
   // a path squat it for everyone.
   @@unique([tenantId, listenPath])
+  // A family can't have two versions with the same name. NULLs (every non-version row) are distinct
+  // from each other in Postgres, so this only constrains actual children.
+  @@unique([parentApiId, versionName])
   @@index([tenantId, status])
   @@index([tenantId, createdAt(sort: Desc)])
+  @@index([parentApiId])
   @@map("api_definitions")
 }
 

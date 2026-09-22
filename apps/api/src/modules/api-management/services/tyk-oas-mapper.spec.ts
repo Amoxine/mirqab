@@ -22,6 +22,9 @@ function apiDef(overrides: Partial<ApiDefinition> = {}): ApiDefinition {
     syncError: null,
     syncState: null,
     defFormat: 'OAS',
+    parentApiId: null,
+    retiredAt: null,
+    versionName: null,
     oasDocument: null,
     lastSyncedAt: null,
     healthStatus: 'UNKNOWN',
@@ -86,8 +89,8 @@ interface ClassicDef {
   jwt_default_policies?: string[];
 }
 
-const oas = (over: Partial<ApiDefinition> = {}, jwtSource = '') =>
-  mapToTykOas(apiDef(over), TENANT, jwtSource) as unknown as OasDoc;
+const oas = (over: Partial<ApiDefinition> = {}, jwtSource = '', versions: { versionName: string; tykApiId: string }[] = []) =>
+  mapToTykOas(apiDef(over), TENANT, jwtSource, versions) as unknown as OasDoc;
 const classic = (over: Partial<ApiDefinition> = {}, jwtSource = '') =>
   mapToTykFormat(apiDef(over), TENANT, jwtSource) as unknown as ClassicDef;
 
@@ -341,6 +344,46 @@ describe('mapToTykOas — golden file against every classic key', () => {
     it('leaves the classic mapper untouched — both formats stay correct side by side', () => {
       // WP13b is additive: CLASSIC rows keep being served from the classic definition.
       expect(classic()).toMatchObject({ name: 'Orders', api_id: 'og-a1', org_id: 'og-t1' });
+    });
+  });
+
+  describe('versioning (WP16)', () => {
+    it('omits info.versioning for a plain, never-versioned API — regression guard for the classic ' +
+      '"Version information not found" 403: an OAS def has no `version_data` equivalent, so the fix ' +
+      'is to omit the block entirely rather than emit a broken placeholder', () => {
+      expect(oas()['x-tyk-api-gateway'].info).not.toHaveProperty('versioning');
+    });
+
+    it('omits info.versioning for a child version even if (mistakenly) passed sibling data', () => {
+      const d = oas({ parentApiId: 'default-1', versionName: 'v2' }, '', [
+        { versionName: 'v3', tykApiId: 'og-v3' },
+      ]);
+      expect(d['x-tyk-api-gateway'].info).not.toHaveProperty('versioning');
+    });
+
+    it('omits info.versioning for a default with a versionName but no active children yet', () => {
+      const d = oas({ parentApiId: null, versionName: 'v1' });
+      expect(d['x-tyk-api-gateway'].info).not.toHaveProperty('versioning');
+    });
+
+    it('emits info.versioning on a default with active children — versions is an ARRAY of {name,id}, ' +
+      'not a map (live-verified against v5.15.0: POSTing a map answers 400 "Invalid type. Expected: ' +
+      'array, given: object")', () => {
+      const d = oas({ parentApiId: null, versionName: 'v1' }, '', [
+        { versionName: 'v2', tykApiId: 'og-v2' },
+        { versionName: 'v3', tykApiId: 'og-v3' },
+      ]);
+      expect(d['x-tyk-api-gateway'].info.versioning).toEqual({
+        enabled: true,
+        name: 'v1',
+        default: 'v1',
+        location: 'header',
+        key: 'x-api-version',
+        versions: [
+          { name: 'v2', id: 'og-v2' },
+          { name: 'v3', id: 'og-v3' },
+        ],
+      });
     });
   });
 });
