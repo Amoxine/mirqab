@@ -38,6 +38,13 @@ const DENIED_HOSTS = new Set([
   'redis',
   'tyk-gateway',
   'tyk-gateway-init',
+  // The `multinode` profile's extra nodes (WP13a). Denied for the same reason as `tyk-gateway`
+  // itself — and they are NOT exempt for being profile-gated: the deny list is evaluated at
+  // runtime against whatever the operator actually started, and a proxy pointed at
+  // `http://tyk-gateway-2:8080/` would loop back into the data plane exactly like node 1.
+  'tyk-gateway-2',
+  'tyk-gateway-3',
+  'tyk-gateway-multinode-init',
   'tyk-pump',
   'tyk-healthcheck',
   'api',

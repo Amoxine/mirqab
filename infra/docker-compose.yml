@@ -51,6 +51,47 @@ name: Open Gateway Infrastructure
 # trusts which network a request came from — that's what put Hydra/Kratos/Keto here in the first
 # place, and the SSRF denylist can catch a stale hostname but structurally cannot catch this.
 #
+# Shared gateway configuration (WP13a). Every node — the default one and the two the `multinode`
+# profile adds — runs byte-identical config, because a per-node difference would show up as
+# permanent drift: ReconcileService hashes the definition each node reports, and Tyk's injected
+# defaults are only identical across nodes when the nodes are configured (and versioned) alike.
+# Node-specific settings stay inline on each service; nothing node-specific belongs in here.
+x-tyk-gateway-env: &tyk-gateway-env
+    TYK_GW_LISTENPORT: "8080"
+    # Control API (/tyk/*) on its own port, which is deliberately NOT published: on the shared data
+    # port anyone who could reach a published API could also reach the admin API. Verified on
+    # v5.15.0: with this set, :8080 answers 404 for /tyk/* AND for /hello — both move to :8081.
+    TYK_GW_CONTROLAPIPORT: "8081"
+    TYK_GW_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
+    TYK_GW_USEDBAPPCONFIGS: "false"
+    TYK_GW_STORAGE_TYPE: redis
+    TYK_GW_STORAGE_HOST: redis
+    TYK_GW_STORAGE_PORT: "6379"
+    TYK_GW_ALLOWINSECURECONFIGS: "true"
+    # Analytics: buffer records in Redis (empty TYPE) for tyk-pump to purge into Postgres.
+    TYK_GW_ENABLEANALYTICS: "true"
+    TYK_GW_ANALYTICSCONFIG_TYPE: ""
+    TYK_GW_ANALYTICSCONFIG_ENABLEDETAILEDRECORDING: "false"
+    TYK_GW_ANALYTICSCONFIG_STORAGEEXPIRATIONTIME: "3600"
+    TYK_GW_HASHKEYS: "true"
+    # Org-scoped cutoff (WP12c). Every definition, policy and key is stamped with its tenant's
+    # `Tenant.tykOrgId`, so `POST /tyk/org/keys/<org> {is_inactive:true}` disables exactly one
+    # tenant. BOTH of these are required to make that work, and the failure mode when either is
+    # missing is silent: the call still answers 200 {"status":"ok"} and the keys keep working.
+    # Verified on v5.15.0 — neither flag alone has any effect; with both, the cutoff lands in
+    # under 5 s. An org that has no org-session at all is unaffected, so enabling these does not
+    # retroactively restrict anything.
+    TYK_GW_ENFORCEORGQUOTAS: "true"
+    TYK_GW_ENFORCEORGDATAAGE: "true"
+    # Policies — the rate / quota / access-rights record a JWT is mapped to — live as one JSON file
+    # per policy in this directory, written by the API through POST /tyk/policies. Without
+    # POLICYPATH the gateway answers 500 "Failed to create file!". ALLOWEXPLICITPOLICYID has to be
+    # on: an OAuth2 client's policy id IS its client id, which is how Tyk maps its tokens
+    # (see apps/api/src/modules/oauth-clients/services/oauth-client-mapper.ts).
+    TYK_GW_POLICIES_POLICYSOURCE: file
+    TYK_GW_POLICIES_POLICYPATH: /opt/tyk-gateway/policies
+    TYK_GW_POLICIES_ALLOWEXPLICITPOLICYID: "true"
+
 services:
   # ─── Edge: TLS termination + WAF (WP26b) ───────────────
   # The only service that publishes an application port. Custom Caddy build (infra/edge/Dockerfile)
@@ -192,40 +233,7 @@ services:
     container_name: open-gateway-tyk-gateway
     restart: unless-stopped
     environment:
-      TYK_GW_LISTENPORT: "8080"
-      # Control API (/tyk/*) on its own port, which is deliberately NOT published: on the shared data
-      # port anyone who could reach a published API could also reach the admin API. Verified on
-      # v5.15.0: with this set, :8080 answers 404 for /tyk/* AND for /hello — both move to :8081.
-      TYK_GW_CONTROLAPIPORT: "8081"
-      TYK_GW_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
-      TYK_GW_USEDBAPPCONFIGS: "false"
-      TYK_GW_STORAGE_TYPE: redis
-      TYK_GW_STORAGE_HOST: redis
-      TYK_GW_STORAGE_PORT: "6379"
-      TYK_GW_ALLOWINSECURECONFIGS: "true"
-      # Analytics: buffer records in Redis (empty TYPE) for tyk-pump to purge into Postgres.
-      TYK_GW_ENABLEANALYTICS: "true"
-      TYK_GW_ANALYTICSCONFIG_TYPE: ""
-      TYK_GW_ANALYTICSCONFIG_ENABLEDETAILEDRECORDING: "false"
-      TYK_GW_ANALYTICSCONFIG_STORAGEEXPIRATIONTIME: "3600"
-      TYK_GW_HASHKEYS: "true"
-      # Org-scoped cutoff (WP12c). Every definition, policy and key is stamped with its tenant's
-      # `Tenant.tykOrgId`, so `POST /tyk/org/keys/<org> {is_inactive:true}` disables exactly one
-      # tenant. BOTH of these are required to make that work, and the failure mode when either is
-      # missing is silent: the call still answers 200 {"status":"ok"} and the keys keep working.
-      # Verified on v5.15.0 — neither flag alone has any effect; with both, the cutoff lands in
-      # under 5 s. An org that has no org-session at all is unaffected, so enabling these does not
-      # retroactively restrict anything.
-      TYK_GW_ENFORCEORGQUOTAS: "true"
-      TYK_GW_ENFORCEORGDATAAGE: "true"
-      # Policies — the rate / quota / access-rights record a JWT is mapped to — live as one JSON file
-      # per policy in this directory, written by the API through POST /tyk/policies. Without
-      # POLICYPATH the gateway answers 500 "Failed to create file!". ALLOWEXPLICITPOLICYID has to be
-      # on: an OAuth2 client's policy id IS its client id, which is how Tyk maps its tokens
-      # (see apps/api/src/modules/oauth-clients/services/oauth-client-mapper.ts).
-      TYK_GW_POLICIES_POLICYSOURCE: file
-      TYK_GW_POLICIES_POLICYPATH: /opt/tyk-gateway/policies
-      TYK_GW_POLICIES_ALLOWEXPLICITPOLICYID: "true"
+      <<: *tyk-gateway-env
     expose:
       # Data plane only, and reachable only through the edge (WP26b) — 33005 is now the edge's
       # HTTPS listener, not this container's. 8081 (control API) stays inside the network either way.
@@ -240,6 +248,80 @@ services:
         condition: service_completed_successfully
     # No healthcheck: the image is distroless — no shell, no wget, no curl. Dependents use
     # service_started; the API degrades gracefully (circuit breaker + syncStatus=FAILED + retry).
+    networks:
+      - open-gateway-network
+
+  # ─── Multi-node gateways (profile: multinode) ──────────
+  # `docker compose --profile multinode up -d` starts THREE gateways against the one Redis; the
+  # default profile-less `up` starts exactly one and nothing below is created.
+  #
+  # Each node gets its OWN apps/policies volumes, which is the point rather than an oversight:
+  # definitions and policies are file-backed per node (TYK_GW_USEDBAPPCONFIGS=false,
+  # POLICIES_POLICYSOURCE=file), so a write has to reach every node. That is what TykClientService's
+  # fan-out does, and what makes a hand-edit on one node show up as drift. Keys, quotas and
+  # certificates are NOT duplicated — they live in the shared Redis (spike S7 measured certs as
+  # Redis-shared), so they need no fan-out at all.
+  #
+  # `expose:` only, never `ports:`. The edge (WP26b) is the single published surface; a LAN client
+  # able to reach a gateway directly would forge X-Forwarded-For and defeat the per-client limits.
+  # The edge keeps pointing at `tyk-gateway` alone until WP29a gives it the full upstream set.
+  #
+  # To actually USE the extra nodes, set TYK_ADMIN_URLS in infra/.env to all three control APIs:
+  #   TYK_ADMIN_URLS=http://tyk-gateway:8081/tyk,http://tyk-gateway-2:8081/tyk,http://tyk-gateway-3:8081/tyk
+  # Left unset, the API talks to `tyk-gateway` only and the extra nodes sit idle and drift — the
+  # node list is configuration, deliberately not discovered (Axis C / A1).
+  tyk-gateway-multinode-init:
+    image: alpine:3
+    container_name: open-gateway-tyk-init-multinode
+    profiles: ["multinode"]
+    # Same chown + `.keep` dance as tyk-gateway-init, for the extra nodes' volumes — see the comment
+    # there for why the `.keep` file is what makes the chown survive first boot.
+    command: ["sh", "-c", "for d in /apps2 /policies2 /apps3 /policies3; do chown -R 65532:65532 $$d && chmod 0755 $$d && touch $$d/.keep && chown 65532:65532 $$d/.keep; done"]
+    volumes:
+      - tyk_apps_2:/apps2
+      - tyk_policies_2:/policies2
+      - tyk_apps_3:/apps3
+      - tyk_policies_3:/policies3
+    networks:
+      - open-gateway-network
+
+  tyk-gateway-2:
+    image: tykio/tyk-gateway:v5.15.0
+    container_name: open-gateway-tyk-gateway-2
+    profiles: ["multinode"]
+    restart: unless-stopped
+    environment:
+      <<: *tyk-gateway-env
+    expose:
+      - "8080"
+    volumes:
+      - tyk_apps_2:/opt/tyk-gateway/apps
+      - tyk_policies_2:/opt/tyk-gateway/policies
+    depends_on:
+      redis:
+        condition: service_healthy
+      tyk-gateway-multinode-init:
+        condition: service_completed_successfully
+    networks:
+      - open-gateway-network
+
+  tyk-gateway-3:
+    image: tykio/tyk-gateway:v5.15.0
+    container_name: open-gateway-tyk-gateway-3
+    profiles: ["multinode"]
+    restart: unless-stopped
+    environment:
+      <<: *tyk-gateway-env
+    expose:
+      - "8080"
+    volumes:
+      - tyk_apps_3:/opt/tyk-gateway/apps
+      - tyk_policies_3:/opt/tyk-gateway/policies
+    depends_on:
+      redis:
+        condition: service_healthy
+      tyk-gateway-multinode-init:
+        condition: service_completed_successfully
     networks:
       - open-gateway-network
 
@@ -329,6 +411,10 @@ services:
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       # Control API port (see TYK_GW_CONTROLAPIPORT above), reachable only inside this network.
       TYK_ADMIN_URL: http://tyk-gateway:8081/tyk
+      # Every gateway node's control API, comma separated, each WITH the /tyk suffix (WP13a).
+      # Empty by default, and TykClientService then falls back to TYK_ADMIN_URL above — so a
+      # single-node stack behaves exactly as it did. Set it in infra/.env to fan out.
+      TYK_ADMIN_URLS: ${TYK_ADMIN_URLS:-}
       TYK_ADMIN_SECRET: ${TYK_GW_SECRET:-tyk-gateway-secret}
       # /hello is served by the control API port too, so the health probe points at 8081.
       TYK_GATEWAY_URL: http://tyk-gateway:8081
@@ -581,6 +667,11 @@ volumes:
   tyk_apps:
     driver: local
   tyk_policies:
+  # multinode profile only: one apps/policies pair per extra node (file-backed, per node).
+  tyk_apps_2:
+  tyk_policies_2:
+  tyk_apps_3:
+  tyk_policies_3:
     driver: local
   # Caddy's internal CA (pki/authorities/local/*) plus its cert store. See the edge service above.
   caddy_data:
