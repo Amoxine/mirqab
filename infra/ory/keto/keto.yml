@@ -1,0 +1,23 @@
+# Ory Keto v26.2.0 — Zanzibar-style relation tuples.
+#
+# Both APIs are UNAUTHENTICATED, so compose publishes them on loopback only and the API reaches
+# them over the compose network (http://keto:4466 read, http://keto:4467 write).
+
+namespaces:
+  location: file:///etc/config/keto/namespaces.ts
+
+serve:
+  read:
+    host: 0.0.0.0
+    port: 4466
+  write:
+    host: 0.0.0.0
+    port: 4467
+  metrics:
+    host: 0.0.0.0
+    port: 4468
+
+log:
+  level: info
+  format: json
+  leak_sensitive_values: false
