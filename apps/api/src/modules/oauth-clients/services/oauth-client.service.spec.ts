@@ -170,7 +170,7 @@ describe('OAuthClientService', () => {
       const order: string[] = [];
       tyk.deletePolicy.mockImplementation(() => {
         order.push('policy');
-        return Promise.resolve();
+        return Promise.resolve([]);
       });
       hydra.remove.mockImplementation(() => {
         order.push('client');

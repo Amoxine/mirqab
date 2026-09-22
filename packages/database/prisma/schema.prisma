@@ -207,6 +207,13 @@ model ApiDefinition {
   config       Json?
   syncStatus   ApiSyncStatus   @default(PENDING) @map("sync_status")
   syncError    String?         @map("sync_error")
+  /// Per-node view of this definition across `TYK_ADMIN_URLS`, written by ReconcileService each
+  /// tick: `{ checkedAt, inSync, nodes: { "<nodeUrl>": { present, hash, error? } } }`.
+  /// Sits BESIDE `syncStatus` (which stays the single scalar the UI reads) rather than replacing
+  /// it — one is "did our last write succeed", the other is "do the nodes agree right now".
+  /// Rebuilt from the current node list every tick, never merged: a node dropped from
+  /// `TYK_ADMIN_URLS` must disappear, or a decommissioned node pins `inSync:false` forever.
+  syncState    Json?           @map("sync_state")
   lastSyncedAt DateTime?       @map("last_synced_at")
   healthStatus ApiHealthStatus @default(UNKNOWN) @map("health_status")
   createdAt    DateTime        @default(now()) @map("created_at")

@@ -25,6 +25,8 @@ import { OAuthClientService } from '../../oauth-clients/services/oauth-client.se
 import { fetchAccessTokenSigningKey } from './hydra-signing-key';
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
 import { loadTenantScope, type TenantGatewayScope } from '../../tyk-integration/services/tenant-scope';
+import type { NodeOutcome } from '../../tyk-integration/services/tyk-client.service';
+import { ReconcileService, type SyncState } from './reconcile.service';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -306,6 +308,7 @@ export class ApiService {
   constructor(
     private readonly tykClient: TykClientService,
     private readonly oauthClients: OAuthClientService,
+    private readonly reconcile: ReconcileService,
   ) {}
 
   async create(dto: CreateApiDto, tenantId: string): Promise<ApiDetail> {
@@ -572,7 +575,16 @@ export class ApiService {
 
   /** Push the definition to Tyk and persist the outcome: SYNCED + `lastSyncedAt`, or FAILED + `syncError`. */
   private async syncToTyk(apiDef: ApiDefinition): Promise<ApiRow> {
+    return (await this.syncToTykWithNodes(apiDef)).row;
+  }
+
+  /**
+   * As `syncToTyk`, but also hands back which nodes accepted the write — what `POST /apis/:id/sync`
+   * needs to answer 207 rather than a 200 that hides a node having refused it.
+   */
+  private async syncToTykWithNodes(apiDef: ApiDefinition): Promise<{ row: ApiRow; nodes: NodeOutcome[] }> {
     let tykApiId: string;
+    let nodes: NodeOutcome[] = [];
 
     // Read once here rather than threading a tenant through every caller: the org and slug must be
     // identical across the definition and its JWT policy, and one query per sync is cheaper than the
@@ -584,11 +596,13 @@ export class ApiService {
 
       if (apiDef.tykApiId) {
         // Update existing
-        await this.tykClient.updateApi(apiDef.tykApiId, tykDef);
+        nodes = (await this.tykClient.updateApi(apiDef.tykApiId, tykDef)).nodes;
         tykApiId = apiDef.tykApiId;
       } else {
         // Create new
-        tykApiId = (await this.tykClient.createApi(tykDef)).apiId;
+        const created = await this.tykClient.createApi(tykDef);
+        tykApiId = created.apiId;
+        nodes = created.nodes;
       }
 
       // The def above already points jwt_default_policies at jwtPolicyId(apiDef.id) — that policy
@@ -602,23 +616,77 @@ export class ApiService {
       const syncError = toSyncError(err);
       this.logger.warn(`Sync of API ${apiDef.id} failed: ${syncError}`);
 
-      return prisma.apiDefinition.update({
-        where: { id: apiDef.id },
-        data: { syncStatus: ApiSyncStatus.FAILED, syncError },
-        include: withActiveKeyCount,
-      });
+      return {
+        row: await prisma.apiDefinition.update({
+          where: { id: apiDef.id },
+          data: { syncStatus: ApiSyncStatus.FAILED, syncError },
+          include: withActiveKeyCount,
+        }),
+        nodes,
+      };
     }
 
-    return prisma.apiDefinition.update({
-      where: { id: apiDef.id },
-      data: {
-        tykApiId,
-        syncStatus: ApiSyncStatus.SYNCED,
-        syncError: null,
-        lastSyncedAt: new Date(),
-        healthStatus: 'UNKNOWN' as const,
-      },
-      include: withActiveKeyCount,
-    });
+    // A partial fan-out is not a clean sync: the definition is live on some nodes and stale on
+    // others, so the row says so rather than reporting SYNCED and letting the drift tick discover it
+    // a minute later.
+    const failed = nodes.filter((n) => !n.ok);
+    return {
+      row: await prisma.apiDefinition.update({
+        where: { id: apiDef.id },
+        data: {
+          tykApiId,
+          syncStatus: failed.length > 0 ? ApiSyncStatus.FAILED : ApiSyncStatus.SYNCED,
+          syncError:
+            failed.length > 0
+              ? `${String(failed.length)} of ${String(nodes.length)} gateway nodes did not accept the definition`
+              : null,
+          lastSyncedAt: new Date(),
+          healthStatus: 'UNKNOWN' as const,
+        },
+        include: withActiveKeyCount,
+      }),
+      nodes,
+    };
+  }
+
+  /**
+   * Re-push to every node and report which ones took it. The controller turns a partial result into
+   * 207; this returns the facts rather than deciding the status code.
+   */
+  async syncNowWithNodes(id: string, tenantId: string): Promise<{ detail: ApiDetail; nodes: NodeOutcome[] }> {
+    const apiDef = await this.findRow(id, tenantId);
+    const { row, nodes } = await this.syncToTykWithNodes(apiDef);
+    return { detail: toApiDetail(row), nodes };
+  }
+
+  /**
+   * Per-node drift for one definition, recomputed on demand so the caller never reads a stale tick.
+   * `differences` lists the nodes that disagree with the majority hash (or that could not be read),
+   * which is what an operator acts on.
+   */
+  async drift(
+    id: string,
+    tenantId: string,
+  ): Promise<{ inSync: boolean; differences: string[]; perNode: SyncState['nodes'] }> {
+    const apiDef = await this.findRow(id, tenantId);
+    if (!apiDef.tykApiId) {
+      return { inSync: false, differences: ['never synced to the gateway'], perNode: {} };
+    }
+
+    const state = await this.reconcile.reconcileOne(apiDef.id, apiDef.tykApiId);
+    const hashes = Object.values(state.nodes)
+      .map((n) => n.hash)
+      .filter((h): h is string => h !== null);
+    const majority = hashes
+      .sort(
+        (a, b) => hashes.filter((h) => h === b).length - hashes.filter((h) => h === a).length,
+      )
+      .at(0);
+
+    const differences = Object.entries(state.nodes)
+      .filter(([, view]) => !view.present || view.hash !== majority)
+      .map(([nodeUrl, view]) => `${nodeUrl}: ${view.error ?? 'definition differs'}`);
+
+    return { inSync: state.inSync, differences, perNode: state.nodes };
   }
 }

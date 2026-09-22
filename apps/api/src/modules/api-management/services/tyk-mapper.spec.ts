@@ -23,6 +23,7 @@ function apiDef(overrides: Partial<ApiDefinition> = {}): ApiDefinition {
     status: 'ACTIVE',
     config: null,
     syncStatus: 'PENDING',
+    syncState: null,
     syncError: null,
     lastSyncedAt: null,
     healthStatus: 'UNKNOWN',

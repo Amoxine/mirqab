@@ -13,6 +13,7 @@ import type { TykClientService } from '../../tyk-integration/services/tyk-client
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
 import { UpdateApiDto } from '../dto/update-api.dto';
 import type { OAuthClientService } from '../../oauth-clients/services/oauth-client.service';
+import type { ReconcileService } from './reconcile.service';
 import { ApiService, toSyncError } from './api.service';
 
 jest.mock('@open-gateway/database', () => ({
@@ -79,13 +80,22 @@ function setup() {
     upsertPolicy: jest.fn().mockResolvedValue(undefined),
     deletePolicy: jest.fn().mockResolvedValue(undefined),
   };
+  // WP13a: both write paths now report per-node outcomes. Armed here rather than at the mock
+  // declaration because `resetAllMocks()` in beforeEach wipes return values.
+  tyk.createApi.mockResolvedValue({ apiId: 'og-11111111', nodes: [] });
+  tyk.updateApi.mockResolvedValue({ nodes: [] });
+
   const oauthClients = { findByApi: jest.fn().mockResolvedValue([]) };
+  // Drift is ReconcileService's job and has its own tests; ApiService only forwards to it.
+  const reconcile = { reconcileOne: jest.fn().mockResolvedValue({ checkedAt: '', inSync: true, nodes: {} }) };
   return {
     tyk,
     oauthClients,
+    reconcile,
     service: new ApiService(
       tyk as unknown as TykClientService,
       oauthClients as unknown as OAuthClientService,
+      reconcile as unknown as ReconcileService,
     ),
   };
 }
