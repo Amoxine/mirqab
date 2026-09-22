@@ -24,7 +24,8 @@
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:logs": "docker compose -f infra/docker-compose.yml logs -f",
-    "setup": "bash infra/scripts/setup.sh"
+    "setup": "bash infra/scripts/setup.sh",
+    "commit": "cz"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -35,6 +36,8 @@
     "@eslint/js": "^9.22.0",
     "@next/eslint-plugin-next": "^15.2.4",
     "@open-gateway/config": "workspace:*",
+    "commitizen": "^4.3.2",
+    "cz-conventional-changelog": "^3.3.0",
     "eslint": "^9.22.0",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -54,5 +57,10 @@
       "esbuild",
       "sharp"
     ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
   }
 }
