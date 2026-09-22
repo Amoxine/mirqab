@@ -1,0 +1,91 @@
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AnalyticsService } from '../services/analytics.service';
+import {
+  AnalyticsListQueryDto,
+  AnalyticsRangeQueryDto,
+  AnalyticsTimeSeriesQueryDto,
+  AnalyticsTopApisQueryDto,
+} from '../dto/analytics-query.dto';
+import type {
+  AnalyticsApiRowResponse,
+  AnalyticsHealthResponse,
+  AnalyticsKeyRowResponse,
+  AnalyticsOverviewResponse,
+  AnalyticsStatusCodeResponse,
+  AnalyticsTimeSeriesPointResponse,
+  AnalyticsTopApiResponse,
+} from '../dto/analytics-response.dto';
+import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { Permissions } from '../../../common/decorators/permissions.decorator';
+import { CurrentTenant } from '../../../common/decorators/current-tenant.decorator';
+
+@ApiTags('Analytics')
+@ApiBearerAuth()
+@UseGuards(TenantIsolationGuard, PermissionsGuard)
+@Permissions('analytics:read')
+@Controller('analytics')
+export class AnalyticsController {
+  constructor(private readonly analyticsService: AnalyticsService) {}
+
+  @Get('overview')
+  @ApiOperation({ summary: 'Aggregate request/latency/error totals for the range' })
+  async getOverview(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsRangeQueryDto,
+  ): Promise<AnalyticsOverviewResponse> {
+    return this.analyticsService.getOverview(tenantId, query.range);
+  }
+
+  @Get('timeseries')
+  @ApiOperation({ summary: 'Bucketed requests, errors and latency for charts' })
+  async getTimeSeries(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsTimeSeriesQueryDto,
+  ): Promise<AnalyticsTimeSeriesPointResponse[]> {
+    return this.analyticsService.getTimeSeries(tenantId, query.metric, query.range);
+  }
+
+  @Get('apis')
+  @ApiOperation({ summary: 'Per-API usage rollup, busiest first (at most `limit` rows)' })
+  async getApiMetrics(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsListQueryDto,
+  ): Promise<AnalyticsApiRowResponse[]> {
+    return this.analyticsService.getApiMetrics(tenantId, query.range, query.limit);
+  }
+
+  @Get('keys')
+  @ApiOperation({ summary: 'Per-key usage rollup, busiest first (at most `limit` rows)' })
+  async getKeyMetrics(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsListQueryDto,
+  ): Promise<AnalyticsKeyRowResponse[]> {
+    return this.analyticsService.getKeyMetrics(tenantId, query.range, query.limit);
+  }
+
+  @Get('top-apis')
+  @ApiOperation({ summary: 'Top APIs by request count' })
+  async getTopApis(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsTopApisQueryDto,
+  ): Promise<AnalyticsTopApiResponse[]> {
+    return this.analyticsService.getTopApis(tenantId, query.range, query.limit);
+  }
+
+  @Get('status-codes')
+  @ApiOperation({ summary: 'Response status-code breakdown' })
+  async getStatusCodes(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsRangeQueryDto,
+  ): Promise<AnalyticsStatusCodeResponse[]> {
+    return this.analyticsService.getStatusCodes(tenantId, query.range);
+  }
+
+  @Get('health')
+  @ApiOperation({ summary: 'Readiness of the Tyk Pump analytics pipeline' })
+  async getHealth(@CurrentTenant() tenantId: string): Promise<AnalyticsHealthResponse> {
+    return this.analyticsService.getHealth(tenantId);
+  }
+}
