@@ -1,0 +1,31 @@
+# Code ownership for CODEOWNERS
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Root config
+/package.json              @team/leads
+/pnpm-workspace.yaml       @team/leads
+/turbo.json                @team/leads
+/eslint.config.js          @team/leads
+
+# Web app (Next.js)
+/apps/web/                 @team/frontend-leads
+
+# API app (NestJS)
+/apps/api/                 @team/backend-leads
+
+# Packages
+/packages/ui/              @team/frontend-leads
+/packages/config/          @team/leads
+/packages/types/           @team/leads
+/packages/database/        @team/backend-leads
+
+# Infrastructure
+/infra/                    @team/devops-leads
+/helm/                     @team/devops-leads
+/k8s/                      @team/devops-leads
+
+# CI/CD
+/.github/                  @team/devops-leads
+
+# Documentation
+/docs/                     @team/leads
