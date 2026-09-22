@@ -1,0 +1,27 @@
+import { getTranslations } from 'next-intl/server';
+import { LocaleSwitcher } from '@/components/layout/locale-switcher';
+
+// Shared by every /auth/* page (login/register/settings/recovery/verification) — each renders its
+// own CardTitle/CardDescription, since "Sign in to your account" no longer fits all five.
+export default async function AuthLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const t = await getTranslations('nav');
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-primary-light/20 p-4">
+      {/* Reachable before login too — otherwise an Arabic/French-speaking visitor has no way to
+       * change language until AFTER completing an all-English sign-in. */}
+      <div className="absolute end-4 top-4">
+        <LocaleSwitcher />
+      </div>
+      <div className="w-full max-w-md space-y-8">
+        <h1 className="text-center text-2xl font-bold text-text-primary">
+          {t('brand')}
+        </h1>
+        {children}
+      </div>
+    </div>
+  );
+}
