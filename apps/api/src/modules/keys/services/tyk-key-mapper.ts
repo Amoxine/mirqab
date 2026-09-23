@@ -51,17 +51,59 @@ function accessRightsFor(apiDef: KeyApiScope | null): Record<string, unknown> | 
 }
 
 /**
+ * The companion ACL policy a plan-governed key needs alongside its plan (WP18 fix). Null when the
+ * key has no API to grant (`accessRightsFor` returns nothing) — nothing to grant, no policy needed.
+ *
+ * Live-verified on Tyk 5.15.0: `POST /tyk/keys/create` refuses `apply_policies` unless a REFERENCED
+ * POLICY owns non-empty access rights, checked regardless of the key's own `access_rights`. The plan
+ * policy is deliberately ACL-less and shared (`buildPlanPolicy`'s `partitions.acl: false` — a plan is
+ * a limit tier, not a grant of APIs), so it can never satisfy that gate; this is the policy that does,
+ * one per key so the grant it carries is only ever this one key's own scope. `partitions.acl: true`
+ * (and everything else false) is what stops it from also swallowing the plan's rate/quota — without
+ * it, whichever unpartitioned/ACL-owning policy is applied becomes the SESSION'S EXCLUSIVE source for
+ * everything, not just ACL (verified live: it silently overwrote the plan's rate too).
+ */
+export function buildKeyAclPolicy(
+  id: string,
+  apiDef: KeyApiScope | null,
+  orgId: string,
+): Record<string, unknown> | null {
+  const accessRights = accessRightsFor(apiDef);
+  if (!accessRights) return null;
+
+  return {
+    id,
+    name: `Key access — ${id}`,
+    org_id: orgId,
+    active: true,
+    state: 'active',
+    // Inert: this policy never owns rate/quota (partitions below), so these values are never read.
+    rate: 0,
+    per: 0,
+    quota_max: -1,
+    quota_renewal_rate: 0,
+    access_rights: accessRights,
+    partitions: { quota: false, rate_limit: false, acl: true, complexity: false, per_api: false },
+  };
+}
+
+/**
  * Tyk key definition for a NEW key. Unlimited rate / quota are expressed by omitting the fields.
  * Pure: `orgId` (the owning tenant's `Tenant.tykOrgId`, the same org its API definitions carry — see
  * `loadTenantScope`) and `nowSeconds` are injected so the mapper is testable. It is no longer the
  * gateway-wide `TYK_ORG_ID`: one org for everyone meant cutting off a single tenant cut off all of
  * them (WP12c).
+ *
+ * `aclPolicyId` is the id of a policy already built by `buildKeyAclPolicy` and pushed to Tyk by the
+ * caller (this function stays pure — it has no gateway access) — see that function's doc comment for
+ * why a planned key needs one. Omitted for a non-plan key, which does not.
  */
 export function buildTykKeyDef(
   input: KeyDefInput,
   apiDef: KeyApiScope | null,
   orgId: string,
   nowSeconds = Math.floor(Date.now() / 1000),
+  aclPolicyId?: string,
 ): Record<string, unknown> {
   const def: Record<string, unknown> = { alias: input.name, active: true, org_id: orgId };
 
@@ -81,7 +123,7 @@ export function buildTykKeyDef(
         'A key with planId cannot also set rateLimitPerSecond or quotaLimit — the plan defines both.',
       );
     }
-    def.apply_policies = [input.planId];
+    def.apply_policies = aclPolicyId ? [input.planId, aclPolicyId] : [input.planId];
   } else {
     if (input.rateLimitPerSecond) {
       def.rate = input.rateLimitPerSecond;

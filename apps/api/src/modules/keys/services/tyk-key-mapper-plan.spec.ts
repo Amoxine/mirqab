@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { QuotaPeriod } from '@prisma/client';
-import { buildTykKeyDef } from './tyk-key-mapper';
+import { buildTykKeyDef, buildKeyAclPolicy } from './tyk-key-mapper';
 
 /**
  * WP18's key-side acceptance: a key with a plan carries `apply_policies` and NO inline limits.
@@ -61,5 +61,43 @@ describe('buildTykKeyDef — plan-backed keys (WP18)', () => {
     const def = buildTykKeyDef({ name: 'k', planId: null, rateLimitPerSecond: 5 }, apiDef, 'og-tenant');
     expect(def).not.toHaveProperty('apply_policies');
     expect(def.rate).toBe(5);
+  });
+});
+
+/**
+ * WP18 fix: a plan's own policy is deliberately ACL-less (`buildPlanPolicy`'s `partitions.acl:
+ * false`), so `apply_policies:[planId]` alone fails at `/tyk/keys/create` — live-verified against
+ * Tyk 5.15.0, "key has no valid policies to be applied". A second, per-key ACL-owning policy fixes
+ * it without giving the plan itself any access grant.
+ */
+describe('buildTykKeyDef — with an ACL policy id (WP18 fix)', () => {
+  it('applies both the plan and the ACL policy, in that order', () => {
+    const def = buildTykKeyDef({ name: 'k', planId: PLAN_ID }, apiDef, 'og-tenant', undefined, 'acl-policy-1');
+    expect(def.apply_policies).toEqual([PLAN_ID, 'acl-policy-1']);
+  });
+
+  it('is a no-op for a non-plan key — an ACL policy id with no planId changes nothing', () => {
+    const def = buildTykKeyDef({ name: 'k', rateLimitPerSecond: 5 }, apiDef, 'og-tenant', 1_000_000, 'acl-policy-1');
+    expect(def).not.toHaveProperty('apply_policies');
+    expect(def.rate).toBe(5);
+  });
+});
+
+describe('buildKeyAclPolicy', () => {
+  it('owns ACL only — real access rights, no rate/quota partition', () => {
+    const policy = buildKeyAclPolicy('acl-policy-1', apiDef, 'og-tenant');
+
+    expect(policy).toMatchObject({
+      id: 'acl-policy-1',
+      org_id: 'og-tenant',
+      active: true,
+      access_rights: { 'og-orders': { api_id: 'og-orders', api_name: 'Orders', versions: ['Default'] } },
+      partitions: { quota: false, rate_limit: false, acl: true, complexity: false, per_api: false },
+    });
+  });
+
+  it('is null when there is nothing to grant — no API, no policy needed', () => {
+    expect(buildKeyAclPolicy('acl-policy-1', null, 'og-tenant')).toBeNull();
+    expect(buildKeyAclPolicy('acl-policy-1', { name: 'x', tykApiId: null }, 'og-tenant')).toBeNull();
   });
 });

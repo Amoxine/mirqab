@@ -62,6 +62,22 @@ describe('buildPlanPolicy', () => {
     expect(buildPlanPolicy(plan, 'og-tenant').access_rights).toEqual({});
   });
 
+  /**
+   * Live-verified on Tyk 5.15.0: without this, `apply_policies` refuses to create at all (this
+   * policy's own access_rights is empty), and putting real access rights here instead makes THIS
+   * policy the session's exclusive ACL source, discarding whatever `buildKeyAclPolicy`'s own policy
+   * grants. `partitions.acl: false` is what keeps this policy in its rate/quota lane.
+   */
+  it('opts out of owning ACL, so it never overrides the paired key-access policy', () => {
+    expect(buildPlanPolicy(plan, 'og-tenant').partitions).toEqual({
+      quota: true,
+      rate_limit: true,
+      acl: false,
+      complexity: false,
+      per_api: false,
+    });
+  });
+
   it.each([
     [QuotaPeriod.HOURLY, 3600],
     [QuotaPeriod.DAILY, 86_400],

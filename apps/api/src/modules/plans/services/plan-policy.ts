@@ -21,6 +21,16 @@ const PERIOD_SECONDS: Record<QuotaPeriod, number> = {
  *     relies on the same reading.
  *   - `quota_max: -1` means unlimited. Zero would be a quota of nothing.
  * Getting either inverted produces a policy the gateway accepts and then enforces as a total block.
+ *
+ * `partitions.acl: false` is a WP18 fix, live-verified against Tyk 5.15.0. `POST /tyk/keys/create`
+ * refuses `apply_policies` unless a referenced policy owns non-empty `access_rights` — checked on the
+ * policy regardless of what the key's own says — so this policy, staying ACL-less by design (a plan
+ * is a limit tier, not a grant of APIs), can never satisfy that gate alone. `partitions` says so
+ * explicitly and confines this policy to rate/quota: a plan-governed key applies a SECOND policy
+ * alongside this one — `buildKeyAclPolicy`, `partitions.acl: true`, the key's own real access rights
+ * — which is what actually gets it past the gate. Without an explicit `partitions.acl: false` here,
+ * an unpartitioned policy becomes the session's EXCLUSIVE access-rights source and would silently
+ * overwrite the ACL policy's grant instead of leaving it alone (verified live).
  */
 export function buildPlanPolicy(
   plan: Pick<Plan, 'id' | 'name' | 'rate' | 'per' | 'quotaMax' | 'quotaPeriod' | 'active'>,
@@ -43,5 +53,8 @@ export function buildPlanPolicy(
     // Empty `access_rights` means the policy grants nothing of its own and the key keeps the API
     // scope it was created with. A plan is a limit tier, not a grant of APIs — products do that.
     access_rights: accessRights,
+    // See the doc comment above: this policy must not be able to own ACL, or it would clobber the
+    // real access rights the paired `buildKeyAclPolicy` policy provides.
+    partitions: { quota: true, rate_limit: true, acl: false, complexity: false, per_api: false },
   };
 }

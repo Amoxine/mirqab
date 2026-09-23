@@ -13,6 +13,8 @@ jest.mock('@open-gateway/database', () => ({
     tenant: { findUniqueOrThrow: jest.fn().mockResolvedValue({ tykOrgId: 'og-tenant-1', slug: 'tenant-1' }) },
     apiKey: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn() },
     apiDefinition: { findUnique: jest.fn() },
+    // WP18: create() looks up a planId's ownership before building the key.
+    plan: { findFirst: jest.fn() },
     quota: { deleteMany: jest.fn() },
     $queryRaw: jest.fn(),
   },
@@ -21,6 +23,7 @@ jest.mock('@open-gateway/database', () => ({
 interface MockDb {
   apiKey: Record<'findUnique' | 'findMany' | 'count' | 'create' | 'update', jest.Mock>;
   apiDefinition: { findUnique: jest.Mock };
+  plan: { findFirst: jest.Mock };
   quota: { deleteMany: jest.Mock };
   $queryRaw: jest.Mock;
 }
@@ -70,7 +73,14 @@ const missingTable = () =>
   });
 
 describe('KeyService', () => {
-  const tyk = { createKey: jest.fn(), getKey: jest.fn(), updateKey: jest.fn(), deleteKey: jest.fn() };
+  const tyk = {
+    createKey: jest.fn(),
+    getKey: jest.fn(),
+    updateKey: jest.fn(),
+    deleteKey: jest.fn(),
+    upsertPolicy: jest.fn(),
+    deletePolicy: jest.fn(),
+  };
   const quotas = { create: jest.fn(), upsert: jest.fn() };
   let service: KeyService;
 
@@ -158,6 +168,94 @@ describe('KeyService', () => {
       tyk.deleteKey.mockRejectedValue(new BadRequestException('Tyk integration error: boom'));
 
       await expect(service.create(dto, TENANT, 'user-1')).rejects.toThrow('database is in recovery');
+    });
+
+    /**
+     * WP18 fix: `apply_policies` needs a second, ACL-owning policy alongside the plan's own
+     * (ACL-less by design) one, or Tyk refuses to create the key at all — live-verified against
+     * Tyk 5.15.0. See `buildKeyAclPolicy`'s doc comment.
+     */
+    describe('with a plan (companion ACL policy)', () => {
+      const PLAN_ID = 'plan-1';
+      const planDto = { name: 'wp18 key', apiDefId: 'api-1', planId: PLAN_ID };
+
+      it('pushes the ACL policy before creating the key, and applies both policies', async () => {
+        db.apiDefinition.findUnique.mockResolvedValue(apiDef);
+        db.plan.findFirst.mockResolvedValue({ id: PLAN_ID });
+        tyk.upsertPolicy.mockResolvedValue([]);
+        tyk.createKey.mockResolvedValue({ keyHash: HASH, key: RAW_KEY });
+        db.apiKey.create.mockResolvedValue(keyRow({ planId: PLAN_ID }));
+
+        await service.create(planDto, TENANT, 'user-1');
+
+        expect(tyk.upsertPolicy).toHaveBeenCalledTimes(1);
+        const aclPolicy = (tyk.upsertPolicy.mock.calls[0] as [Record<string, unknown>])[0];
+        expect(aclPolicy).toMatchObject({
+          access_rights: RIGHTS,
+          partitions: { acl: true, quota: false, rate_limit: false, complexity: false, per_api: false },
+        });
+        // The key references the policy's id, so the policy must exist on the gateway first.
+        expect(tyk.upsertPolicy.mock.invocationCallOrder[0]).toBeLessThan(tyk.createKey.mock.invocationCallOrder[0]);
+
+        expect(tyk.createKey).toHaveBeenCalledWith(
+          expect.objectContaining({ apply_policies: [PLAN_ID, aclPolicy.id] }),
+        );
+        const stored = (db.apiKey.create.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
+        expect(stored.tykAclPolicyId).toBe(aclPolicy.id);
+        expect(stored.planId).toBe(PLAN_ID);
+      });
+
+      it('rejects an unknown plan before touching Tyk at all', async () => {
+        db.apiDefinition.findUnique.mockResolvedValue(apiDef);
+        db.plan.findFirst.mockResolvedValue(null);
+
+        await expect(service.create(planDto, TENANT, 'user-1')).rejects.toThrow(BadRequestException);
+        expect(tyk.upsertPolicy).not.toHaveBeenCalled();
+        expect(tyk.createKey).not.toHaveBeenCalled();
+      });
+
+      it('deletes the ACL policy too when key creation on the gateway fails', async () => {
+        db.apiDefinition.findUnique.mockResolvedValue(apiDef);
+        db.plan.findFirst.mockResolvedValue({ id: PLAN_ID });
+        tyk.upsertPolicy.mockResolvedValue([]);
+        tyk.createKey.mockRejectedValue(new Error('gateway down'));
+        tyk.deletePolicy.mockResolvedValue([]);
+
+        await expect(service.create(planDto, TENANT, 'user-1')).rejects.toThrow(BadRequestException);
+
+        const aclPolicy = (tyk.upsertPolicy.mock.calls[0] as [Record<string, unknown>])[0];
+        expect(tyk.deletePolicy).toHaveBeenCalledWith(aclPolicy.id);
+        expect(db.apiKey.create).not.toHaveBeenCalled();
+      });
+
+      it('deletes both the gateway key and its ACL policy when the database row cannot be written', async () => {
+        db.apiDefinition.findUnique.mockResolvedValue(apiDef);
+        db.plan.findFirst.mockResolvedValue({ id: PLAN_ID });
+        tyk.upsertPolicy.mockResolvedValue([]);
+        tyk.createKey.mockResolvedValue({ keyHash: HASH, key: RAW_KEY });
+        tyk.deleteKey.mockResolvedValue(undefined);
+        tyk.deletePolicy.mockResolvedValue([]);
+        db.apiKey.create.mockRejectedValue(new Error('database is in recovery'));
+
+        await expect(service.create(planDto, TENANT, 'user-1')).rejects.toThrow('database is in recovery');
+
+        const aclPolicy = (tyk.upsertPolicy.mock.calls[0] as [Record<string, unknown>])[0];
+        expect(tyk.deleteKey).toHaveBeenCalledWith(HASH);
+        expect(tyk.deletePolicy).toHaveBeenCalledWith(aclPolicy.id);
+      });
+
+      it('creates no ACL policy when the key has no API to scope — apply_policies is the plan alone', async () => {
+        db.plan.findFirst.mockResolvedValue({ id: PLAN_ID });
+        tyk.createKey.mockResolvedValue({ keyHash: HASH, key: RAW_KEY });
+        db.apiKey.create.mockResolvedValue(keyRow({ planId: PLAN_ID, tykAclPolicyId: null }));
+
+        await service.create({ name: 'no-api key', planId: PLAN_ID }, TENANT, 'user-1');
+
+        expect(tyk.upsertPolicy).not.toHaveBeenCalled();
+        expect(tyk.createKey).toHaveBeenCalledWith(expect.objectContaining({ apply_policies: [PLAN_ID] }));
+        const stored = (db.apiKey.create.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
+        expect(stored.tykAclPolicyId).toBeNull();
+      });
     });
   });
 
@@ -396,6 +494,45 @@ describe('KeyService', () => {
       await expect(service.revoke(KEY_ID, TENANT)).rejects.toThrow(BadGatewayException);
       expect(db.apiKey.update).not.toHaveBeenCalled();
     });
+
+    // WP18 fix: a plan-governed key's companion ACL policy (buildKeyAclPolicy) is its own — nothing
+    // else references it, so revoking the key is what cleans it up.
+    it('also deletes the ACL policy for a plan-governed key, after the gateway key is gone', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ planId: 'plan-1', tykAclPolicyId: 'acl-1' }));
+      db.apiKey.update.mockResolvedValue(keyRow({ status: ApiKeyStatus.REVOKED }));
+      tyk.deletePolicy.mockResolvedValue([]);
+
+      await service.revoke(KEY_ID, TENANT);
+
+      expect(tyk.deleteKey).toHaveBeenCalledWith(HASH);
+      expect(tyk.deletePolicy).toHaveBeenCalledWith('acl-1');
+      expect(tyk.deleteKey.mock.invocationCallOrder[0]).toBeLessThan(tyk.deletePolicy.mock.invocationCallOrder[0]);
+    });
+
+    it('does not touch a plan key that has no ACL policy (pre-fix key, or none was needed)', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ planId: 'plan-1', tykAclPolicyId: null }));
+      db.apiKey.update.mockResolvedValue(keyRow({ status: ApiKeyStatus.REVOKED }));
+
+      await service.revoke(KEY_ID, TENANT);
+
+      expect(tyk.deletePolicy).not.toHaveBeenCalled();
+    });
+
+    it('still revokes the key even when its ACL policy fails to delete — the leak is logged, not fatal', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ planId: 'plan-1', tykAclPolicyId: 'acl-1' }));
+      db.apiKey.update.mockResolvedValue(keyRow({ status: ApiKeyStatus.REVOKED }));
+      tyk.deletePolicy.mockRejectedValue(new Error('policy delete failed'));
+
+      await expect(service.revoke(KEY_ID, TENANT)).resolves.toMatchObject({ status: ApiKeyStatus.REVOKED });
+    });
+
+    it('does NOT delete the ACL policy when the Tyk key deletion genuinely fails (it may still reference it)', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ planId: 'plan-1', tykAclPolicyId: 'acl-1' }));
+      tyk.deleteKey.mockRejectedValue(new TypeError('fetch failed'));
+
+      await expect(service.revoke(KEY_ID, TENANT)).rejects.toThrow(BadGatewayException);
+      expect(tyk.deletePolicy).not.toHaveBeenCalled();
+    });
   });
 
   describe('checkExpired', () => {
@@ -420,6 +557,17 @@ describe('KeyService', () => {
         where: { id: KEY_ID },
         data: { status: ApiKeyStatus.EXPIRED },
       });
+    });
+
+    // WP18 fix: expiry goes through the same deleteTykKey path as revoke, so a plan-governed key's
+    // ACL policy is cleaned up here too, not left behind.
+    it('also deletes a plan-governed key’s ACL policy on expiry', async () => {
+      db.apiKey.findMany.mockResolvedValue([expiredRow({ planId: 'plan-1', tykAclPolicyId: 'acl-1' })]);
+      db.apiKey.update.mockResolvedValue(expiredRow({ status: ApiKeyStatus.EXPIRED }));
+      tyk.deletePolicy.mockResolvedValue([]);
+
+      await expect(service.checkExpired()).resolves.toBe(1);
+      expect(tyk.deletePolicy).toHaveBeenCalledWith('acl-1');
     });
 
     // B7b: an expired key the gateway already dropped used to throw, stay ACTIVE and be retried nightly.

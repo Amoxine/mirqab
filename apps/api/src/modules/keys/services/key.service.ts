@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   Injectable,
   NotFoundException,
@@ -28,7 +28,7 @@ import {
   toNumber,
   type RollupRow,
 } from '../../analytics/services/pump-query.builder';
-import { buildTykKeyDef, applyKeyUpdate } from './tyk-key-mapper';
+import { buildTykKeyDef, buildKeyAclPolicy, applyKeyUpdate } from './tyk-key-mapper';
 import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
 
 /** Tyk answers a missing key with 404 "Key not found" / "There is no such key found". */
@@ -67,12 +67,13 @@ export class KeyService {
    * Create a new API key.
    *
    * Flow:
-   * 1. Build Tyk key definition with rate limits / quotas
-   * 2. Call Tyk to create the key → get { keyHash, key }
-   * 3. Hash the raw key with SHA-256 (NEVER store raw key)
-   * 4. Create ApiKey record in DB with keyHash
-   * 5. If quota params provided, create Quota record
-   * 6. Return response with raw keyValue shown ONCE
+   * 1. If planned, build and push its companion ACL policy first (WP18 fix — see buildKeyAclPolicy)
+   * 2. Build Tyk key definition with rate limits / quotas
+   * 3. Call Tyk to create the key → get { keyHash, key }
+   * 4. Hash the raw key with SHA-256 (NEVER store raw key)
+   * 5. Create ApiKey record in DB with keyHash
+   * 6. If quota params provided, create Quota record
+   * 7. Return response with raw keyValue shown ONCE
    */
   async create(
     dto: CreateKeyDto,
@@ -103,14 +104,40 @@ export class KeyService {
       if (!plan) throw new BadRequestException(`Plan ${dto.planId} not found in this tenant`);
     }
 
-    // Step 1: Build Tyk key definition
-    const tykKeyDef = buildTykKeyDef(dto, apiDef, (await loadTenantScope(tenantId)).tykOrgId);
+    const orgId = (await loadTenantScope(tenantId)).tykOrgId;
 
-    // Step 2: Create key in Tyk
+    // Step 1: a planned key needs a companion ACL policy pushed BEFORE the key references it — see
+    // buildKeyAclPolicy's doc comment for why the plan's own policy cannot carry this key's access.
+    // Null when there is nothing to grant (no synced apiDef), same as a non-plan apiDef-less key.
+    const aclPolicy = dto.planId ? buildKeyAclPolicy(randomUUID(), apiDef, orgId) : null;
+    if (aclPolicy) {
+      try {
+        await this.tykClient.upsertPolicy(aclPolicy);
+      } catch (err) {
+        this.logger.error(
+          `Failed to create the access policy for a new key: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        throw new BadRequestException('Failed to create API key — Tyk integration error');
+      }
+    }
+    const aclPolicyId = aclPolicy ? (aclPolicy.id as string) : undefined;
+
+    // Step 2: Build Tyk key definition
+    const tykKeyDef = buildTykKeyDef(dto, apiDef, orgId, undefined, aclPolicyId);
+
+    // Step 3: Create key in Tyk
     let tykResult: { keyHash: string; key: string };
     try {
       tykResult = await this.tykClient.createKey(tykKeyDef);
     } catch (err) {
+      if (aclPolicyId) {
+        await this.tykClient.deletePolicy(aclPolicyId).catch((cleanupErr: unknown) => {
+          this.logger.error(
+            `Orphaned access policy ${aclPolicyId} after a failed key creation; delete it manually: ` +
+              (cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)),
+          );
+        });
+      }
       this.logger.error(
         `Failed to create key in Tyk: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -119,10 +146,10 @@ export class KeyService {
       );
     }
 
-    // Step 3: Hash the raw key value
+    // Step 4: Hash the raw key value
     const keyHash = this.hashKey(tykResult.key);
 
-    // Step 4: Create ApiKey record in DB
+    // Step 5: Create ApiKey record in DB
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
 
     let apiKey: ApiKey;
@@ -138,6 +165,7 @@ export class KeyService {
           expiresAt,
           apiDefId: dto.apiDefId ?? null,
           planId: dto.planId ?? null,
+          tykAclPolicyId: aclPolicyId ?? null,
         },
       });
     } catch (err) {
@@ -146,21 +174,24 @@ export class KeyService {
       // since it is the only handle left to remove it by hand (it is not a usable credential).
       try {
         await this.tykClient.deleteKey(tykResult.keyHash);
+        if (aclPolicyId) await this.tykClient.deletePolicy(aclPolicyId);
       } catch (cleanupErr) {
         this.logger.error(
-          `Orphaned gateway key ${tykResult.keyHash} after a failed database write; delete it manually: ` +
+          `Orphaned gateway key ${tykResult.keyHash}` +
+            (aclPolicyId ? ` (and access policy ${aclPolicyId})` : '') +
+            ` after a failed database write; delete it manually: ` +
             (cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)),
         );
       }
       throw err;
     }
 
-    // Step 5: Create quota record if quota params provided
+    // Step 6: Create quota record if quota params provided
     if (dto.quotaLimit && dto.quotaPeriod) {
       await this.quotaService.create(apiKey.id, dto.quotaLimit, dto.quotaPeriod);
     }
 
-    // Step 6: Return with raw keyValue (shown ONCE)
+    // Step 7: Return with raw keyValue (shown ONCE)
     return {
       id: apiKey.id,
       name: apiKey.name,
@@ -326,7 +357,7 @@ export class KeyService {
     // so it must NOT be marked revoked.
     if (apiKey.tykKeyId) {
       try {
-        await this.deleteTykKey(apiKey.tykKeyId, id);
+        await this.deleteTykKey(apiKey);
       } catch {
         throw new BadGatewayException('Could not revoke the key on the gateway; it was not revoked');
       }
@@ -381,7 +412,7 @@ export class KeyService {
         // Revoke in Tyk. A key the gateway has already dropped must not keep this row ACTIVE and be
         // retried every night, so "key not found" is tolerated here exactly as in revoke().
         if (key.tykKeyId) {
-          await this.deleteTykKey(key.tykKeyId, key.id);
+          await this.deleteTykKey(key);
         }
 
         // Update local status
@@ -443,18 +474,37 @@ export class KeyService {
    * Delete a key on the gateway, tolerating "key not found" — it is already gone (or the row predates
    * D5 and holds a raw key), which is the state the caller wanted. TykClientService raises
    * BadRequestException for anything the gateway rejected; those are rethrown, because the key may
-   * still be live and the local status must not claim otherwise.
+   * still be live and the local status must not claim otherwise — and in that case its ACL policy
+   * (below) is deliberately left alone too, since the key may still be referencing it.
+   *
+   * The companion ACL policy (WP18 fix — see `buildKeyAclPolicy`) is this key's alone, so it is
+   * cleaned up here rather than left for the plan to eventually collect: only reached once the Tyk
+   * key itself is confirmed gone, and a failure to delete it is logged, not thrown — the key is
+   * already revoked at that point, and an orphaned policy nothing references grants no live access.
    */
-  private async deleteTykKey(tykKeyId: string, keyId: string): Promise<void> {
+  private async deleteTykKey(apiKey: Pick<ApiKey, 'id' | 'tykKeyId' | 'tykAclPolicyId'>): Promise<void> {
+    const tykKeyId = apiKey.tykKeyId;
+    if (!tykKeyId) return;
+
     try {
       await this.tykClient.deleteKey(tykKeyId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (!(err instanceof BadRequestException && TYK_KEY_MISSING.test(message))) {
-        this.logger.error(`Failed to delete key ${keyId} on the gateway: ${message}`);
+        this.logger.error(`Failed to delete key ${apiKey.id} on the gateway: ${message}`);
         throw err;
       }
-      this.logger.warn(`Key ${keyId} is not known to Tyk (${message}); continuing locally`);
+      this.logger.warn(`Key ${apiKey.id} is not known to Tyk (${message}); continuing locally`);
+    }
+
+    const aclPolicyId = apiKey.tykAclPolicyId;
+    if (aclPolicyId) {
+      await this.tykClient.deletePolicy(aclPolicyId).catch((err: unknown) => {
+        this.logger.error(
+          `Could not delete access policy ${aclPolicyId} for key ${apiKey.id}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      });
     }
   }
 

@@ -301,6 +301,15 @@ model ApiKey {
   /// limits on the key — so existing keys keep working untouched.
   planId String? @map("plan_id")
 
+  /// WP18 fix, live-verified against Tyk 5.15.0: a plan's own policy is deliberately ACL-less
+  /// (`partitions.acl: false`, shared across every key on the plan — see `Plan`'s doc comment), but
+  /// `apply_policies` still requires SOME referenced policy to own ACL or `/tyk/keys/create` refuses
+  /// the key outright. This is that policy: one per plan-governed key, `partitions.acl: true`,
+  /// carrying this key's real `access_rights` so its API scope survives being paired with an
+  /// ACL-less plan policy. Null for a pre-fix or non-plan key. Lifecycle tied to the key: created
+  /// alongside it, deleted alongside it — see `KeyService`.
+  tykAclPolicyId String? @map("tyk_acl_policy_id")
+
   tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiDef   ApiDefinition? @relation(fields: [apiDefId], references: [id], onDelete: SetNull)
