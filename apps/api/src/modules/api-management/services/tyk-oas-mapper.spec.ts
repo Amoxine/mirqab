@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import type { ApiDefinition } from '@prisma/client';
-import { mapToTykFormat, mapToTykOas } from './api.service';
+import { mapToTykFormat, mapToTykOas } from './tyk-mappers';
 
 jest.mock('@open-gateway/database', () => ({ prisma: {} }));
 

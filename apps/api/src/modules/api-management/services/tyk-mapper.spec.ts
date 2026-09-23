@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import type { ApiDefinition } from '@prisma/client';
-import { buildJwtPolicy, mapToTykFormat } from './api.service';
+import { buildJwtPolicy, mapToTykFormat } from './tyk-mappers';
 
 // api.service imports the shared prisma singleton; the mapper is pure, so keep the real client out.
 jest.mock('@open-gateway/database', () => ({ prisma: {} }));

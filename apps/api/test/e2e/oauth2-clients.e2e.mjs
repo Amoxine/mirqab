@@ -36,7 +36,7 @@ const UPSTREAM = 'http://api:4000';
 const UPSTREAM_PATH = '/api/health';
 
 const { prisma } = require('@open-gateway/database');
-const { mapToTykFormat } = require(`${ROOT}/modules/api-management/services/api.service.js`);
+const { mapToTykFormat } = require(`${ROOT}/modules/api-management/services/tyk-mappers.js`);
 const { fetchAccessTokenSigningKey } = require(`${ROOT}/modules/api-management/services/hydra-signing-key.js`);
 const { TykClientService } = require(`${ROOT}/modules/tyk-integration/services/tyk-client.service.js`);
 const { CircuitBreakerService } = require(`${ROOT}/common/circuit-breaker/circuit-breaker.service.js`);
