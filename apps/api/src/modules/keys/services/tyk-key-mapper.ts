@@ -25,6 +25,12 @@ export interface KeyLimits {
 export interface KeyDefInput extends KeyLimits {
   name: string;
   expiresAt?: string;
+  /**
+   * WP18. When set, the key's limits come from this plan's Tyk policy and the key carries NO
+   * inline `rate`/`per`/`quota_max` — that is what makes editing the plan change every key at once.
+   * The value is the `Plan.id`, which IS the Tyk policy id (see the Plan model).
+   */
+  planId?: string | null;
 }
 
 export interface KeyUpdateInput extends KeyLimits {
@@ -62,19 +68,35 @@ export function buildTykKeyDef(
   const accessRights = accessRightsFor(apiDef);
   if (accessRights) def.access_rights = accessRights;
 
-  if (input.rateLimitPerSecond) {
-    def.rate = input.rateLimitPerSecond;
-    def.per = 1;
-  }
-
-  if (input.quotaLimit) {
-    if (!input.quotaPeriod) {
-      throw new BadRequestException('quotaPeriod is required when quotaLimit is set');
+  // WP18: a planned key delegates its limits to the plan's policy and carries none of its own.
+  //
+  // The exclusivity is the whole feature, not tidiness. Tyk applies a policy's rate/quota on top of
+  // the session, and an inline `rate` on the key wins over the policy's — so a key that kept its own
+  // limits would silently ignore a plan edit, which is exactly the behaviour this replaces. Refusing
+  // the combination outright is better than picking a winner: a caller who sent both wanted
+  // something, and neither answer is obviously it.
+  if (input.planId) {
+    if (input.rateLimitPerSecond ?? input.quotaLimit) {
+      throw new BadRequestException(
+        'A key with planId cannot also set rateLimitPerSecond or quotaLimit — the plan defines both.',
+      );
     }
-    const period = quotaPeriodToSeconds(input.quotaPeriod);
-    def.quota_max = input.quotaLimit;
-    def.quota_renewal_rate = period;
-    def.quota_renews = nowSeconds + period;
+    def.apply_policies = [input.planId];
+  } else {
+    if (input.rateLimitPerSecond) {
+      def.rate = input.rateLimitPerSecond;
+      def.per = 1;
+    }
+
+    if (input.quotaLimit) {
+      if (!input.quotaPeriod) {
+        throw new BadRequestException('quotaPeriod is required when quotaLimit is set');
+      }
+      const period = quotaPeriodToSeconds(input.quotaPeriod);
+      def.quota_max = input.quotaLimit;
+      def.quota_renewal_rate = period;
+      def.quota_renews = nowSeconds + period;
+    }
   }
 
   if (input.expiresAt) def.expires = toEpochSeconds(input.expiresAt);

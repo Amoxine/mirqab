@@ -41,6 +41,16 @@ const PERMISSIONS = [
   // Settings
   { name: 'settings:read', resource: 'settings', action: 'read' },
   { name: 'settings:update', resource: 'settings', action: 'update' },
+  // Plans (WP18) — commercial rate/quota tiers, each backed by one Tyk policy
+  { name: 'plan:read', resource: 'plan', action: 'read' },
+  { name: 'plan:create', resource: 'plan', action: 'create' },
+  { name: 'plan:update', resource: 'plan', action: 'update' },
+  { name: 'plan:delete', resource: 'plan', action: 'delete' },
+  // Products (WP18) — bundles of APIs published together
+  { name: 'product:read', resource: 'product', action: 'read' },
+  { name: 'product:create', resource: 'product', action: 'create' },
+  { name: 'product:update', resource: 'product', action: 'update' },
+  { name: 'product:delete', resource: 'product', action: 'delete' },
 ];
 
 // Role definitions with their permissions
@@ -71,6 +81,13 @@ const ROLE_DEFINITIONS = {
         'analytics:read',
         'audit:read',
         'settings:read',
+        // WP18, DoD-OWNER 1: `operator` is the one explicit list, so a new permission reaches it
+        // only by being named here. Operator already holds key:create/key:update and WP19 makes
+        // key->plan assignment a select, so it has to be able to SEE plans and products to assign
+        // one. It gets no create/update/delete on either: commercial config is the tenant admin's,
+        // matching operator's existing read-only posture on users and roles.
+        'plan:read',
+        'product:read',
       ].includes(p.name),
     ).map((p) => p.name),
   },

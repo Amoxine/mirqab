@@ -104,17 +104,17 @@ enum AuditAction {
 // ─── MODELS ─────────────────────────────────────────────────────────────────
 
 model User {
-  id         String     @id @default(uuid())
-  email      String     @unique
-  name       String
-  password   String?
-  status     UserStatus @default(ACTIVE)
+  id               String     @id @default(uuid())
+  email            String     @unique
+  name             String
+  password         String?
+  status           UserStatus @default(ACTIVE)
   /// The Kratos identity this row shadows, set by the migration script (WP5). Kratos generates the
   /// id and refuses a supplied one, so it cannot equal `id` — and it is NOT the token subject
   /// either: Hydra's `sub` is `id`, which is what every FK and guard already keys on.
-  kratosIdentityId String? @unique @map("kratos_identity_id")
-  createdAt  DateTime   @default(now()) @map("created_at")
-  updatedAt  DateTime   @updatedAt @map("updated_at")
+  kratosIdentityId String?    @unique @map("kratos_identity_id")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
 
   userTenants UserTenant[]
   apiKeys     ApiKey[]
@@ -124,9 +124,9 @@ model User {
 }
 
 model Tenant {
-  id   String @id @default(uuid())
-  name String
-  slug String @unique
+  id        String       @id @default(uuid())
+  name      String
+  slug      String       @unique
   /// The tenant's Tyk organisation. Every definition, policy and key this tenant owns is stamped
   /// with it, which is what makes `POST /tyk/org/keys {is_inactive:true}` cut off exactly one
   /// tenant: Tyk's OrganizationMonitor keys off the API *definition's* `org_id`, not the key's
@@ -146,6 +146,8 @@ model Tenant {
   apiKeys        ApiKey[]
   roles          Role[]
   auditLogs      AuditLog[]
+  plans          Plan[]
+  products       Product[]
 
   @@map("tenants")
 }
@@ -182,7 +184,7 @@ model Role {
 }
 
 model Permission {
-  id       String   @id @default(uuid())
+  id       String @id @default(uuid())
   name     String
   resource String
   action   String
@@ -261,10 +263,11 @@ model ApiDefinition {
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
 
-  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  apiKeys  ApiKey[]
-  parentApi ApiDefinition? @relation("ApiVersions", fields: [parentApiId], references: [id], onDelete: Restrict)
-  versions ApiDefinition[] @relation("ApiVersions")
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys   ApiKey[]
+  products  ProductApi[]
+  parentApi ApiDefinition?  @relation("ApiVersions", fields: [parentApiId], references: [id], onDelete: Restrict)
+  versions  ApiDefinition[] @relation("ApiVersions")
 
   @@unique([tenantId, slug])
   // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
@@ -293,17 +296,104 @@ model ApiKey {
   expiresAt DateTime?    @map("expires_at")
   createdAt DateTime     @default(now()) @map("created_at")
 
-  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// WP18: when set, the key's limits come from this plan's Tyk policy (`apply_policies`) and the
+  /// key itself carries no inline `rate`/`quota_max`. Null keeps the pre-WP18 behaviour — inline
+  /// limits on the key — so existing keys keep working untouched.
+  planId String? @map("plan_id")
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiDef   ApiDefinition? @relation(fields: [apiDefId], references: [id], onDelete: SetNull)
-  apiDefId String?       @map("api_def_id")
+  apiDefId String?        @map("api_def_id")
+  /// SetNull, not Cascade: deleting a plan must not delete the customer's keys. They fall back to
+  /// unlimited-by-policy and are visible as plan-less in the UI, which is recoverable; deleting
+  /// live credentials because a commercial plan was retired is not.
+  plan     Plan?          @relation(fields: [planId], references: [id], onDelete: SetNull)
   quotas   Quota[]
 
+  @@index([planId])
   @@index([tenantId, status])
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([userId])
   @@index([apiDefId])
   @@map("api_keys")
+}
+
+/// A commercial plan (WP18): one Tyk policy, shared by every key assigned to it.
+///
+/// The point of the indirection is that editing a plan changes the effective limit for all its
+/// keys without touching a single key — Tyk resolves `apply_policies` at request time, so the
+/// policy is the single source of the rate and quota and the key carries none of its own.
+///
+/// **`Plan.id` IS the Tyk policy id.** No separate column, because a second identifier is a second
+/// thing to keep in sync; `apply_policies: [plan.id]` is then literally true. Safe because the
+/// gateway runs with `allow_explicit_policy_id`, and the other two policy-id shapes in this system
+/// are distinguishable by construction: JWT policies are `og-jwt-<apiDefId>` and an OAuth2 client's
+/// policy id is its Hydra client id.
+model Plan {
+  id          String  @id @default(uuid())
+  tenantId    String  @map("tenant_id")
+  name        String
+  description String?
+
+  /// Requests per `per` seconds. 0 disables rate limiting (Tyk's own convention, matching
+  /// `buildJwtPolicy`), it does not mean "block everything".
+  rate Int @default(0)
+  per  Int @default(1)
+
+  /// Requests per `quotaPeriod`. **-1 is unlimited**, again Tyk's convention — 0 would mean a
+  /// quota of zero requests, which is not the same thing and is not what an unset plan wants.
+  quotaMax    Int         @default(-1) @map("quota_max")
+  quotaPeriod QuotaPeriod @default(MONTHLY) @map("quota_period")
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys ApiKey[]
+
+  /// Unique per tenant, not globally: two tenants may both call a plan "Gold".
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("plans")
+}
+
+/// A bundle of APIs published together (WP18). Purely a grouping in the control plane — it has no
+/// gateway object of its own; the APIs it names are what a developer is granted access to.
+model Product {
+  id          String  @id @default(uuid())
+  tenantId    String  @map("tenant_id")
+  name        String
+  slug        String
+  description String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apis   ProductApi[]
+
+  /// Both unique per tenant, for the same reason as `Plan.name` (O10's per-tenant keying).
+  @@unique([tenantId, slug])
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("products")
+}
+
+/// Product <-> ApiDefinition join. Cascades from both sides: deleting either end removes the
+/// membership, never leaving a row pointing at something that is gone.
+model ProductApi {
+  productId String   @map("product_id")
+  apiDefId  String   @map("api_def_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  apiDef  ApiDefinition @relation(fields: [apiDefId], references: [id], onDelete: Cascade)
+
+  @@id([productId, apiDefId])
+  @@index([apiDefId])
+  @@map("product_apis")
 }
 
 model Quota {

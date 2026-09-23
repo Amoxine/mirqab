@@ -72,4 +72,15 @@ export class CreateKeyDto {
   @IsNumber()
   @Min(0)
   rateLimitPerSecond?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Plan to govern this key (WP18). When set, the key carries `apply_policies` and the plan ' +
+      'defines its rate and quota — `rateLimitPerSecond` and `quotaLimit` are then rejected, ' +
+      'because an inline limit on the key would override the plan and silently ignore plan edits.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  planId?: string;
 }

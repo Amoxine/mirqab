@@ -388,6 +388,25 @@ export class TykClientService {
     });
   }
 
+  /**
+   * Zero one key's quota counter on the gateway (WP18's admin reset).
+   *
+   * Tyk has no "reset counter" endpoint. A `PUT /keys/{id}` resets the quota as a SIDE EFFECT
+   * unless `suppress_reset=1` is passed — which is why this re-sends the key's current session
+   * unchanged with the flag off. The session is read first rather than reconstructed: sending a
+   * partial one would replace the live key with whatever this method happened to know about it,
+   * silently dropping its access rights or policies.
+   */
+  async resetKeyQuota(keyHash: string): Promise<void> {
+    this.logger.debug(`Resetting quota for API key ${keyHash}`);
+
+    const current = await this.getKey(keyHash);
+    await this.request(`/keys/${encodeURIComponent(keyHash)}?hashed=true&suppress_reset=0`, {
+      method: 'PUT',
+      body: JSON.stringify(current),
+    });
+  }
+
   async deleteKey(keyHash: string): Promise<void> {
     this.logger.debug(`Deleting API key ${keyHash} from Tyk`);
 
@@ -426,6 +445,60 @@ export class TykClientService {
     const policyId = policy.id;
     if (typeof policyId === 'string') await this.waitForPolicy(policyId, true);
     return outcomes;
+  }
+
+  /**
+   * Write a tenant's ORG-level session (WP18).
+   *
+   * This is the per-tenant ceiling that sits above every key: `quota_max` here caps the whole
+   * organisation regardless of what individual keys are allowed, and `is_inactive: true` is the
+   * cut-off switch WP12c relies on.
+   *
+   * Two things make it work, both verified on v5.15.0 and both easy to get silently wrong:
+   * the gateway needs `enforce_org_quotas` AND `enforce_org_data_age` (with either missing this
+   * call still answers 200 and does nothing), and Tyk keys the check off the API DEFINITION's
+   * `org_id`, not the key's — which is why `Tenant.tykOrgId` is stamped on definitions too.
+   *
+   * Fanned out like every other write: an org ceiling that exists on one node and not another is
+   * not a ceiling. No reload — org sessions live in Redis, which every node already shares.
+   */
+  async setOrgSession(orgId: string, session: Record<string, unknown>): Promise<NodeOutcome[]> {
+    this.logger.debug(`Setting org session for ${orgId}`);
+    return this.fanOut((nodeUrl) =>
+      this.request(
+        `/org/keys/${encodeURIComponent(orgId)}`,
+        { method: 'POST', body: JSON.stringify({ ...session, org_id: orgId }) },
+        nodeUrl,
+      ),
+    );
+  }
+
+  /** Read a tenant's org session, or null when it has none (Tyk answers 404). */
+  async getOrgSession(orgId: string): Promise<Record<string, unknown> | null> {
+    try {
+      return await this.request<Record<string, unknown>>(`/org/keys/${encodeURIComponent(orgId)}`);
+    } catch (err) {
+      // Same distinction `policyExists` makes: a genuine 404 means "this org has no session",
+      // which is a valid answer, not a failure to reach the gateway.
+      if (err instanceof TykResponseError && err.upstreamStatus === 404) return null;
+      throw err;
+    }
+  }
+
+  /**
+   * Drop a tenant's org session entirely — the reset path for "an admin zeroes the counter for one
+   * org". Deleting is how Tyk clears an org's accumulated usage: there is no "set used to 0" call,
+   * and re-POSTing the session preserves the counter.
+   */
+  async deleteOrgSession(orgId: string): Promise<NodeOutcome[]> {
+    this.logger.debug(`Deleting org session for ${orgId}`);
+    return this.fanOut((nodeUrl) =>
+      this.request(
+        `/org/keys/${encodeURIComponent(orgId)}`,
+        { method: 'DELETE' },
+        nodeUrl,
+      ),
+    );
   }
 
   /**

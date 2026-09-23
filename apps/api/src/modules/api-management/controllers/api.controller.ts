@@ -29,6 +29,7 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { CurrentTenant } from '../../../common/decorators/current-tenant.decorator';
 import { Audit } from '../../../common/decorators/audit.decorator';
+import { PlanLimitGuard } from '../../plans/guards/plan-limit.guard';
 import { ApiStatus, ApiSyncStatus } from '@prisma/client';
 
 @ApiTags('APIs')
@@ -40,8 +41,13 @@ export class ApiManagementController {
 
   @Post()
   @Permissions('api:create')
+  // WP18 (owner decision O7, hard block). Route-level, so it runs after the controller's
+  // TenantIsolationGuard has put `tenantId` on the request. It is deliberately NOT on
+  // `POST /apis/:id/versions`: a version is not a new API, see the guard's own note.
+  @UseGuards(PlanLimitGuard)
   @ApiOperation({ summary: 'Create a new API definition' })
   @ApiResponse({ status: 201, description: 'API definition created successfully' })
+  @ApiResponse({ status: 403, description: 'PLAN_LIMIT_EXCEEDED — the tenant plan’s API ceiling is reached' })
   @Audit('api:created', 'ApiDefinition')
   @HttpCode(HttpStatus.CREATED)
   async create(

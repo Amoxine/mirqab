@@ -12,6 +12,8 @@ import { TykIntegrationModule } from './modules/tyk-integration/tyk-integration.
 import { KeysModule } from './modules/keys/keys.module';
 import { OAuthClientsModule } from './modules/oauth-clients/oauth-clients.module';
 import { QuotasModule } from './modules/quotas/quotas.module';
+import { PlansModule } from './modules/plans/plans.module';
+import { ProductsModule } from './modules/products/products.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AppController } from './app.controller';
@@ -36,6 +38,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     KeysModule,
     OAuthClientsModule,
     QuotasModule,
+    PlansModule,
+    ProductsModule,
     AnalyticsModule,
     AuditModule,
   ],

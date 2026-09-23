@@ -93,6 +93,16 @@ export class KeyService {
       throw new BadRequestException('API is not synced to the gateway yet, try again in a moment');
     }
 
+    // WP18: a plan must belong to THIS tenant. Without the check a caller could name another
+    // tenant's plan id and have the gateway apply that tenant's commercial limits to its own key.
+    if (dto.planId) {
+      const plan = await prisma.plan.findFirst({
+        where: { id: dto.planId, tenantId },
+        select: { id: true },
+      });
+      if (!plan) throw new BadRequestException(`Plan ${dto.planId} not found in this tenant`);
+    }
+
     // Step 1: Build Tyk key definition
     const tykKeyDef = buildTykKeyDef(dto, apiDef, (await loadTenantScope(tenantId)).tykOrgId);
 
@@ -127,6 +137,7 @@ export class KeyService {
           status: ApiKeyStatus.ACTIVE,
           expiresAt,
           apiDefId: dto.apiDefId ?? null,
+          planId: dto.planId ?? null,
         },
       });
     } catch (err) {
