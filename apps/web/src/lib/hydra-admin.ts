@@ -78,28 +78,45 @@ let ensured: Promise<void> | null = null;
  * `skip_consent`/`skip_logout_consent`: this is the dashboard's own first-party client, so there is
  * no third-party consent screen to show.
  */
+const dashboardClientDef = {
+  client_id: DASHBOARD_CLIENT_ID,
+  client_name: 'Open Gateway Dashboard',
+  token_endpoint_auth_method: 'none',
+  grant_types: ['authorization_code', 'refresh_token'],
+  response_types: ['code'],
+  redirect_uris: [DASHBOARD_REDIRECT_URI],
+  post_logout_redirect_uris: [APP_URL],
+  scope: 'openid offline_access',
+  skip_consent: true,
+  skip_logout_consent: true,
+};
+
 export function ensureDashboardClient(): Promise<void> {
   ensured ??= (async () => {
+    let existing;
     try {
-      await hydraAdmin.getOAuth2Client({ id: DASHBOARD_CLIENT_ID });
-      return;
+      existing = await hydraAdmin.getOAuth2Client({ id: DASHBOARD_CLIENT_ID });
     } catch (err) {
       if (!(err instanceof ResponseError) || err.response.status !== 404) throw err;
     }
-    await hydraAdmin.createOAuth2Client({
-      oAuth2Client: {
-        client_id: DASHBOARD_CLIENT_ID,
-        client_name: 'Open Gateway Dashboard',
-        token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code', 'refresh_token'],
-        response_types: ['code'],
-        redirect_uris: [DASHBOARD_REDIRECT_URI],
-        post_logout_redirect_uris: [APP_URL],
-        scope: 'openid offline_access',
-        skip_consent: true,
-        skip_logout_consent: true,
-      },
-    });
+    if (!existing) {
+      await hydraAdmin.createOAuth2Client({ oAuth2Client: dashboardClientDef });
+      return;
+    }
+    // APP_URL (and so DASHBOARD_REDIRECT_URI) can change across deploys/cutovers — WP26b's
+    // http->https move drifted from a client registered before it, and Hydra rejects any
+    // authorize request whose redirect_uri no longer matches a *stale* registration with
+    // "does not match any of the OAuth 2.0 Client's pre-registered redirect urls". A one-shot
+    // create-if-missing doesn't catch that, since the client already exists — always bring the
+    // existing registration back in sync rather than only creating it once.
+    const drifted =
+      existing.redirect_uris?.length !== 1 ||
+      existing.redirect_uris[0] !== DASHBOARD_REDIRECT_URI ||
+      existing.post_logout_redirect_uris?.length !== 1 ||
+      existing.post_logout_redirect_uris[0] !== APP_URL;
+    if (drifted) {
+      await hydraAdmin.setOAuth2Client({ id: DASHBOARD_CLIENT_ID, oAuth2Client: dashboardClientDef });
+    }
   })().catch((err: unknown) => {
     // A failed bootstrap must not "stick" — the next request should retry, not stay broken forever.
     ensured = null;
