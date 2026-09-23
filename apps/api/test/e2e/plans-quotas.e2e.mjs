@@ -44,8 +44,12 @@ const redis = new RedisService(config);
 
 const SECRET = process.env.TYK_ADMIN_SECRET ?? '';
 const ADMIN = process.env.TYK_ADMIN_URL ?? 'http://tyk-gateway:8081/tyk';
-/** Every node, so "present on every node" is a real assertion and not node 1 twice. */
-const NODES = (process.env.TYK_ADMIN_URLS ?? ADMIN).split(',').map((s) => s.trim()).filter(Boolean);
+/** Every node, so "present on every node" is a real assertion and not node 1 twice.
+ *  `||`, not `??`: compose's `${TYK_ADMIN_URLS:-}` sets an empty STRING in single-node mode, not
+ *  unset — `??` only falls back on null/undefined, so this must reject '' the same way
+ *  TykClientService.parseNodeUrls already does, or NODES resolves to [] and the script can't run
+ *  in the normal single-node dev flow. */
+const NODES = (process.env.TYK_ADMIN_URLS || ADMIN).split(',').map((s) => s.trim()).filter(Boolean);
 
 const results = [];
 const check = (label, actual, expected) => {
