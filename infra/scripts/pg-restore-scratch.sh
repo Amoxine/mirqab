@@ -45,25 +45,44 @@ done
 
 command -v docker >/dev/null || die "docker not found"
 
-# ── Discover the primary rather than assuming it ────────────────────────────────────────────────
-# The volume actually mounted at the data directory, read off the running container. Discovered,
-# not hardcoded: a hardcoded name is wrong the moment the compose project is renamed, and wrong
-# silently, which is the worst way for a safety check to be wrong.
-PRIMARY_VOLUME="$(docker inspect "$PRIMARY_CONTAINER" \
-  --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' \
-  2>/dev/null || true)"
-
-if [ -z "$PRIMARY_VOLUME" ]; then
-  say "WARNING: could not inspect '$PRIMARY_CONTAINER'; falling back to name-pattern checks only."
-else
-  say "primary data volume (never touched): $PRIMARY_VOLUME"
-fi
-
 if [ -z "$BACKUP_VOLUME" ]; then
   BACKUP_VOLUME="$(docker inspect open-gateway-postgres-backup \
     --format '{{range .Mounts}}{{if eq .Destination "/backups"}}{{.Name}}{{end}}{{end}}' 2>/dev/null || true)"
 fi
 [ -n "$BACKUP_VOLUME" ] || die "could not determine the backups volume; pass BACKUP_VOLUME=<name>"
+
+backups() {
+  # `sed` off the prefix rather than `find -printf`: -printf is a GNU extension and the postgres
+  # image ships busybox find, where it silently produces nothing at all.
+  #
+  # `.part` is excluded because pg-backup.sh writes a backup under that suffix and only renames it
+  # once pg_basebackup has succeeded. Restoring one gets a base.tar.gz with no pg_wal.tar.gz beside
+  # it yet — which is the half-written backup that script's rename dance exists to prevent anyone
+  # mistaking for a real one, and this script fell for it once before this line existed.
+  docker run --rm -v "$BACKUP_VOLUME":/b:ro "$PG_IMAGE" \
+    sh -c 'find /b -mindepth 1 -maxdepth 1 -type d ! -name "*.part" 2>/dev/null | sed "s#^/b/##" | sort'
+}
+
+# Listing creates nothing and touches nothing, so it runs before the primary is required.
+if [ "$LIST" = true ]; then backups; exit 0; fi
+
+# ── Discover the primary rather than assuming it ────────────────────────────────────────────────
+# The volume actually mounted at the data directory, read off the running container. Discovered,
+# not hardcoded: a hardcoded name is wrong the moment the compose project is renamed, and wrong
+# silently, which is the worst way for a safety check to be wrong.
+#
+# A FAILURE HERE IS FATAL, not a warning. It used to fall back to "name pattern checks only", which
+# is fail-OPEN: the single strongest guard — "is this the actual volume the primary is using?" —
+# would quietly switch itself off in exactly the situation where the operator's mental model of the
+# deployment is already wrong. And the verification step needs the primary running regardless, so
+# continuing without it buys nothing.
+PRIMARY_VOLUME="$(docker inspect "$PRIMARY_CONTAINER" \
+  --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' \
+  2>/dev/null || true)"
+[ -n "$PRIMARY_VOLUME" ] || die "could not inspect '$PRIMARY_CONTAINER' to discover the primary data volume.
+  Refusing to continue on name patterns alone — that would disable the strongest guard.
+  Start the primary, or set PRIMARY_CONTAINER=<name> if this deployment names it differently."
+say "primary data volume (never touched): $PRIMARY_VOLUME"
 
 # ── Guards. All of them run BEFORE anything is created. ─────────────────────────────────────────
 # Case-folded, because `POSTGRES_DATA` and `postgres_data` name the same mistake.
@@ -78,7 +97,9 @@ guard_target() {
       die "refusing: $kind '$name' contains 'postgres_data' — that is the primary's data volume" ;;
   esac
 
-  if [ -n "$PRIMARY_VOLUME" ] && [ "$(lower "$name")" = "$(lower "$PRIMARY_VOLUME")" ]; then
+  # PRIMARY_VOLUME is guaranteed non-empty here — discovery is fatal above, deliberately, so this
+  # check can never silently degrade into "no comparison performed".
+  if [ "$(lower "$name")" = "$(lower "$PRIMARY_VOLUME")" ]; then
     die "refusing: $kind '$name' IS the primary data volume"
   fi
 
@@ -101,23 +122,17 @@ if [ -n "$(docker ps -aq -f "name=^${SCRATCH_CONTAINER}$")" ]; then
   die "refusing: a container named '$SCRATCH_CONTAINER' already exists"
 fi
 
-# ── List / pick a backup ────────────────────────────────────────────────────────────────────────
-backups() {
-  # `sed` off the prefix rather than `find -printf`: -printf is a GNU extension and the postgres
-  # image ships busybox find, where it silently produces nothing at all.
-  #
-  # `.part` is excluded because pg-backup.sh writes a backup under that suffix and only renames it
-  # once pg_basebackup has succeeded. Restoring one gets a base.tar.gz with no pg_wal.tar.gz beside
-  # it yet — which is the half-written backup that script's rename dance exists to prevent anyone
-  # mistaking for a real one, and this script fell for it once before this line existed.
-  docker run --rm -v "$BACKUP_VOLUME":/b:ro "$PG_IMAGE" \
-    sh -c 'find /b -mindepth 1 -maxdepth 1 -type d ! -name "*.part" 2>/dev/null | sed "s#^/b/##" | sort'
-}
-
-if [ "$LIST" = true ]; then backups; exit 0; fi
-
+# ── Pick a backup ───────────────────────────────────────────────────────────────────────────────
 [ -n "$BACKUP" ] || BACKUP="$(backups | tail -n 1)"
 [ -n "$BACKUP" ] || die "no backups found in volume '$BACKUP_VOLUME'"
+
+# $BACKUP is interpolated into a `sh -c` string below, so it is validated against the exact shape
+# pg-backup.sh generates rather than trusted. Without this, `--backup 'x; rm -rf /'` is command
+# injection into that container and `--backup ../..` is a path escape out of /backups. The blast
+# radius is one throwaway container with the backups volume mounted read-only, which is small —
+# but "small blast radius" is not a reason to feed an argument to a shell unchecked.
+printf '%s' "$BACKUP" | grep -qE '^[0-9]{8}T[0-9]{6}Z$' \
+  || die "refusing: '--backup $BACKUP' is not a backup label (expected YYYYMMDDThhmmssZ)"
 say "restoring backup: $BACKUP"
 
 cleanup() {
@@ -165,15 +180,36 @@ COUNT_SQL="select relname, (xpath('/row/c/text()', x))[1]::text::bigint as n fro
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"; cleanup' EXIT
 
-for db in opengateway hydra kratos keto; do
-  echo "### $db" >>"$tmp/scratch.txt"
-  docker exec "$SCRATCH_CONTAINER" psql -U opengateway -d "$db" -tAF'|' -c "$COUNT_SQL" >>"$tmp/scratch.txt" 2>/dev/null || true
-  echo "### $db" >>"$tmp/primary.txt"
-  docker exec "$PRIMARY_CONTAINER" psql -U opengateway -d "$db" -tAF'|' -c "$COUNT_SQL" >>"$tmp/primary.txt" 2>/dev/null || true
-done
+# Errors are NOT swallowed. This loop used to end `2>/dev/null || true` on both calls, which meant
+# that if psql failed on BOTH sides — primary stopped, role renamed in another deployment, image
+# without psql — each file held nothing but its four `###` headers, `diff` found them identical,
+# and the script printed "PASS: every table's row count matches the primary" directly under
+# "compared 0 tables". A verification that reports success when it verified nothing is worse than
+# no verification, because it is the one an operator believes.
+dump_counts() {
+  container="$1"; out="$2"
+  : >"$out"
+  for db in opengateway hydra kratos keto; do
+    echo "### $db" >>"$out"
+    docker exec "$container" psql -U opengateway -d "$db" -tAF'|' -c "$COUNT_SQL" >>"$out" 2>"$tmp/psql.err" \
+      || die "row count query failed on $container/$db: $(tr '\n' ' ' <"$tmp/psql.err")"
+  done
+}
 
-tables="$(grep -cv '^###' "$tmp/scratch.txt" || true)"
-say "compared $tables tables across 4 databases"
+dump_counts "$SCRATCH_CONTAINER" "$tmp/scratch.txt"
+dump_counts "$PRIMARY_CONTAINER" "$tmp/primary.txt"
+
+s_tables="$(grep -cv '^###' "$tmp/scratch.txt" || true)"
+p_tables="$(grep -cv '^###' "$tmp/primary.txt" || true)"
+
+# Three ways the comparison can be meaningless; all three are fatal rather than a quiet PASS.
+[ "$s_tables" -gt 0 ] || die "the restored instance reports 0 tables — the restore produced an empty cluster"
+[ "$p_tables" -gt 0 ] || die "the primary reports 0 tables — there is nothing to verify against"
+[ "$s_tables" = "$p_tables" ] || die "table COUNT differs: primary $p_tables, restored $s_tables.
+  A table created after this backup was taken will do that; so will a partial restore.
+  Compare the table lists before trusting either instance."
+
+say "compared $s_tables tables across 4 databases"
 
 if diff -u "$tmp/primary.txt" "$tmp/scratch.txt" >"$tmp/diff.txt"; then
   say "PASS: every table's row count matches the primary"
