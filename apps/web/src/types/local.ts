@@ -194,6 +194,29 @@ export interface GatewayStatus {
   }[];
 }
 
+// ─── Settings (`GET /settings`, `/gateway/nodes/health`, `/gateway/reload`, WP14) ─
+
+/** `GET /settings` — all read-only config, U17: no node CRUD, no secret rotation here or anywhere in the UI. */
+export interface TenantSettings {
+  tykOrgId: string;
+  analyticsRetentionDays: number;
+  analyticsAggregateRetentionDays: number;
+}
+
+/** One entry of `GET /gateway/nodes/health` — the `nodeUrl` is the admin URL (`/tyk` suffix), for display only. */
+export interface NodeHealthEntry {
+  nodeUrl: string;
+  health: GatewayStatus['gateway'];
+}
+
+/** One entry of `POST /gateway/reload`'s per-node fan-out report. */
+export interface GatewayReloadOutcome {
+  nodeUrl: string;
+  ok: boolean;
+  data?: { latencyMs: number };
+  error?: string;
+}
+
 // ─── Analytics (`/analytics/*`, spec §5.4) ────────────────────────
 
 export type AnalyticsRange = '1h' | '24h' | '7d' | '30d';

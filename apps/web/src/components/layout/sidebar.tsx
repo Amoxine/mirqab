@@ -10,6 +10,7 @@ import {
   Users,
   BarChart3,
   FileText,
+  Settings,
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react';
@@ -21,7 +22,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 
 interface NavItem {
   /** Key into the `nav` message namespace. */
-  labelKey: 'dashboard' | 'apis' | 'keys' | 'tenants' | 'analytics' | 'auditLogs';
+  labelKey: 'dashboard' | 'apis' | 'keys' | 'tenants' | 'analytics' | 'auditLogs' | 'settings';
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   /** Permission required to see the entry; omitted = always visible. */
@@ -35,6 +36,7 @@ const navigation: NavItem[] = [
   { labelKey: 'tenants', href: '/tenants', icon: Users, permission: 'tenant:read' },
   { labelKey: 'analytics', href: '/analytics', icon: BarChart3, permission: 'analytics:read' },
   { labelKey: 'auditLogs', href: '/audit-logs', icon: FileText, permission: 'audit:read' },
+  { labelKey: 'settings', href: '/settings', icon: Settings, permission: 'settings:read' },
 ];
 
 /** The permission-gated entries the current user may see; shared by the desktop sidebar and the mobile sheet. */

@@ -18,9 +18,12 @@ import { PlansModule } from './modules/plans/plans.module';
 import { ProductsModule } from './modules/products/products.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { GovernanceModule } from './modules/governance/governance.module';
 import { PortalModule } from './modules/portal/portal.module';
-import { McpModule } from './modules/mcp/mcp.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { McpModule } from './modules/mcp/mcp.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -66,9 +69,12 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     ProductsModule,
     AnalyticsModule,
     AuditModule,
+    GovernanceModule,
     ObservabilityModule,
     PortalModule,
+    WebhooksModule,
     McpModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [

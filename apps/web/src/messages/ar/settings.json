@@ -1,0 +1,31 @@
+{
+  "title": "الإعدادات",
+  "description": "تهيئة البوابة، معروضة للقراءة فقط. تسجيل العقد وتدوير الأسرار هي إجراءات يقوم بها المشغل خارج لوحة التحكم هذه.",
+  "tabs": {
+    "general": "عام",
+    "nodes": "عقد البوابة"
+  },
+  "general": {
+    "tykOrgId": "معرّف مؤسسة Tyk",
+    "analyticsRetentionDays": "مدة الاحتفاظ بالتحليلات (الخام)",
+    "analyticsAggregateRetentionDays": "مدة الاحتفاظ بالتحليلات (المجمّعة)",
+    "daysValue": "{count} يومًا"
+  },
+  "nodes": {
+    "description": "حالة القراءة فقط لكل عقدة بوابة مهيّأة.",
+    "columns": {
+      "node": "العقدة",
+      "status": "الحالة",
+      "version": "الإصدار",
+      "latency": "زمن الاستجابة"
+    },
+    "reachable": "متاحة",
+    "unreachable": "غير متاحة",
+    "empty": "لا توجد عقد بوابة مهيّأة.",
+    "reloadButton": "إعادة تحميل جميع البوابات",
+    "reloadingButton": "جارٍ إعادة التحميل…",
+    "reloadResult": "تم تأكيد {ok} من أصل {total} عقدة",
+    "reloadError": "فشلت إعادة التحميل"
+  },
+  "loadError": "تعذّر تحميل الإعدادات."
+}

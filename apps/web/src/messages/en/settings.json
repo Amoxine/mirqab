@@ -1,0 +1,31 @@
+{
+  "title": "Settings",
+  "description": "Gateway configuration, shown read-only. Node registration and secret rotation are operator actions outside this dashboard.",
+  "tabs": {
+    "general": "General",
+    "nodes": "Gateway nodes"
+  },
+  "general": {
+    "tykOrgId": "Tyk organization ID",
+    "analyticsRetentionDays": "Analytics retention (raw)",
+    "analyticsAggregateRetentionDays": "Analytics retention (aggregate)",
+    "daysValue": "{count} days"
+  },
+  "nodes": {
+    "description": "Read-only health for every configured gateway node.",
+    "columns": {
+      "node": "Node",
+      "status": "Status",
+      "version": "Version",
+      "latency": "Latency"
+    },
+    "reachable": "Reachable",
+    "unreachable": "Unreachable",
+    "empty": "No gateway nodes configured.",
+    "reloadButton": "Reload all gateways",
+    "reloadingButton": "Reloading…",
+    "reloadResult": "{ok} of {total} node(s) confirmed",
+    "reloadError": "Reload failed"
+  },
+  "loadError": "Could not load settings."
+}

@@ -14,6 +14,8 @@ import enKeys from '@/messages/en/keys.json';
 import enTenants from '@/messages/en/tenants.json';
 import enAnalytics from '@/messages/en/analytics.json';
 import enDashboard from '@/messages/en/dashboard.json';
+import enPortal from '@/messages/en/portal.json';
+import enSettings from '@/messages/en/settings.json';
 
 import frCommon from '@/messages/fr/common.json';
 import frNav from '@/messages/fr/nav.json';
@@ -24,6 +26,8 @@ import frKeys from '@/messages/fr/keys.json';
 import frTenants from '@/messages/fr/tenants.json';
 import frAnalytics from '@/messages/fr/analytics.json';
 import frDashboard from '@/messages/fr/dashboard.json';
+import frPortal from '@/messages/fr/portal.json';
+import frSettings from '@/messages/fr/settings.json';
 
 import arCommon from '@/messages/ar/common.json';
 import arNav from '@/messages/ar/nav.json';
@@ -34,6 +38,8 @@ import arKeys from '@/messages/ar/keys.json';
 import arTenants from '@/messages/ar/tenants.json';
 import arAnalytics from '@/messages/ar/analytics.json';
 import arDashboard from '@/messages/ar/dashboard.json';
+import arPortal from '@/messages/ar/portal.json';
+import arSettings from '@/messages/ar/settings.json';
 
 const MESSAGES = {
   en: {
@@ -46,6 +52,8 @@ const MESSAGES = {
     tenants: enTenants,
     analytics: enAnalytics,
     dashboard: enDashboard,
+    portal: enPortal,
+    settings: enSettings,
   },
   fr: {
     common: frCommon,
@@ -57,6 +65,8 @@ const MESSAGES = {
     tenants: frTenants,
     analytics: frAnalytics,
     dashboard: frDashboard,
+    portal: frPortal,
+    settings: frSettings,
   },
   ar: {
     common: arCommon,
@@ -68,6 +78,8 @@ const MESSAGES = {
     tenants: arTenants,
     analytics: arAnalytics,
     dashboard: arDashboard,
+    portal: arPortal,
+    settings: arSettings,
   },
 };
 

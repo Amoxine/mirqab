@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { prisma } from '@open-gateway/database';
-import type { TykClientService, TykGatewayHealth } from '../../tyk-integration/services/tyk-client.service';
+import type { NodeOutcome, TykClientService, TykGatewayHealth } from '../../tyk-integration/services/tyk-client.service';
 import { GatewayStatusService } from './gateway-status.service';
 
 jest.mock('@open-gateway/database', () => ({
@@ -29,8 +29,15 @@ const down: TykGatewayHealth = {
   error: 'Gateway unreachable',
 };
 
-function makeService(health: TykGatewayHealth): GatewayStatusService {
-  const tyk = { gatewayHealth: jest.fn().mockResolvedValue(health) };
+function makeService(
+  health: TykGatewayHealth,
+  overrides: Partial<{ nodeHealth: jest.Mock; reloadAllNodes: jest.Mock }> = {},
+): GatewayStatusService {
+  const tyk = {
+    gatewayHealth: jest.fn().mockResolvedValue(health),
+    nodeHealth: overrides.nodeHealth ?? jest.fn().mockResolvedValue([]),
+    reloadAllNodes: overrides.reloadAllNodes ?? jest.fn().mockResolvedValue([]),
+  };
   return new GatewayStatusService(tyk as unknown as TykClientService);
 }
 
@@ -82,5 +89,36 @@ describe('GatewayStatusService.getStatus', () => {
       error: 'Gateway unreachable',
     });
     expect(status.apis).toEqual({ total: 2, synced: 0, pending: 2, failed: 0 });
+  });
+});
+
+describe('GatewayStatusService — WP14 (node health, reload)', () => {
+  it('getNodeHealth trims each node to the same shape GET /gateway/status already exposes', async () => {
+    const nodeHealth = jest.fn().mockResolvedValue([{ nodeUrl: 'http://n1:8081/tyk', health: up }]);
+
+    const result = await makeService(up, { nodeHealth }).getNodeHealth();
+
+    expect(result).toEqual([
+      {
+        nodeUrl: 'http://n1:8081/tyk',
+        health: { reachable: true, version: '5.15.0', latencyMs: 12, redis: 'pass', error: null },
+      },
+    ]);
+    // Never Tyk's raw fields — those aren't this API's shape to expose.
+    expect(result[0].health).not.toHaveProperty('status');
+    expect(result[0].health).not.toHaveProperty('details');
+    expect(nodeHealth).toHaveBeenCalledWith();
+  });
+
+  it('reloadAll passes through TykClientService.reloadAllNodes() unchanged', async () => {
+    const outcome: NodeOutcome<{ latencyMs: number }>[] = [
+      { nodeUrl: 'http://n1:8081/tyk', ok: true, data: { latencyMs: 910 } },
+    ];
+    const reloadAllNodes = jest.fn().mockResolvedValue(outcome);
+
+    const result = await makeService(up, { reloadAllNodes }).reloadAll();
+
+    expect(result).toEqual(outcome);
+    expect(reloadAllNodes).toHaveBeenCalledWith();
   });
 });

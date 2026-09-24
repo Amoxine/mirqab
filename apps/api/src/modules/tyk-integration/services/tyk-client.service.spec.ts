@@ -290,6 +290,79 @@ describe('TykClientService', () => {
     });
   });
 
+  describe('nodeHealth (WP14)', () => {
+    const NODES = 'http://n1:8081/tyk,http://n2:8081/tyk';
+
+    it('probes /hello on every configured node with the /tyk suffix stripped', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse({ status: 'pass', version: '5.15.0' }));
+
+      await makeClient({ TYK_ADMIN_URLS: NODES }).nodeHealth();
+
+      const urls = fetchSpy.mock.calls.map(([url]) => url as string);
+      expect(urls).toEqual(['http://n1:8081/hello', 'http://n2:8081/hello']);
+    });
+
+    it('reports each node by its (suffixed) admin URL, one failure not affecting the other node', async () => {
+      fetchSpy.mockImplementation((input) =>
+        (input as string).startsWith('http://n1')
+          ? Promise.resolve(jsonResponse({ status: 'pass', version: '5.15.0' }))
+          : Promise.reject(new TypeError('fetch failed')),
+      );
+
+      const results = await makeClient({ TYK_ADMIN_URLS: NODES }).nodeHealth();
+
+      expect(results.map((r) => [r.nodeUrl, r.health.reachable])).toEqual([
+        ['http://n1:8081/tyk', true],
+        ['http://n2:8081/tyk', false],
+      ]);
+    });
+
+    it('falls back to the single TYK_ADMIN_URL when TYK_ADMIN_URLS is unset (single-node stack)', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse({ status: 'pass' }));
+
+      const results = await makeClient().nodeHealth();
+
+      expect(results).toHaveLength(1);
+      expect(results[0].nodeUrl).toBe(ADMIN_URL);
+      expect(results[0].health.reachable).toBe(true);
+    });
+  });
+
+  describe('reloadAllNodes (WP14)', () => {
+    const NODES = 'http://n1:8081/tyk,http://n2:8081/tyk';
+
+    it('reloads every node and returns a per-node latency, never throwing', async () => {
+      fetchSpy.mockResolvedValue(jsonResponse({ status: 'ok' }));
+
+      const results = await makeClient({ TYK_ADMIN_URLS: NODES }).reloadAllNodes();
+
+      expect(results).toHaveLength(2);
+      for (const result of results) {
+        expect(result.ok).toBe(true);
+        expect(result.data?.latencyMs).toEqual(expect.any(Number));
+      }
+      const calledPaths = fetchSpy.mock.calls.map(([url]) => url as string);
+      expect(calledPaths).toEqual(['http://n1:8081/tyk/reload/?block=true', 'http://n2:8081/tyk/reload/?block=true']);
+    });
+
+    it('reports one node down without losing the others', async () => {
+      fetchSpy.mockImplementation((input) =>
+        (input as string).startsWith('http://n2')
+          ? Promise.reject(new TypeError('fetch failed'))
+          : Promise.resolve(jsonResponse({ status: 'ok' })),
+      );
+
+      const results = await makeClient({ TYK_ADMIN_URLS: NODES }).reloadAllNodes();
+
+      expect(results).toHaveLength(2);
+      const [n1, n2] = results;
+      expect(n1).toMatchObject({ nodeUrl: 'http://n1:8081/tyk', ok: true });
+      expect(n1.data?.latencyMs).toEqual(expect.any(Number));
+      expect(n2).toMatchObject({ nodeUrl: 'http://n2:8081/tyk', ok: false });
+      expect(typeof n2.error).toBe('string');
+    });
+  });
+
   describe('circuit breaker', () => {
     it('opens after 5 consecutive network failures and then rejects without touching the network', async () => {
       const breaker = new CircuitBreakerService();

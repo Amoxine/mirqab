@@ -16,6 +16,10 @@ export const queryKeys = {
   },
   gateway: {
     status: ['gateway', 'status'] as const,
+    nodeHealth: ['gateway', 'nodes', 'health'] as const,
+  },
+  settings: {
+    all: ['settings'] as const,
   },
   tenants: {
     all: ['tenants'] as const,

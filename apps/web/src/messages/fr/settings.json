@@ -1,0 +1,31 @@
+{
+  "title": "Paramètres",
+  "description": "Configuration de la passerelle, affichée en lecture seule. L'enregistrement des nœuds et la rotation des secrets sont des actions d'opérateur en dehors de ce tableau de bord.",
+  "tabs": {
+    "general": "Général",
+    "nodes": "Nœuds de la passerelle"
+  },
+  "general": {
+    "tykOrgId": "ID d'organisation Tyk",
+    "analyticsRetentionDays": "Rétention des analyses (brutes)",
+    "analyticsAggregateRetentionDays": "Rétention des analyses (agrégées)",
+    "daysValue": "{count} jours"
+  },
+  "nodes": {
+    "description": "État en lecture seule de chaque nœud de passerelle configuré.",
+    "columns": {
+      "node": "Nœud",
+      "status": "État",
+      "version": "Version",
+      "latency": "Latence"
+    },
+    "reachable": "Accessible",
+    "unreachable": "Inaccessible",
+    "empty": "Aucun nœud de passerelle configuré.",
+    "reloadButton": "Recharger toutes les passerelles",
+    "reloadingButton": "Rechargement…",
+    "reloadResult": "{ok} nœud(s) confirmé(s) sur {total}",
+    "reloadError": "Échec du rechargement"
+  },
+  "loadError": "Impossible de charger les paramètres."
+}

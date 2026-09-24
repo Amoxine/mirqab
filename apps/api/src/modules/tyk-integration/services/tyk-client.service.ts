@@ -83,6 +83,11 @@ interface TykHelloBody {
   details?: Record<string, { status?: string } | undefined>;
 }
 
+/** Shared "could not reach this node" shape for `gatewayHealth()` and `nodeHealth()`. */
+function unreachableHealth(error: string): TykGatewayHealth {
+  return { reachable: false, status: null, version: null, redis: 'unknown', latencyMs: null, details: null, error };
+}
+
 const HEALTH_TIMEOUT_MS = 3000;
 
 /**
@@ -737,30 +742,38 @@ export class TykClientService {
    * NOT circuit-broken: a health probe is exactly what must still run while the breaker is open.
    */
   async gatewayHealth(): Promise<TykGatewayHealth> {
-    const unreachable = (error: string): TykGatewayHealth => ({
-      reachable: false,
-      status: null,
-      version: null,
-      redis: 'unknown',
-      latencyMs: null,
-      details: null,
-      error,
-    });
-
     if (!this.gatewayUrl) {
-      return unreachable('Tyk gateway URL is not configured');
+      return unreachableHealth('Tyk gateway URL is not configured');
     }
+    return this.probeHello(this.gatewayUrl);
+  }
 
+  /**
+   * Per-node `/hello`, for every entry in `TYK_ADMIN_URLS` (WP14's read-only node health list).
+   * `nodes` carries the `/tyk` suffix (admin API shape); `/hello` is served at the control port's
+   * ROOT, same reasoning as `TYK_GATEWAY_URL` being a separate, suffix-less var from `TYK_ADMIN_URL`.
+   */
+  async nodeHealth(): Promise<{ nodeUrl: string; health: TykGatewayHealth }[]> {
+    return Promise.all(
+      this.nodeUrls.map(async (nodeUrl) => ({
+        nodeUrl,
+        health: await this.probeHello(nodeUrl.replace(/\/tyk$/, '')),
+      })),
+    );
+  }
+
+  /** Shared `/hello` probe body for both `gatewayHealth()` (one URL) and `nodeHealth()` (every node). */
+  private async probeHello(baseUrl: string): Promise<TykGatewayHealth> {
     const startedAt = performance.now();
     try {
-      const response = await fetch(`${this.gatewayUrl}/hello`, {
+      const response = await fetch(`${baseUrl}/hello`, {
         signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
       });
       const latencyMs = Math.round(performance.now() - startedAt);
       const body = (await response.json().catch(() => null)) as TykHelloBody | null;
 
       if (!body) {
-        return unreachable(`Gateway returned an unreadable response (HTTP ${String(response.status)})`);
+        return unreachableHealth(`Gateway returned an unreadable response (HTTP ${String(response.status)})`);
       }
 
       const redisStatus = body.details?.redis?.status;
@@ -776,8 +789,29 @@ export class TykClientService {
     } catch (err) {
       const timedOut = err instanceof Error && err.name === 'TimeoutError';
       this.logger.warn(`Tyk gateway health probe failed: ${timedOut ? 'timeout' : 'unreachable'}`);
-      return unreachable(timedOut ? 'Gateway health check timed out' : 'Gateway unreachable');
+      return unreachableHealth(timedOut ? 'Gateway health check timed out' : 'Gateway unreachable');
     }
+  }
+
+  /**
+   * Fan out a blocking reload to every node, timed (WP14's "Reload all gateways" settings action).
+   *
+   * Deliberately does NOT call `reloadNode()`/`reload()` above: those swallow a failed reload on
+   * purpose, because for a definition write the config is already stored and a delayed reload only
+   * delays routing (see `reloadGateway()`'s doc comment). Here the reload IS the whole point of the
+   * call — silently reporting `ok:true` for a node that never got it would make this settings action
+   * lie. `request()` goes through the per-node circuit breaker and actually throws on failure, which
+   * `forEachNode` turns into this node's `ok:false` instead of losing the signal.
+   *
+   * Uses `forEachNode`, not `fanOut`: a report of what happened on each node is useful even if every
+   * node failed, so this never throws — the caller reads `ok`/`error` per node instead.
+   */
+  async reloadAllNodes(): Promise<NodeOutcome<{ latencyMs: number }>[]> {
+    return this.forEachNode(async (nodeUrl) => {
+      const startedAt = performance.now();
+      await this.request('/reload/?block=true', {}, nodeUrl);
+      return { latencyMs: Math.round(performance.now() - startedAt) };
+    });
   }
 
   /**
