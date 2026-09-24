@@ -96,9 +96,16 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
-# Prisma resolves its engine relative to the bundle that loads it; `.next/server/.prisma/client` is
-# one of the paths it searches (it names them all in the not-found error). See the builder stage.
+# Prisma resolves its engine relative to the bundle that loads it (it names every path it tried in
+# the not-found error), and WHERE that bundle lives is not stable: while only /oauth2/login imported
+# Prisma the runtime was inlined in that route's own bundle (`.next/server/app/oauth2/login/`), so
+# `.next/server/.prisma/client` was a searched path. Once a second route imported it (WP21's audit
+# writes from /oauth2/session-logout) webpack moved the runtime into a shared `chunks/NNNN.js`, whose
+# searched paths are `.next/server` itself and NOT `.prisma/client` — login then 500'd, unseen until
+# the image was next rebuilt (the running container predated it). Place the engine at both, so either
+# layout resolves; ~17 MB of duplication buys not depending on how webpack happens to split chunks.
 COPY --from=builder /prisma-engine/ ./apps/web/.next/server/.prisma/client/
+COPY --from=builder /prisma-engine/ ./apps/web/.next/server/
 
 USER nextjs
 
