@@ -146,6 +146,49 @@ MANAGED_SECRETS=(
   REDIS_PASSWORD TYK_WEBHOOK_RELAY_SECRET
 )
 
+# Every key this script WRITES into infra/.env. The secrets plus EDGE_LAN_IP, which is not a
+# credential but is still ours to emit — and, like the secrets, is kept if the file already has it,
+# because auto-detection picks one interface and a multi-homed host may need a different one.
+# Each name here is also the shell variable holding its value, which is what lets the writer below
+# use `${!key}` instead of a case statement that would drift from this list.
+MANAGED_ENV_KEYS=( "${MANAGED_SECRETS[@]}" EDGE_LAN_IP )
+
+# A managed key written in a shape the strict parser cannot read is an ERROR, never an absence.
+#
+# This is the dangerous case, not a cosmetic one: `export DB_PASS=x` or an indented key is honoured
+# by docker compose but missed by `load_existing_secrets`, which would then treat the secret as
+# absent, mint a new one, and — because the writer rewrites the file — drop the original line. The
+# result is a silently rotated live credential, which is the whole failure this reuse logic exists
+# to prevent. Quoted and trailing-whitespace values are rejected for a related reason: compose
+# strips both, this script does not, so the value would round-trip through infra/.env intact while
+# being interpolated RAW into apps/api/.env.local (`DATABASE_URL=...:"quoted"@...`).
+#
+# Rejecting rather than normalising is deliberate. Matching compose's full quoting, export and
+# whitespace semantics means a second dotenv parser written in Bash, which will drift from the real
+# one exactly as the comment in load_existing_secrets once did.
+#
+# `KEY=` with an empty value is ACCEPTED and treated as absent: compose rejects an empty `${VAR:?}`
+# anyway, so regenerating is both safe and what the operator meant.
+#
+# The message names the key and the line, NEVER the value — installer output gets pasted into bug
+# reports.
+assert_strict_env_lines() {
+  local env_file="${SCRIPT_DIR}/infra/.env" key loose offender line_no
+  [ -f "$env_file" ] || return 0
+  for key in "${MANAGED_ENV_KEYS[@]}"; do
+    # Lines that look like this key, minus the ones in the exact form we can read. No `head` in
+    # this pipeline: it exits early, and the resulting SIGPIPE trips `set -o pipefail`.
+    loose=$(grep -nE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$env_file" || true)
+    [ -n "$loose" ] || continue
+    offender=$(printf '%s\n' "$loose" | grep -vE "^[0-9]+:${key}=([^[:space:]'\"][^[:space:]]*)?$" || true)
+    [ -n "$offender" ] || continue
+    line_no=${offender%%$'\n'*}
+    line_no=${line_no%%:*}
+    fail "infra/.env line ${line_no}: ${key} is set in a form install.sh cannot read (an \`export\` prefix, leading whitespace, spaces around \`=\`, quotes, or a trailing space or CR). Normalise it to ${key}=value — left as is, the secret would be treated as missing and regenerated, silently replacing the one your stack is already using."
+  done
+  return 0
+}
+
 # Load what an existing infra/.env already holds, so a re-run keeps it.
 #
 # PARSED, never sourced. A .env is data; `source` would execute whatever is in it, and a file this
@@ -160,6 +203,8 @@ MANAGED_SECRETS=(
 load_existing_secrets() {
   local env_file="${SCRIPT_DIR}/infra/.env" key value
   [ -f "$env_file" ] || return 0
+  # Stop on an unreadable-but-present key before deciding anything is missing.
+  assert_strict_env_lines
   for key in "${MANAGED_SECRETS[@]}"; do
     # LAST occurrence wins, because that is what docker compose resolves for a duplicated key —
     # measured, not assumed: a file holding `FOO=first` then `FOO=second` makes `compose config`
@@ -504,6 +549,31 @@ EOF
 # container, and JWT_SECRET is required by the compose file — without it the api service refuses to
 # start rather than fall back to a committed key.
 log "Generating compose environment (infra/.env)..."
+if [ -f "${SCRIPT_DIR}/infra/.env" ]; then
+  # An existing file is EDITED, never rewritten: every line survives byte for byte and only keys it
+  # is missing get appended.
+  #
+  # Rewriting it truncated everything this script does not itself emit, and that is not a
+  # hypothetical loss — the compose file tells operators to set `TYK_ADMIN_URLS` here for the
+  # multinode profile and `KRATOS_SMTP_URI` for real mail, and the prod overlay reads `EDGE_IMAGE` /
+  # `API_IMAGE` / `WEB_IMAGE` from here too. Measured before this change: all of those, plus a
+  # hand-corrected EDGE_LAN_IP, were silently gone after one re-run, which left README's "safe to
+  # re-run" false for everything except the secrets.
+  #
+  # `${!key}` works because every name in MANAGED_ENV_KEYS is also the variable holding its value.
+  _env_added=0
+  for _env_key in "${MANAGED_ENV_KEYS[@]}"; do
+    grep -qE "^${_env_key}=" "${SCRIPT_DIR}/infra/.env" && continue
+    if [ "$_env_added" -eq 0 ]; then
+      printf '\n# Added by install.sh on %s — keys this file did not have.\n' "$(date +%F)" \
+        >> "${SCRIPT_DIR}/infra/.env"
+      _env_added=1
+    fi
+    printf '%s=%s\n' "$_env_key" "${!_env_key:-}" >> "${SCRIPT_DIR}/infra/.env"
+    debug "$_env_key appended to existing infra/.env"
+  done
+  chmod 600 "${SCRIPT_DIR}/infra/.env"
+else
 umask 077
 {
   printf 'TYK_GW_SECRET=%s\n' "$TYK_GW_SECRET"
@@ -527,6 +597,7 @@ umask 077
 } > "${SCRIPT_DIR}/infra/.env"
 umask 022
 chmod 600 "${SCRIPT_DIR}/infra/.env"
+fi
 
 # Create Web .env.local
 log "Generating Web environment configuration..."

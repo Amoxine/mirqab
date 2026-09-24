@@ -274,8 +274,10 @@ grep "<install-id>" .install-logs/install-*.log
 
 **Re-running after a failure**
 
-Safe to re-run: `install.sh` reads any existing `infra/.env` and keeps the credentials it finds,
-generating only the ones that are missing.
+Safe to re-run: an existing `infra/.env` is **edited, not rewritten**. Every line already in it
+survives byte for byte — including keys `install.sh` does not manage, like `TYK_ADMIN_URLS` for the
+multinode profile, `KRATOS_SMTP_URI` for real mail, and the `EDGE_IMAGE`/`API_IMAGE`/`WEB_IMAGE`
+pins the prod overlay reads — and only keys the file is missing are appended.
 
 ```bash
 bash install.sh                        # Re-run normally
@@ -283,8 +285,14 @@ bash install.sh --debug                # Re-run with full trace output
 ```
 
 This was not always true. Until it was fixed, every re-run minted fresh values and truncated the
-file, so a second run rotated every credential against state that still held the old one — see the
-rotation table under **Security Notes** for what that costs per secret.
+file, so a second run rotated every credential *and* dropped every hand-set line — see the rotation
+table under **Security Notes** for what that costs per secret.
+
+One constraint comes with it: a managed key has to be written as plain `KEY=value`. An `export`
+prefix, indentation, spaces around `=`, quotes, or a trailing space or CR make the line unreadable
+to the installer, and it stops with the key and line number rather than treating the secret as
+missing and regenerating it. Compose accepts all of those forms, which is exactly why the
+mismatch was worth failing on instead of guessing.
 
 ### Security Notes
 
