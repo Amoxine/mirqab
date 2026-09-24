@@ -121,6 +121,19 @@ services:
   # deployment states it and `prod-preflight` refuses anything that is not a sha256 digest. CD
   # writes it into the staging host's .env from the build it just pushed; for a manual deploy:
   #   docker buildx imagetools inspect ghcr.io/<owner>/<repo>/edge:<tag> --format '{{.Manifest.Digest}}'
+  #
+  # WHAT THIS DIGEST DOES NOT COVER, and it is the easy mistake to make: the Caddyfile is a
+  # read-only BIND MOUNT from `./edge/Caddyfile` (base file), not a layer in this image. The image
+  # is the Caddy binary and its compiled-in CRS rules; the configuration is mounted at run time. So
+  # a Caddyfile change never changes this digest, and re-pinning the digest after editing the
+  # Caddyfile proves nothing about the config.
+  #
+  # The trap that follows is the one worth naming: Caddy reads the Caddyfile ONCE, at start. Edit it
+  # and the file on disk is current while the running server is still serving the old config, with
+  # nothing in `docker inspect`, in the digest or in a file diff to say so. Apply a Caddyfile change
+  # with a reload or a recreate of this service, then confirm against what is LOADED rather than
+  # what is on disk:
+  #   docker exec open-gateway-edge wget -qO- http://127.0.0.1:2019/config/
   edge:
     image: ${EDGE_IMAGE:?set EDGE_IMAGE to a digest-pinned edge image (ghcr.io/<owner>/<repo>/edge@sha256:...)}
     pull_policy: always
