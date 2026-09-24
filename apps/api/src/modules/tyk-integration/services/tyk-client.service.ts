@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CircuitBreakerService } from '../../../common/circuit-breaker/circuit-breaker.service';
+import { RedisService } from '../../../common/redis/redis.service';
 
 /**
  * A non-2xx answer from Tyk, carrying the status so a caller can tell a genuine 404 ("the gateway
@@ -103,6 +104,22 @@ const ADMIN_TIMEOUT_MS = 10_000;
  */
 const CIRCUIT_NAME = 'tyk';
 
+/**
+ * Redis key pattern Tyk stores response-cache entries under: `cache-<apiId><apiId><clientIP><hash>`.
+ *
+ * WE SHOULD NOT NEED THIS. Tyk exposes `DELETE /tyk/cache/{apiID}` for exactly this job, but on
+ * v5.15.0 that endpoint answers `{"status":"ok","message":"cache invalidated"}` and deletes
+ * nothing — verified from a single client at a fixed IP (the key embeds the caller's IP, so a probe
+ * that changes IP between requests reads a cache MISS as a successful invalidation, which is how
+ * this first looked fine). Deleting these keys directly does work.
+ *
+ * So this reaches past the gateway's public API into its private storage layout, and that is a
+ * deliberate, owner-approved trade: an invalidation that silently does nothing is worse than one
+ * with a documented coupling. `wp15b-acceptance.ts` asserts Tyk still writes keys matching this
+ * pattern, so a prefix change upstream fails a test instead of silently restoring the no-op.
+ */
+export const tykCacheKeyPattern = (tykApiId: string): string => `cache-${tykApiId}*`;
+
 /** Result of one node's participation in a fan-out write. Never throws; failure is a value. */
 export interface NodeOutcome<T = unknown> {
   nodeUrl: string;
@@ -149,6 +166,7 @@ export class TykClientService {
   constructor(
     private readonly configService: ConfigService,
     private readonly circuitBreaker: CircuitBreakerService,
+    private readonly redis: RedisService,
   ) {
     this.adminApiUrl = this.configService.get('TYK_ADMIN_URL', '');
     this.adminKey = this.configService.get('TYK_ADMIN_SECRET', '');
@@ -271,6 +289,46 @@ export class TykClientService {
       await this.reloadNode(nodeUrl);
       return body;
     });
+  }
+
+  /**
+   * Drop this API's cached responses on every node.
+   *
+   * Fans out because the response cache is per-node in-memory as well as Redis-backed: invalidating
+   * only the node we happen to write to would leave the other nodes serving the stale entry until
+   * its TTL expired, which is exactly the bug a manual invalidation exists to fix.
+   */
+  async invalidateCache(apiId: string): Promise<{ nodes: NodeOutcome[]; keysDropped: number }> {
+    this.logger.debug(`Invalidating response cache for ${apiId}`);
+
+    // Still called, even though it is a no-op today: it is the supported API, it costs one request,
+    // and if Tyk fixes it this keeps working without a change here.
+    const nodes = await this.fanOut((nodeUrl) =>
+      this.request(`/cache/${encodeURIComponent(apiId)}`, { method: 'DELETE' }, nodeUrl),
+    );
+
+    // The part that actually invalidates. SCAN rather than KEYS: KEYS blocks the whole Redis
+    // instance for the length of the scan, and this one is shared with every key, quota and
+    // analytics buffer in the stack.
+    const keysDropped = await this.dropCacheKeys(apiId);
+    return { nodes, keysDropped };
+  }
+
+  /** Delete every response-cache entry Tyk holds for this API. Returns how many keys went. */
+  private async dropCacheKeys(apiId: string): Promise<number> {
+    const client = this.redis.getClient();
+    const match = tykCacheKeyPattern(apiId);
+    let cursor = '0';
+    let dropped = 0;
+
+    do {
+      const [next, keys] = await client.scan(cursor, 'MATCH', match, 'COUNT', 500);
+      cursor = next;
+      if (keys.length > 0) dropped += await client.del(...keys);
+    } while (cursor !== '0');
+
+    if (dropped === 0) this.logger.debug(`No cached responses held for ${apiId}`);
+    return dropped;
   }
 
   /** Read a definition from one specific node — the drift check's per-node fetch. */

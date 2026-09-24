@@ -6,6 +6,11 @@ import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit
 
 jest.mock('@open-gateway/database', () => ({ prisma: {} }));
 
+/** Cache invalidation deletes Tyk's own Redis keys (see `tykCacheKeyPattern`); these suites never
+ *  exercise that path, so an empty SCAN is all they need. */
+const fakeRedis = () =>
+  ({ getClient: () => ({ scan: () => Promise.resolve(['0', []]), del: () => Promise.resolve(0) }) }) as never;
+
 const NODES = 'http://n1:8081/tyk,http://n2:8081/tyk,http://n3:8081/tyk';
 
 /**
@@ -43,10 +48,8 @@ function makeClient(breaker: ReturnType<typeof fakeBreaker>, nodes = NODES) {
         TYK_ADMIN_URLS: nodes,
       })[key] ?? fallback,
   };
-  return new TykClientService(
-    config as unknown as ConfigService,
-    breaker as unknown as CircuitBreakerService,
-  );
+  return new TykClientService(config as unknown as ConfigService, breaker as unknown as CircuitBreakerService,
+    fakeRedis(),);
 }
 
 describe('WP13a fan-out and the per-node circuit breaker', () => {

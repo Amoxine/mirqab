@@ -137,8 +137,11 @@ export function mapToTykFormat(
   tenant: TenantGatewayScope,
   jwtSource = '',
 ): Record<string, unknown> {
-  const { rateLimit, cors, doNotTrack, jwt, throttle, timeoutSeconds, circuitBreaker, requestSizeLimitBytes, loadBalancing, uptimeTests } =
-    readConfig(apiDef.config);
+  const {
+    rateLimit, cors, doNotTrack, jwt, throttle, timeoutSeconds, circuitBreaker, requestSizeLimitBytes,
+    loadBalancing, uptimeTests, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
+    transformRequestBody, transformResponseBody, cache, detailedRecording,
+  } = readConfig(apiDef.config);
 
   // Classic keeps per-path middleware under `extended_paths`, so an API-WIDE timeout, size limit or
   // circuit breaker is expressed as a single entry whose path matches everything. `/.*` is Tyk's
@@ -157,6 +160,61 @@ export function mapToTykFormat(
       method,
       size_limit: requestSizeLimitBytes,
     }));
+  }
+  if (transformRequestHeaders) {
+    extendedPaths.transform_headers = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      add_headers: Object.fromEntries((transformRequestHeaders.add ?? []).map((h) => [h.name, h.value])),
+      delete_headers: transformRequestHeaders.remove ?? [],
+    }));
+  }
+  if (transformResponseHeaders) {
+    extendedPaths.transform_response_headers = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      add_headers: Object.fromEntries((transformResponseHeaders.add ?? []).map((h) => [h.name, h.value])),
+      delete_headers: transformResponseHeaders.remove ?? [],
+    }));
+  }
+  if (urlRewrite) {
+    extendedPaths.url_rewrites = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      match_pattern: urlRewrite.pattern,
+      rewrite_to: urlRewrite.rewriteTo,
+    }));
+  }
+  if (mock) {
+    // Classic expresses a mock as a "virtual" allow-listed path carrying the canned response.
+    extendedPaths.white_list = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method_actions: {
+        [method]: {
+          action: 'reply',
+          code: mock.code,
+          data: mock.body,
+          headers: Object.fromEntries((mock.headers ?? []).map((h) => [h.name, h.value])),
+        },
+      },
+    }));
+  }
+  if (transformRequestBody) {
+    extendedPaths.transform = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      template_data: { template_mode: 'blob', template_source: transformRequestBody.body, input_type: transformRequestBody.format },
+    }));
+  }
+  if (transformResponseBody) {
+    extendedPaths.transform_response = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      template_data: { template_mode: 'blob', template_source: transformResponseBody.body, input_type: transformResponseBody.format },
+    }));
+  }
+  if (cache) {
+    extendedPaths.cache = ['/.*'];
   }
   if (circuitBreaker) {
     extendedPaths.circuit_breakers = CATCH_ALL_METHODS.map((method) => ({
@@ -230,6 +288,19 @@ export function mapToTykFormat(
         }
       : {}),
     ...(doNotTrack === undefined ? {} : { do_not_track: doNotTrack }),
+    // O9: per-API opt-in; the gateway-wide default stays false
+    // (`TYK_GW_ANALYTICSCONFIG_ENABLEDETAILEDRECORDING`, infra/docker-compose.yml).
+    ...(detailedRecording === undefined ? {} : { enable_detailed_recording: detailedRecording }),
+    ...(cache
+      ? {
+          cache_options: {
+            enable_cache: true,
+            cache_timeout: cache.timeoutSeconds,
+            cache_all_safe_requests: cache.cacheAllSafeRequests ?? true,
+            ...(cache.cacheResponseCodes ? { cache_response_codes: cache.cacheResponseCodes } : {}),
+          },
+        }
+      : {}),
     ...(throttle
       ? { global_rate_limit_throttle_retry_limit: throttle.retryLimit, global_rate_limit_throttle_interval: throttle.intervalSeconds }
       : {}),
@@ -316,8 +387,11 @@ export function mapToTykOas(
   jwtSource = '',
   versions: readonly ApiVersionChild[] = [],
 ): Record<string, unknown> {
-  const { rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests, circuitBreaker } =
-    readConfig(apiDef.config);
+  const {
+    rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests,
+    circuitBreaker, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
+    transformRequestBody, transformResponseBody, cache, detailedRecording,
+  } = readConfig(apiDef.config);
   const isOAuth = apiDef.authType === 'OAUTH';
 
   const isJwt = apiDef.authType === 'JWT';
@@ -378,6 +452,28 @@ export function mapToTykOas(
       debug: false,
     };
   }
+  if (transformRequestHeaders) {
+    globalMiddleware.transformRequestHeaders = {
+      enabled: true,
+      ...(transformRequestHeaders.add ? { add: transformRequestHeaders.add.map((h) => ({ name: h.name, value: h.value })) } : {}),
+      ...(transformRequestHeaders.remove ? { remove: transformRequestHeaders.remove } : {}),
+    };
+  }
+  if (transformResponseHeaders) {
+    globalMiddleware.transformResponseHeaders = {
+      enabled: true,
+      ...(transformResponseHeaders.add ? { add: transformResponseHeaders.add.map((h) => ({ name: h.name, value: h.value })) } : {}),
+      ...(transformResponseHeaders.remove ? { remove: transformResponseHeaders.remove } : {}),
+    };
+  }
+  if (cache) {
+    globalMiddleware.cache = {
+      enabled: true,
+      timeout: cache.timeoutSeconds,
+      cacheAllSafeRequests: cache.cacheAllSafeRequests ?? true,
+      ...(cache.cacheResponseCodes ? { cacheResponseCodes: cache.cacheResponseCodes } : {}),
+    };
+  }
   if (requestSizeLimitBytes) {
     // `X-Tyk-GlobalRequestSizeLimit`. Capped by the DTO at the edge's own limit, so this is always
     // the smaller of the two enforcers and the 413 comes from the gateway.
@@ -395,24 +491,56 @@ export function mapToTykOas(
   // is expressed the same way the classic mapper expresses it: one catch-all entry per method,
   // here as a synthesised OAS operation rather than an `extended_paths` regex. Without this an OAS
   // api would silently have no breaker while a CLASSIC one did.
+  // Middleware Tyk only offers PER OPERATION, expressed API-wide through one synthesised catch-all
+  // path. `circuitBreaker`, `urlRewrite`, `mockResponse` and the body transforms all live on
+  // `X-Tyk-Operation` and have no `upstream`/`global` equivalent, so without this an OAS api would
+  // silently lose them while a CLASSIC one kept them.
+  const perOperation: Record<string, unknown> = {};
+  if (circuitBreaker) {
+    perOperation.circuitBreaker = {
+      enabled: true,
+      threshold: circuitBreaker.threshold,
+      sampleSize: circuitBreaker.sampleSize,
+      coolDownPeriod: circuitBreaker.coolDownSeconds,
+      halfOpenStateEnabled: true,
+    };
+  }
+  if (urlRewrite) {
+    perOperation.urlRewrite = { enabled: true, pattern: urlRewrite.pattern, rewriteTo: urlRewrite.rewriteTo };
+  }
+  if (mock) {
+    perOperation.mockResponse = {
+      enabled: true,
+      code: mock.code,
+      body: mock.body,
+      ...(mock.headers ? { headers: mock.headers.map((h) => ({ name: h.name, value: h.value })) } : {}),
+    };
+  }
+  if (transformRequestBody) {
+    perOperation.transformRequestBody = {
+      enabled: true,
+      format: transformRequestBody.format,
+      body: transformRequestBody.body,
+    };
+  }
+  if (transformResponseBody) {
+    perOperation.transformResponseBody = {
+      enabled: true,
+      format: transformResponseBody.format,
+      body: transformResponseBody.body,
+    };
+  }
+
   const operations: Record<string, unknown> = {};
   const catchAllPaths: Record<string, unknown> = {};
-  if (circuitBreaker) {
+  if (Object.keys(perOperation).length > 0) {
     const pathItem: Record<string, unknown> = {
       parameters: [{ name: 'wildcard', in: 'path', required: true, schema: { type: 'string' } }],
     };
     for (const method of CATCH_ALL_METHODS) {
       const operationId = catchAllOperationId(method);
       pathItem[method.toLowerCase()] = { operationId, responses: { '200': { description: 'ok' } } };
-      operations[operationId] = {
-        circuitBreaker: {
-          enabled: true,
-          threshold: circuitBreaker.threshold,
-          sampleSize: circuitBreaker.sampleSize,
-          coolDownPeriod: circuitBreaker.coolDownSeconds,
-          halfOpenStateEnabled: true,
-        },
-      };
+      operations[operationId] = { ...perOperation };
     }
     catchAllPaths[CATCH_ALL_PATH] = pathItem;
   }
@@ -500,6 +628,10 @@ export function mapToTykOas(
         listenPath: { value: gatewayListenPath(tenant.slug, apiDef.listenPath), strip: true },
         // classic `use_keyless` is the inverse of this flag; a keyless API sets it false.
         authentication: authenticated ? { enabled: true, securitySchemes } : { enabled: false },
+        // O9: off unless this API opts in. `X-Tyk-DetailedActivityLogs` hangs off `server`, NOT off
+        // `middleware.global.trafficLogs` — trafficLogs is whether to record at all, this is how
+        // much. Detailed records carry request and response bodies, which is why it is per-API.
+        ...(detailedRecording === undefined ? {} : { detailedActivityLogs: { enabled: detailedRecording } }),
       },
       ...(Object.keys(globalMiddleware).length > 0 || Object.keys(operations).length > 0
         ? {

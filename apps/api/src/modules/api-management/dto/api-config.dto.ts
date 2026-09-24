@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -226,6 +227,106 @@ export class ApiUptimeTestDto {
   timeoutSeconds?: number;
 }
 
+
+export class ApiHeaderDto {
+  @ApiProperty({ example: 'X-Request-Source' })
+  @IsString()
+  @MaxLength(ITEM_MAX)
+  name!: string;
+
+  @ApiProperty({ example: 'open-gateway' })
+  @IsString()
+  @MaxLength(ITEM_MAX)
+  value!: string;
+}
+
+/** Headers added to / removed from a request or response. Both directions use this shape. */
+export class ApiTransformHeadersDto {
+  @ApiPropertyOptional({ type: [ApiHeaderDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LIST_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => ApiHeaderDto)
+  add?: ApiHeaderDto[];
+
+  @ApiPropertyOptional({ type: [String], example: ['X-Internal-Token'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LIST_MAX)
+  @IsString({ each: true })
+  @MaxLength(ITEM_MAX, { each: true })
+  remove?: string[];
+}
+
+export class ApiUrlRewriteDto {
+  @ApiProperty({ example: '/old/(.*)', description: 'Regex matched against the stripped path' })
+  @IsString()
+  @MaxLength(ITEM_MAX)
+  pattern!: string;
+
+  @ApiProperty({ example: '/new/$1' })
+  @IsString()
+  @MaxLength(ITEM_MAX)
+  rewriteTo!: string;
+}
+
+/** Short-circuits the request: the upstream is never called. */
+export class ApiMockDto {
+  @ApiProperty({ minimum: 100, maximum: 599, example: 200 })
+  @Raw()
+  @IsInt()
+  @Min(100)
+  @Max(599)
+  code!: number;
+
+  @ApiProperty({ example: '{"status":"ok"}' })
+  @IsString()
+  @MaxLength(64_000)
+  body!: string;
+
+  @ApiPropertyOptional({ type: [ApiHeaderDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LIST_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => ApiHeaderDto)
+  headers?: ApiHeaderDto[];
+}
+
+export class ApiBodyTransformDto {
+  @ApiProperty({ enum: ['json', 'xml'] })
+  @IsIn(['json', 'xml'])
+  format!: 'json' | 'xml';
+
+  @ApiProperty({ description: 'Go template applied to the body' })
+  @IsString()
+  @MaxLength(64_000)
+  body!: string;
+}
+
+export class ApiCacheDto {
+  @ApiProperty({ minimum: 1, description: 'Seconds a cached response is served for' })
+  @Raw()
+  @IsInt()
+  @Min(1)
+  @Max(86_400)
+  timeoutSeconds!: number;
+
+  @ApiPropertyOptional({ description: 'Cache every safe (GET/HEAD/OPTIONS) request' })
+  @IsOptional()
+  @Raw()
+  @IsBoolean()
+  cacheAllSafeRequests?: boolean;
+
+  @ApiPropertyOptional({ type: [Number], example: [200], description: 'Response codes worth caching' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsInt({ each: true })
+  cacheResponseCodes?: number[];
+}
+
 /** `ApiDefinition.config` JSON (spec §3.2). `null` on a section clears it; an absent section is left as-is. */
 export class ApiConfigDto {
   @ApiPropertyOptional({ type: ApiRateLimitDto, nullable: true })
@@ -298,7 +399,60 @@ export class ApiConfigDto {
   @ValidateNested({ each: true })
   @Type(() => ApiUptimeTestDto)
   uptimeTests?: ApiUptimeTestDto[] | null;
+
+  @ApiPropertyOptional({ type: ApiTransformHeadersDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiTransformHeadersDto)
+  transformRequestHeaders?: ApiTransformHeadersDto | null;
+
+  @ApiPropertyOptional({ type: ApiTransformHeadersDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiTransformHeadersDto)
+  transformResponseHeaders?: ApiTransformHeadersDto | null;
+
+  @ApiPropertyOptional({ type: ApiUrlRewriteDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiUrlRewriteDto)
+  urlRewrite?: ApiUrlRewriteDto | null;
+
+  @ApiPropertyOptional({ type: ApiMockDto, nullable: true, description: 'When set, the upstream is never called' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiMockDto)
+  mock?: ApiMockDto | null;
+
+  @ApiPropertyOptional({ type: ApiBodyTransformDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiBodyTransformDto)
+  transformRequestBody?: ApiBodyTransformDto | null;
+
+  @ApiPropertyOptional({ type: ApiBodyTransformDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiBodyTransformDto)
+  transformResponseBody?: ApiBodyTransformDto | null;
+
+  @ApiPropertyOptional({ type: ApiCacheDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiCacheDto)
+  cache?: ApiCacheDto | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Record full request/response detail for THIS api. Off by default and per-API on purpose (O9): ' +
+      'the global default stays false because detailed records carry headers and bodies.',
+  })
+  @IsOptional()
+  @Raw()
+  @IsBoolean()
+  detailedRecording?: boolean;
 }
+
 
 
 /** Data-only view of `ApiConfigDto` (no class identity): the shape stored in `ApiDefinition.config`. */

@@ -159,6 +159,22 @@ export class ApiManagementController {
     return { ...detail, nodes };
   }
 
+  @Post(':id/cache/invalidate')
+  @Permissions('api:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Drop this API's cached responses on every gateway node",
+    description:
+      'Reuses `api:update` rather than introducing a cache permission: flushing a cache is a change ' +
+      'to how the API behaves, and whoever may edit it may already cause the same effect by re-syncing.',
+  })
+  async invalidateCache(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+  ): Promise<{ success: true; data: { invalidated: boolean; keysDropped: number; nodes: NodeOutcome[] } }> {
+    return { success: true, data: await this.apiService.invalidateCache(id, tenantId) };
+  }
+
   @Get(':id/drift')
   @Permissions('api:read')
   @ApiOperation({

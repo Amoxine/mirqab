@@ -705,6 +705,24 @@ export class ApiService {
   }
 
   /**
+   * Drop this API's cached responses. Tenant-scoped through `findRow`, so one tenant cannot flush
+   * another's cache by guessing an id.
+   */
+  async invalidateCache(
+    id: string,
+    tenantId: string,
+  ): Promise<{ invalidated: boolean; keysDropped: number; nodes: NodeOutcome[] }> {
+    const apiDef = await this.findRow(id, tenantId);
+    if (!apiDef.tykApiId) return { invalidated: false, keysDropped: 0, nodes: [] };
+
+    const { nodes, keysDropped } = await this.tykClient.invalidateCache(apiDef.tykApiId);
+    // `invalidated` reports whether cache entries were actually dropped, NOT whether the gateway
+    // answered 200 — Tyk's own endpoint answers 200 while doing nothing, and reporting that as
+    // success is the exact failure this route exists to avoid.
+    return { invalidated: keysDropped > 0, keysDropped, nodes };
+  }
+
+  /**
    * Per-node drift for one definition, recomputed on demand so the caller never reads a stale tick.
    * `differences` lists the nodes that disagree with the majority hash (or that could not be read),
    * which is what an operator acts on.

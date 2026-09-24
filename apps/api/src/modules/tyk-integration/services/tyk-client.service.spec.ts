@@ -5,6 +5,11 @@ import { CircuitBreakerService } from '../../../common/circuit-breaker/circuit-b
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
 import { TykClientService } from './tyk-client.service';
 
+/** Cache invalidation deletes Tyk's own Redis keys (see `tykCacheKeyPattern`); this suite never
+ *  exercises that path, so an empty SCAN is all it needs. */
+const fakeRedis = () =>
+  ({ getClient: () => ({ scan: () => Promise.resolve(['0', []]), del: () => Promise.resolve(0) }) }) as never;
+
 const ADMIN_URL = 'http://tyk:8080/tyk';
 const GATEWAY_URL = 'http://tyk:8080';
 
@@ -29,6 +34,7 @@ function makeClient(
       ...config,
     }),
     breaker,
+    fakeRedis(),
   );
 }
 
