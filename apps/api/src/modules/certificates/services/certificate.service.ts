@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { prisma } from '@open-gateway/database';
 import { TykClientService, type TykCertMeta } from '../../tyk-integration/services/tyk-client.service';
 import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
@@ -27,6 +27,24 @@ function toDetail(cert: TykCertMeta): CertificateDetail {
   };
 }
 
+/** A SHA-256 fingerprint as Tyk renders it: 64 lowercase hex chars (live-verified, RSA and EC). */
+const FINGERPRINT = /^[0-9a-f]{64}$/;
+const FINGERPRINT_LENGTH = 64;
+
+/**
+ * Exact ownership: `id` is `<org_id><fingerprint>`, so peel the fixed-length fingerprint off the end
+ * and compare what is left to `tykOrgId` for EQUALITY. A `startsWith` here is only correct while
+ * every org id has the same length — an org id that is a prefix of another's (`og-a` vs `og-a5ef…`)
+ * would "own" the longer org's certificates. Peeling the suffix makes it exact for any org id shape.
+ *
+ * Exported so `ApiService` (create/update) applies the same rule to `upstreamMutualTls.certificateId`
+ * — without it a tenant could reference another tenant's cert, and push traffic under its key.
+ */
+export const isCertOwnedByOrg = (id: string, tykOrgId: string): boolean =>
+  id.length > FINGERPRINT_LENGTH &&
+  id.slice(0, id.length - FINGERPRINT_LENGTH) === tykOrgId &&
+  FINGERPRINT.test(id.slice(id.length - FINGERPRINT_LENGTH));
+
 /**
  * Certificate upload/list/delete (U19, WP26a) — a thin passthrough over `/tyk/certs`, deliberately
  * with NO local table. Tyk is already the store of record (S7: Redis-shared, org-scoped, and its
@@ -34,19 +52,23 @@ function toDetail(cert: TykCertMeta): CertificateDetail {
  * place the private key could leak into if anyone ever paired a create-DTO field with a Prisma
  * `create()` — passthrough closes that class of bug by construction rather than by discipline.
  *
- * `Tenant.tykOrgId` is `og-<tenantId>` (fixed length) and every cert id Tyk hands back is
- * `<org_id><fingerprint>` (live-verified) — so `id.startsWith(tykOrgId)` is an exact org-id
- * comparison, not a fuzzy prefix match, and is asserted before EVERY id-scoped call. Tyk's own
- * `org_id` query param scopes LIST correctly (also live-verified), but GET/DELETE take only an id —
- * nothing stops a caller who already knows another tenant's cert id from asking for it by id alone,
- * so this is the actual tenant-isolation boundary for those two calls, not a defensive extra.
+ * Tenant isolation is enforced HERE, not trusted to Tyk. Every cert id Tyk hands back is
+ * `<org_id><sha256 fingerprint>` (live-verified: the suffix is exactly the 64 lowercase hex chars of
+ * `fingerprint`, for RSA and EC keys), so ownership is an exact comparison — see
+ * `isCertOwnedByOrg`. It is needed on every path because Tyk's scoping is weaker than it looks:
+ * its LIST `org_id` filter is a PREFIX match (live-measured: `?org_id=og-len` returned the certs of
+ * org `og-lenprobe`), and GET/DELETE/USE take only a bare id. Org ids are server-generated 39-char
+ * values today so the prefix case is unreachable through the API, but that is a convention, not a
+ * constraint (`tenants` has no length check) — so the check must not depend on it.
  */
 @Injectable()
 export class CertificateService {
+  private readonly logger = new Logger(CertificateService.name);
+
   constructor(private readonly tykClient: TykClientService) {}
 
   private assertOwned(id: string, tykOrgId: string): void {
-    if (!id.startsWith(tykOrgId)) {
+    if (!isCertOwnedByOrg(id, tykOrgId)) {
       // 404, not 403: which certificate ids exist outside this tenant is not the caller's business.
       throw new NotFoundException(`Certificate ${id} not found`);
     }
@@ -55,7 +77,23 @@ export class CertificateService {
   async create(dto: UploadCertificateDto, tenantId: string): Promise<CertificateDetail> {
     const { tykOrgId } = await loadTenantScope(tenantId);
     const { id } = await this.tykClient.uploadCert(dto.pem, tykOrgId);
-    return toDetail(await this.tykClient.getCert(id));
+    try {
+      return toDetail(await this.tykClient.getCert(id));
+    } catch (err) {
+      // Live-measured: Tyk ACCEPTS an ed25519 certificate ("Certificate added") but then cannot read
+      // it back (GET 404s). Left alone that is a stored private key the UI can neither list nor
+      // delete, so take it out again rather than leave it orphaned.
+      await this.tykClient.deleteCert(id, tykOrgId).catch((cleanupErr: unknown) => {
+        this.logger.error(
+          `Certificate ${id} could not be read back and could not be removed either: ` +
+            (cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)),
+        );
+      });
+      this.logger.warn(`Certificate upload rolled back: ${err instanceof Error ? err.message : String(err)}`);
+      throw new BadRequestException(
+        'The certificate was stored but the gateway could not read it back (unsupported key type?); it was removed.',
+      );
+    }
   }
 
   /** No bulk-detail endpoint exists on `/tyk/certs` — list gives ids only, so this fetches each
@@ -63,7 +101,9 @@ export class CertificateService {
    * fails to load (e.g. a race with a concurrent delete) is dropped rather than failing the page. */
   async findAll(tenantId: string): Promise<CertificateDetail[]> {
     const { tykOrgId } = await loadTenantScope(tenantId);
-    const ids = await this.tykClient.listCertIds(tykOrgId);
+    // Tyk's `org_id` filter is a prefix match, so it can hand back ANOTHER tenant's ids (one whose
+    // org id merely starts with ours). Drop them before fetching anything, not after.
+    const ids = (await this.tykClient.listCertIds(tykOrgId)).filter((id) => isCertOwnedByOrg(id, tykOrgId));
     const certs = await Promise.all(
       ids.map((id) => this.tykClient.getCert(id).then(toDetail).catch(() => null)),
     );
@@ -100,7 +140,3 @@ export class CertificateService {
     return { message: `Certificate ${id} deleted.` };
   }
 }
-
-// Re-exported so a caller (the API-config validator, a future WP) can 404 an unowned certificateId
-// the same way `remove` does, without re-deriving the ownership rule.
-export const isCertOwnedByOrg = (id: string, tykOrgId: string): boolean => id.startsWith(tykOrgId);

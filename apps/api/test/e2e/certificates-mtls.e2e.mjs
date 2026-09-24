@@ -21,7 +21,9 @@
  * Covers what unit tests structurally cannot:
  *   1. upload -> Tyk holds it; the response (and every read) never carries private key material
  *   2. org scoping: another tenant's list excludes it, and its delete answers 404 with the cert intact;
- *      and a cert an API still references cannot be deleted (delete is NOT revoke — see 2b)
+ *      a tenant whose org id is a strict PREFIX of another's cannot list or delete that org's certs
+ *      (Tyk's own list filter is a prefix match — 2c proves our layer is what stops it); and a cert
+ *      an API still references cannot be deleted (delete is NOT revoke — see 2b)
  *   3. certs are visible on every node in TYK_ADMIN_URLS (S7: Redis-shared, so no fan-out needed)
  *   4. UPSTREAM mTLS: the exact OAS document `mapToTykOas` emits presents the cert to a demanding
  *      upstream (200), and the same API without it never reaches the protected resource
@@ -34,7 +36,7 @@
  */
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const ROOT = '/app/apps/api/dist';
 const require = createRequire('/app/apps/api/package.json');
@@ -73,6 +75,7 @@ const tenantA = { id: randomUUID(), slug: `wp26a-a-${suffix}` };
 const tenantB = { id: randomUUID(), slug: `wp26a-b-${suffix}` };
 const createdApis = [];
 let certId;
+let prefixCertId;
 
 async function makeTenant({ id, slug }) {
   await prisma.tenant.create({ data: { id, tykOrgId: tykOrgIdFor(id), name: slug, slug, plan: 'FREE' } });
@@ -118,6 +121,9 @@ try {
   certId = created.id;
   check('upload returns the cert id scoped by the tenant org', certId.startsWith(tykOrgIdFor(tenantA.id)), true);
   check('upload reports hasPrivate (the key was stored)', created.hasPrivate, true);
+  // The ownership check peels a fixed-length fingerprint off the id, so pin that shape on real data.
+  check('the id suffix is exactly the 64-char sha256 fingerprint', certId.slice(tykOrgIdFor(tenantA.id).length), created.fingerprint);
+  check('...which is 64 lowercase hex chars', /^[0-9a-f]{64}$/.test(created.fingerprint), true);
   check('upload response carries no private key', JSON.stringify(created).includes('PRIVATE KEY'), false);
 
   const listA = await certs.findAll(tenantA.id);
@@ -140,6 +146,50 @@ try {
   check('...and the cert is still there', (await adminGet(ADMIN, `/certs/${certId}`)).status, 200);
   const otherOrg = await (await adminGet(ADMIN, `/certs?org_id=${encodeURIComponent(tykOrgIdFor(tenantB.id))}`)).json();
   check("Tyk's own list for tenant B's org excludes it", (otherOrg.certs ?? []).includes(certId), false);
+
+  // ── 2c. a strict-prefix org cannot see or touch the longer org's certs ─────
+  // Tyk's `?org_id=` filter is a PREFIX match (measured), so a tenant whose org id is a prefix of
+  // another's is handed that org's ids by the gateway itself. Unreachable through the API today (org
+  // ids are server-generated, 39 chars) but the schema does not constrain it, so build it directly.
+  const shortOrg = `og-wp26a-pfx-${suffix}`;
+  const longOrg = `${shortOrg}-longer`;
+  const tenantShort = { id: randomUUID(), slug: `wp26a-s-${suffix}` };
+  const tenantLong = { id: randomUUID(), slug: `wp26a-l-${suffix}` };
+  await prisma.tenant.create({ data: { ...tenantShort, tykOrgId: shortOrg, name: tenantShort.slug, plan: 'FREE' } });
+  await prisma.tenant.create({ data: { ...tenantLong, tykOrgId: longOrg, name: tenantLong.slug, plan: 'FREE' } });
+  prefixCertId = (await certs.create({ pem: CLIENT_PEM }, tenantLong.id)).id;
+  const rawShortList = await (await adminGet(ADMIN, `/certs?org_id=${encodeURIComponent(shortOrg)}`)).json();
+  check("Tyk's OWN list for the short org includes the longer org's cert (the gateway is prefix-matching)", (rawShortList.certs ?? []).includes(prefixCertId), true);
+  check("...but the short tenant's service-level list does not", (await certs.findAll(tenantShort.id)).length, 0);
+  let prefixDelete = 'no error';
+  try {
+    await certs.remove(prefixCertId, tenantShort.id);
+  } catch (err) {
+    prefixDelete = err.constructor.name;
+  }
+  check("...and its delete of that cert answers NotFoundException", prefixDelete, 'NotFoundException');
+  check('...the cert is intact', (await adminGet(ADMIN, `/certs/${prefixCertId}`)).status, 200);
+  check('the long tenant still lists its own cert', (await certs.findAll(tenantLong.id)).some((c) => c.id === prefixCertId), true);
+  await tyk.deleteCert(prefixCertId, longOrg);
+  prefixCertId = undefined;
+  await prisma.tenant.deleteMany({ where: { id: { in: [tenantShort.id, tenantLong.id] } } });
+
+  // ── 2d. an upload Tyk accepts but cannot read back is rolled back, not orphaned ──
+  // Only when an ed25519 PEM is supplied: Tyk says "Certificate added" and then 404s the GET.
+  if (existsSync('/tmp/wp26a/ed25519.pem')) {
+    const before = (await (await adminGet(ADMIN, `/certs?org_id=${encodeURIComponent(tykOrgIdFor(tenantA.id))}`)).json()).certs ?? [];
+    let unreadable = 'no error';
+    try {
+      await certs.create({ pem: readFileSync('/tmp/wp26a/ed25519.pem', 'utf8') }, tenantA.id);
+    } catch (err) {
+      unreadable = err.constructor.name;
+    }
+    check('an unreadable (ed25519) upload answers BadRequestException', unreadable, 'BadRequestException');
+    const after = (await (await adminGet(ADMIN, `/certs?org_id=${encodeURIComponent(tykOrgIdFor(tenantA.id))}`)).json()).certs ?? [];
+    check('...and leaves nothing behind in Tyk', after.length, before.length);
+  } else {
+    console.log('SKIP  2d (no /tmp/wp26a/ed25519.pem supplied)');
+  }
 
   // ── 2b. delete is not revoke: an attached cert cannot be deleted ────────────
   // Measured on v5.15.0: an API that already has a cert attached keeps presenting it after the
@@ -190,7 +240,8 @@ try {
   // ── 5. cleanup ─────────────────────────────────────────────────────────────
   for (const apiId of createdApis) await tyk.deleteApi(apiId).catch((e) => console.log(`cleanup api ${apiId}: ${e.message}`));
   if (certId) await tyk.deleteCert(certId, tykOrgIdFor(tenantA.id)).catch((e) => console.log(`cleanup cert: ${e.message}`));
-  await prisma.tenant.deleteMany({ where: { id: { in: [tenantA.id, tenantB.id] } } });
+  if (prefixCertId) await tyk.deleteCert(prefixCertId, `og-wp26a-pfx-${suffix}-longer`).catch((e) => console.log(`cleanup prefix cert: ${e.message}`));
+  await prisma.tenant.deleteMany({ where: { OR: [{ id: { in: [tenantA.id, tenantB.id] } }, { slug: { in: [`wp26a-s-${suffix}`, `wp26a-l-${suffix}`] } }] } });
   check('cleanup removed the cert from Tyk', certId ? (await adminGet(ADMIN, `/certs/${certId}`)).status : 404, 404);
   await prisma.$disconnect();
 }
