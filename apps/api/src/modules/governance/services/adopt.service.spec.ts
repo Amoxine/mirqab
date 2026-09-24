@@ -8,11 +8,13 @@ import { GovernanceAdoptService, ADOPT_RESOURCE, ADOPT_EVENT } from './adopt.ser
 jest.mock('@open-gateway/database', () => ({
   prisma: {
     apiDefinition: { findFirst: jest.fn(), update: jest.fn() },
+    $transaction: jest.fn(),
   },
 }));
 
 interface MockDb {
   apiDefinition: { findFirst: jest.Mock; update: jest.Mock };
+  $transaction: jest.Mock;
 }
 const db = prisma as unknown as MockDb;
 
@@ -33,6 +35,13 @@ describe('GovernanceAdoptService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     tyk.nodes = [NODE_1, NODE_2];
+    // $transaction's real behaviour is "run the callback with a tx client, commit or roll back
+    // together" — a mock can't exercise the rollback itself, but running the callback against THIS
+    // SAME mock object (rather than a separate one) is enough to prove both writes go through the
+    // one client the tests assert against, and that a throw inside it propagates out of $transaction
+    // exactly as a real rollback would surface to the caller. Re-armed every test: resetAllMocks()
+    // clears mock implementations, not just call history.
+    db.$transaction.mockImplementation((callback: (tx: unknown) => unknown) => callback(db));
     service = new GovernanceAdoptService(
       tyk as unknown as TykClientService,
       audit as unknown as AuditService,
@@ -105,12 +114,15 @@ describe('GovernanceAdoptService', () => {
       adoptedFields: ['info', 'openapi', 'paths'],
     });
 
-    expect(audit.recordOrThrow).toHaveBeenCalledWith({
-      tenantId: TENANT,
-      action: 'UPDATED',
-      resource: ADOPT_RESOURCE,
-      details: { event: ADOPT_EVENT, apiDefId: API_ID, node: NODE_1, adoptedFields: ['info', 'openapi', 'paths'] },
-    });
+    expect(audit.recordOrThrow).toHaveBeenCalledWith(
+      {
+        tenantId: TENANT,
+        action: 'UPDATED',
+        resource: ADOPT_RESOURCE,
+        details: { event: ADOPT_EVENT, apiDefId: API_ID, node: NODE_1, adoptedFields: ['info', 'openapi', 'paths'] },
+      },
+      db, // the transaction client — see "the persist and the audit write are one transaction" below
+    );
   });
 
   it('labels the response as an override, not a routine sync', async () => {
@@ -134,5 +146,46 @@ describe('GovernanceAdoptService', () => {
     audit.recordOrThrow.mockRejectedValue(new Error('audit db down'));
 
     await expect(service.adopt(API_ID, NODE_1, TENANT)).rejects.toThrow('audit db down');
+  });
+
+  // The regression worker-8 found: two separately-awaited writes let the ApiDefinition override
+  // persist even when the audit write failed. These three assertions are what rules that out —
+  // one $transaction call wrapping both, and the audit write going through ITS client, not the
+  // bare one.
+  describe('the persist and the audit write are one transaction', () => {
+    beforeEach(() => {
+      db.apiDefinition.findFirst.mockResolvedValue({ id: API_ID, tykApiId: 'og-api-1', defFormat: 'OAS' });
+      tyk.getOasApiFromNode.mockResolvedValue({ openapi: '3.0.3' });
+      db.apiDefinition.update.mockResolvedValue({});
+    });
+
+    it('wraps both writes in exactly one prisma.$transaction call', async () => {
+      audit.recordOrThrow.mockResolvedValue(undefined);
+
+      await service.adopt(API_ID, NODE_1, TENANT);
+
+      expect(db.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes the transaction client to recordOrThrow, not a bare call', async () => {
+      audit.recordOrThrow.mockResolvedValue(undefined);
+
+      await service.adopt(API_ID, NODE_1, TENANT);
+
+      expect(audit.recordOrThrow).toHaveBeenCalledWith(expect.any(Object), db);
+    });
+
+    it('never calls apiDefinition.update outside of $transaction', async () => {
+      audit.recordOrThrow.mockRejectedValue(new Error('audit db down'));
+
+      await expect(service.adopt(API_ID, NODE_1, TENANT)).rejects.toThrow('audit db down');
+
+      // The update mock IS the transaction's own client (see the module mock above), so this does
+      // not distinguish "ran inside the transaction" from "ran outside it" on its own — what does is
+      // that $transaction was the only entry point that could have reached it at all: nothing in
+      // adopt() calls prisma.apiDefinition.update directly.
+      expect(db.$transaction).toHaveBeenCalledTimes(1);
+      expect(db.apiDefinition.update).toHaveBeenCalledTimes(1);
+    });
   });
 });

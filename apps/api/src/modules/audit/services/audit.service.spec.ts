@@ -224,3 +224,42 @@ describe('AuditService.exportCsv', () => {
     expect(CSV_MAX_ROWS).toBe(10_000);
   });
 });
+
+describe('AuditService.record / recordOrThrow', () => {
+  const entry = { action: 'UPDATED' as const, resource: 'ApiDefinition', details: { x: 1 } };
+
+  it('record() swallows a write failure and still resolves — the fire-and-forget path', async () => {
+    const { service } = makeService();
+    (service as unknown as { prisma: { auditLog: { create: jest.Mock } } }).prisma.auditLog.create = jest
+      .fn()
+      .mockRejectedValue(new Error('db down'));
+
+    await expect(service.record(entry)).resolves.toBeUndefined();
+  });
+
+  it('recordOrThrow() rejects on a write failure instead of swallowing it', async () => {
+    const { service } = makeService();
+    (service as unknown as { prisma: { auditLog: { create: jest.Mock } } }).prisma.auditLog.create = jest
+      .fn()
+      .mockRejectedValue(new Error('db down'));
+
+    await expect(service.recordOrThrow(entry)).rejects.toThrow('db down');
+  });
+
+  // WP25's adopt-from-gateway is the reason this parameter exists: worker-8 verified live that
+  // recordOrThrow() alone does not roll back a sibling write when the audit insert fails — only
+  // wrapping both in one prisma.$transaction and writing the audit row THROUGH that transaction's
+  // client does. This is the unit-level guarantee the wiring makes that possible.
+  it('recordOrThrow() writes through a supplied transaction client, not the default one, when given one', async () => {
+    const { service } = makeService();
+    const defaultCreate = jest.fn();
+    (service as unknown as { prisma: { auditLog: { create: jest.Mock } } }).prisma.auditLog.create = defaultCreate;
+    const txCreate = jest.fn().mockResolvedValue(undefined);
+    const tx = { auditLog: { create: txCreate } } as unknown as Parameters<typeof service.recordOrThrow>[1];
+
+    await service.recordOrThrow(entry, tx);
+
+    expect(txCreate).toHaveBeenCalledTimes(1);
+    expect(defaultCreate).not.toHaveBeenCalled();
+  });
+});

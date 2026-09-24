@@ -26,11 +26,15 @@ export interface AdoptResult {
  * pushes Postgres's config out to every node.
  *
  * Stores the node's raw definition into `ApiDefinition.adoptedFromGateway` (see that field's own
- * doc comment for why it is a dedicated field, not `oasDocument`) and writes ONE mandatory,
- * synchronous `AuditLog` row naming the node and the adopted fields — `await`ed here, not the
- * fire-and-forget `AuditLogInterceptor`/`@Audit()` path every other mutation uses (`setImmediate`,
- * swallows its own failures): an operator override to config of record is exactly the action that
- * must not be silently unaudited, so a failed audit write fails the whole request.
+ * doc comment for why it is a dedicated field, not `oasDocument`) and writes ONE mandatory
+ * `AuditLog` row naming the node and the adopted fields — not the fire-and-forget
+ * `AuditLogInterceptor`/`@Audit()` path every other mutation uses (`setImmediate`, swallows its own
+ * failures): an operator override to config of record is exactly the action that must not be
+ * silently unaudited. Both writes go through ONE `prisma.$transaction`, not just an awaited
+ * `recordOrThrow()` — live-verified (worker-8) that two separate awaited writes are not enough: a
+ * throwing audit write left the row's `adoptedFromGateway` persisted anyway, an override with no
+ * trace it happened. The transaction is what makes "the request failed" and "nothing changed" the
+ * same fact.
  *
  * Deliberately does NOT reverse-map the adopted document into `proxyUrl`/`listenPath`/`config` — see
  * the field's doc comment. A future `PATCH`/`POST :id/sync` still regenerates from those structured
@@ -70,25 +74,34 @@ export class GovernanceAdoptService {
     const adoptedFields = Object.keys(document).sort();
     const adoptedAt = new Date().toISOString();
 
-    await prisma.apiDefinition.update({
-      where: { id: apiDefId },
-      // `document` is whatever shape Tyk answered with (already sanitised of internal_id/org_id/etc
-      // by TykClientService.request) — cast, not `as any`: Prisma's InputJsonValue is a closed
-      // recursive union that a plain `Record<string, unknown>` cannot structurally satisfy even
-      // though every value in it is, in fact, valid JSON (it came from a JSON HTTP response).
-      data: {
-        adoptedFromGateway: { node: nodeUrl, document, adoptedFields, adoptedAt } as Prisma.InputJsonValue,
-      },
-    });
+    // One transaction, not two awaited calls: recordOrThrow() alone makes a failed audit write
+    // THROW, but by itself does nothing to undo the apiDefinition.update that already committed —
+    // exactly the gap worker-8's live verification found. Wrapping both in $transaction is what
+    // makes them commit or roll back together, so "adopt reported success" and "the AuditLog row
+    // exists" can never disagree.
+    await prisma.$transaction(async (tx) => {
+      await tx.apiDefinition.update({
+        where: { id: apiDefId },
+        // `document` is whatever shape Tyk answered with (already sanitised of internal_id/org_id/etc
+        // by TykClientService.request) — cast, not `as any`: Prisma's InputJsonValue is a closed
+        // recursive union that a plain `Record<string, unknown>` cannot structurally satisfy even
+        // though every value in it is, in fact, valid JSON (it came from a JSON HTTP response).
+        data: {
+          adoptedFromGateway: { node: nodeUrl, document, adoptedFields, adoptedAt } as Prisma.InputJsonValue,
+        },
+      });
 
-    // recordOrThrow, not record(): record() swallows its own failures (logs and resolves anyway),
-    // which would let this method report success on a silently unaudited override. A caller that
-    // gets a 200 back here is guaranteed the AuditLog row exists.
-    await this.auditService.recordOrThrow({
-      tenantId,
-      action: AuditAction.UPDATED,
-      resource: ADOPT_RESOURCE,
-      details: { event: ADOPT_EVENT, apiDefId, node: nodeUrl, adoptedFields },
+      // recordOrThrow, not record(): record() swallows its own failures (logs and resolves anyway),
+      // which would let this method report success on a silently unaudited override.
+      await this.auditService.recordOrThrow(
+        {
+          tenantId,
+          action: AuditAction.UPDATED,
+          resource: ADOPT_RESOURCE,
+          details: { event: ADOPT_EVENT, apiDefId, node: nodeUrl, adoptedFields },
+        },
+        tx,
+      );
     });
 
     return {

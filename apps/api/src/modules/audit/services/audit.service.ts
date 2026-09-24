@@ -113,9 +113,16 @@ export class AuditService {
    * (P2) — an operator override to config of record that must not be able to report success while
    * going unaudited. Most callers want `record()`; reach for this only when a failed audit write
    * should fail the whole request.
+   *
+   * `tx` is an optional interactive-transaction client (`prisma.$transaction(async (tx) => ...)`) to
+   * write through instead of the shared singleton — needed wherever the audit row and the change it
+   * documents must commit or roll back together. WP25's own adopt-from-gateway is the reason this
+   * parameter exists: live-verified (worker-8) that without it, a throwing audit write left the
+   * `ApiDefinition` override persisted with zero trace it happened, which is exactly the un-audited
+   * state P2's escape hatch exists to prevent.
    */
-  async recordOrThrow(entry: AuditEntry): Promise<void> {
-    await this.prisma.auditLog.create({
+  async recordOrThrow(entry: AuditEntry, tx: Prisma.TransactionClient | typeof this.prisma = this.prisma): Promise<void> {
+    await tx.auditLog.create({
       data: {
         tenantId: entry.tenantId ?? null,
         userId: entry.userId ?? null,
