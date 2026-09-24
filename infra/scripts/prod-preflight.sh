@@ -25,6 +25,25 @@ bad() {
 }
 ok() { echo "ok    $*"; }
 
+# A secret must be non-empty and contain no whitespace. Length alone is not enough: `${#VAR}`
+# happily counts spaces, so a TYK_GW_SECRET of 40 spaces — which is what a truncated copy-paste or
+# a trailing-whitespace .env line produces — passed every check this script made. Whitespace also
+# rules out the multi-line case, where a value whose FIRST line is the committed default sails past
+# a `case` comparing the whole string. Neither is an attack (these come from the operator's own
+# .env) but both are silent, and a preflight that accepts 40 spaces as a gateway secret is
+# decoration.
+#
+# Length-after-stripping, NOT a `case` glob listing the whitespace characters. The glob version was
+# written first and was wrong in the most embarrassing way available: `*"$(printf '\n')"*` is
+# `*""*`, because command substitution strips trailing newlines — and `*""*` matches EVERY string,
+# so it rejected a perfectly good 64-character hex secret. It was caught only by testing a value
+# that was supposed to PASS. `tr -d '[:space:]'` needs no quoting gymnastics and covers tab, CR and
+# form feed as well as space and newline.
+has_whitespace() {
+  _stripped=$(printf '%s' "$1" | tr -d '[:space:]')
+  [ "${#_stripped}" -ne "${#1}" ]
+}
+
 : "${NODE_ENV:=}"
 : "${TYK_GW_SECRET:=}"
 : "${REDIS_PASSWORD:=}"
@@ -54,7 +73,9 @@ case "$TYK_GW_SECRET" in
   '') bad "TYK_GW_SECRET is unset — the compose default 'tyk-gateway-secret' would be used" ;;
   tyk-gateway-secret) bad "TYK_GW_SECRET is still the committed default 'tyk-gateway-secret'" ;;
   *)
-    if [ "${#TYK_GW_SECRET}" -lt 32 ]; then
+    if has_whitespace "$TYK_GW_SECRET"; then
+      bad "TYK_GW_SECRET contains whitespace — a padded or multi-line value is not a secret"
+    elif [ "${#TYK_GW_SECRET}" -lt 32 ]; then
       bad "TYK_GW_SECRET is only ${#TYK_GW_SECRET} characters — use at least 32 (openssl rand -hex 32)"
     else
       ok "TYK_GW_SECRET set, ${#TYK_GW_SECRET} characters"
@@ -69,6 +90,8 @@ esac
 # session key and quota counter in the stack.
 if [ -z "$REDIS_PASSWORD" ]; then
   bad "REDIS_PASSWORD is unset — Redis holds every gateway key, session and quota counter"
+elif has_whitespace "$REDIS_PASSWORD"; then
+  bad "REDIS_PASSWORD contains whitespace — a padded or multi-line value is not a secret"
 else
   ok "REDIS_PASSWORD set, ${#REDIS_PASSWORD} characters"
 fi
@@ -91,6 +114,8 @@ esac
 # stops being written with no error the dashboard can show.
 if [ -z "$DB_PASS" ]; then
   bad "DB_PASS is unset"
+elif has_whitespace "$DB_PASS"; then
+  bad "DB_PASS contains whitespace — it also goes into the pump's libpq connection string, where a space ENDS the value"
 else
   ok "DB_PASS set, ${#DB_PASS} characters"
 fi

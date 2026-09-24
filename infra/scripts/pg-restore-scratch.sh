@@ -131,8 +131,18 @@ fi
 # injection into that container and `--backup ../..` is a path escape out of /backups. The blast
 # radius is one throwaway container with the backups volume mounted read-only, which is small —
 # but "small blast radius" is not a reason to feed an argument to a shell unchecked.
-printf '%s' "$BACKUP" | grep -qE '^[0-9]{8}T[0-9]{6}Z$' \
-  || die "refusing: '--backup $BACKUP' is not a backup label (expected YYYYMMDDThhmmssZ)"
+#
+# A `case` GLOB, not `grep -qE '^...$'`. grep is line-oriented: it succeeds when ANY line matches,
+# so a multi-line value whose FIRST line is a valid label passes the check and then carries its
+# remaining lines straight into the shell — `20260924T172613Z\ntouch /tmp/pwned` validated clean and
+# put `touch /tmp/pwned/base.tar.gz` on its own line inside the container. A glob matches the whole
+# string and cannot match across a newline, which is the property actually wanted here. This is the
+# second time in this file that a check looked right and tested nothing; anchors in a line-oriented
+# tool are not string anchors.
+case "$BACKUP" in
+  [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+  *) die "refusing: '--backup $BACKUP' is not a backup label (expected YYYYMMDDThhmmssZ)" ;;
+esac
 say "restoring backup: $BACKUP"
 
 cleanup() {
