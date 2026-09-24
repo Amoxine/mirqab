@@ -24,8 +24,14 @@
 #         -> "the backup is intact and complete" (every file matches the manifest's checksum)
 #   L2  server starts, recovery completes, all four databases open and answer a query
 #         -> "the restore works"
-#   L3  table SET identical to the primary, and no restored table empty where the primary's is not
+#   L3  table SET identical to the primary, and no DATABASE restored hollow (structure, no data)
 #         -> "the backup is not hollow, stale, or of the wrong cluster"
+#         Hollowness is judged per database, never per table: a single table that is empty in the
+#         restore and non-empty now is just a table that gained its first row after the backup,
+#         which on a young schema is most of them. Those are reported as drift information.
+#         NOTE: a backup older than a table-adding migration WILL fail the table-SET check. That is
+#         intended — the backup genuinely cannot restore the current schema — but it reads as a
+#         hard failure, so check the migration history before suspecting the backup itself.
 #   L4  pg_amcheck across the restored databases (skipped with a note if unavailable)
 #         -> "no page or index corruption in the restored relations"
 #
@@ -326,19 +332,38 @@ if ! diff -u "$tmp/p.set" "$tmp/s.set" >"$tmp/set.diff"; then
   die "this backup is of a different cluster, a different schema version, or is incomplete"
 fi
 
-# Hollow check: a table the primary has rows in must not come back empty. This is what catches a
-# backup that restored structure but no data — which a count DIFF would merely call "drift".
-hollow=0
-while IFS='|' read -r db t pn; do
-  [ -n "${t:-}" ] || continue
-  sn="$(awk -F'|' -v d="$db" -v k="$t" '$1==d && $2==k {print $3; exit}' "$tmp/scratch.txt")"
-  if [ "${pn:-0}" -gt 0 ] && [ "${sn:-0}" -eq 0 ]; then
-    say "  HOLLOW: $db.$t — primary has $pn rows, restored has 0"
-    hollow=1
-  fi
-done <"$tmp/primary.txt"
-[ "$hollow" -eq 0 ] || die "L3 FAILED: restored tables are empty where the primary's are not"
-say "L3 PASS: $s_tables tables, table set identical, no hollow tables"
+# Hollow check, judged PER DATABASE — deliberately not per table.
+#
+# Per table was the obvious version and it is wrong on a live system, in the same way the original
+# count oracle was. "Empty in the restore, non-empty on the primary" describes every table that
+# gained its FIRST row after the backup, which is ordinary drift. Measured on this stack: 10 of the
+# 22 `opengateway` tables are empty right now (api_keys, plans, developers, products, …), so the
+# first API key anyone creates after a backup would make a perfect restore exit 1 with "HOLLOW".
+#
+# A database is hollow when its restored rows sum to zero while the primary's do not, or when a
+# MAJORITY of the primary's non-empty tables came back empty. One or two empty tables is a young
+# schema filling up; all of them is a backup that restored structure and no data. Individual
+# empty-where-primary-isn't tables are reported as information in the drift section below.
+awk -F'|' '
+  NR==FNR { p[$1"|"$2]=$3; psum[$1]+=$3; if ($3>0) pne[$1]++; next }
+  { k=$1"|"$2; ssum[$1]+=$3; if (k in p && p[k]>0 && $3==0) { lost[$1]++; print "LOST " $1 " " $2 " " p[k] > "/dev/stderr" } }
+  END {
+    for (db in psum) {
+      hollow=0
+      if (psum[db] > 0 && ssum[db]+0 == 0) hollow=1
+      if (pne[db] > 0 && lost[db]*2 > pne[db]) hollow=1
+      if (hollow) printf "HOLLOW %s %d %d %d %d\n", db, psum[db], ssum[db]+0, lost[db]+0, pne[db]
+    }
+  }' "$tmp/primary.txt" "$tmp/scratch.txt" >"$tmp/hollow.txt" 2>"$tmp/lost.txt"
+
+if [ -s "$tmp/hollow.txt" ]; then
+  say "L3 FAILED: a restored database is hollow — structure without data"
+  while read -r _ db psum ssum lost pne; do
+    say "  $db: primary has $psum rows, restored has $ssum; $lost of $pne non-empty tables came back empty"
+  done <"$tmp/hollow.txt"
+  die "this backup did not capture the data"
+fi
+say "L3 PASS: $s_tables tables, table set identical, no database hollow"
 
 # ── L4: no page or index corruption (optional) ──────────────────────────────────────────────────
 if docker exec "$SCRATCH_CONTAINER" sh -c 'command -v pg_amcheck' >/dev/null 2>&1; then
@@ -369,6 +394,13 @@ else
   # Keyed on db|table, never table alone — see dump_counts.
   awk -F'|' 'NR==FNR{p[$1"|"$2]=$3; next} {k=$1"|"$2} k in p && p[k]!=$3 {printf "    %-44s primary %s, restored %s\n", k, p[k], $3}' \
     "$tmp/primary.txt" "$tmp/scratch.txt"
+  # Tables that are empty in the restore but not on the primary. INFORMATION, not a verdict: this
+  # is what a table gaining its first row after the backup looks like, and on a young schema that
+  # is most of them. L3 above judges hollowness per database instead.
+  if [ -s "$tmp/lost.txt" ]; then
+    say "  first-row-since-backup (empty in the restore, non-empty now) — normal on a young schema:"
+    while read -r _ db t n; do say "    $db.$t — primary $n, restored 0"; done <"$tmp/lost.txt"
+  fi
   if [ "$STRICT" = true ]; then
     die "--strict: counts must equal the primary, and they do not"
   fi
