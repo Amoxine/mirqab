@@ -51,6 +51,8 @@ while IFS= read -r file; do
   echo "::error file=$file::$file exists; this repo is Compose-only (O1)."
   fail=1
 done < <(find . \( "${prune[@]}" \) -prune -o \
-  -type f \( -name 'kustomization.yaml' -o -name 'kustomization.yml' -o -name 'Chart.yaml' -o -name 'Chart.yml' \) -print | sort)
+  -type f \( -name 'kustomization.yaml' -o -name 'kustomization.yml' \
+             -o -name 'Kustomization' \
+             -o -name 'Chart.yaml' -o -name 'Chart.yml' \) -print | sort)
 
 exit "$fail"

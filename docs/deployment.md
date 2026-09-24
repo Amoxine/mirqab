@@ -673,7 +673,7 @@ read, and `vars` keeps them visible in the run log where a wrong one is diagnosa
 | `STAGING_API_URL` | e.g. `https://staging.example.com/api` |
 | `STAGING_KRATOS_URL` | e.g. `https://staging.example.com:33012` |
 | `STAGING_HYDRA_URL` | e.g. `https://staging.example.com:33010` |
-| `STAGING_APP_URL` | e.g. `https://staging.example.com` — also what the health check probes |
+| `STAGING_APP_URL` | e.g. `https://staging.example.com` — also what the health check probes; a trailing slash is trimmed |
 | `STAGING_GATEWAY_URL` | e.g. `https://staging.example.com:33005` |
 
 The five URL variables are passed as **build args** to the web image. `NEXT_PUBLIC_*` values are
@@ -691,14 +691,51 @@ Three things it deliberately does not do, each of which made an earlier version 
   success;
 - it does not grep the HTML, because `NEXT_PUBLIC_*` values appear **0 times** there — they are in
   the JS chunks;
-- it does not test for the *absence* of `localhost`, which would fail a correct deploy: even a
-  properly built bundle carries a chunk with the literal `localhost:33001`, from the source fallback
-  `"" === o ? "http://localhost:33001/api" : o`.
+- it does not test for the *absence* of `localhost`, which would fail a correct deploy (see below);
+- it trims a trailing slash from `STAGING_APP_URL`: without that, every chunk fetch becomes
+  `//_next/...`, Next answers **308**, and `curl --fail` without `-L` counts that as success with a
+  45-byte body — reporting a *correct* image as broken, with a message blaming the build args.
 
-Measured against two images built from the same commit, one with the build args and one without:
-expected URL in 1 of 22 chunks versus 0 of 22, while `localhost:33001` appeared in 1 chunk of
-**both**. Presence of the expected URL is the only signal that separates them. Finding no chunks at
-all also fails, because a probe that passes by looking at nothing is the failure this replaced.
+It asserts **two** variables, `STAGING_API_URL` and `STAGING_KRATOS_URL`, and matches each **with
+its surrounding double quotes** so the value must be the whole inlined string literal rather than a
+substring of it.
+
+Measured against three images built from the same commit:
+
+| image | API URL | Kratos URL | `localhost:33001` | verdict |
+| --- | --- | --- | --- | --- |
+| all five build args | 1 of 22 chunks | 2 of 22 | 1 of 22 | pass |
+| only `NEXT_PUBLIC_API_URL` | 1 of 22 | **0** | 1 of 22 | fail |
+| no build args | **0** | 0 | 1 of 22 | fail |
+
+The middle row is why one variable was not enough: that is exactly what CD renders when the other
+four repo variables are unset, and asserting the API URL alone passed it.
+
+### What this check cannot tell you
+
+Worth reading before trusting a green deploy, because each of these is a real gap rather than a
+theoretical one:
+
+- **Only two of the five URLs are observable here.** The Hydra, App and Gateway URLs appear in **0**
+  chunks of the login page even in a correctly built image, so they are not asserted. A deploy can
+  go green with those three wrong.
+- **Chunk paths are resolved against `STAGING_APP_URL`**, not against the final origin of any
+  redirect the page followed. If the app redirects to a different host, the chunks fetched are the
+  ones at `APP_URL`, which may not be the ones the browser loaded.
+- **The URL currently lives in 1 chunk of 22.** That is a property of how Next happens to split
+  this bundle today, not a guarantee. A Next upgrade that moves the API client into a chunk the
+  login page does not reference would turn the deploy red with a message blaming the build args —
+  the message would be wrong and the build args fine.
+- **A match is a match anywhere in the chunk**, including inside an unrelated string that happens to
+  contain the URL.
+- **It cannot tell whether the container it probed is the one the deploy just started.** It probes a
+  URL; nothing ties the response to the new image.
+
+It also does not test for the *absence* of `localhost`: a correctly built bundle still carries a
+chunk with the literal `localhost:33001`, from the source fallback
+`"" === o ? "http://localhost:33001/api" : o`, so absence is not a signal in either direction.
+Finding no chunks at all fails, because a probe that passes by looking at nothing is the failure
+this replaced.
 
 #### Secrets
 

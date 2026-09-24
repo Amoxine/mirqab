@@ -259,6 +259,12 @@ jobs:
           HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
           APP_URL: ${{ vars.STAGING_APP_URL }}
           API_URL: ${{ vars.STAGING_API_URL }}
+          # A second variable, because asserting only the API URL let an image built with ONLY
+          # NEXT_PUBLIC_API_URL through — which is exactly what CD renders when the other four repo
+          # variables are unset. Kratos is the one other value observable from this page: 2 chunks
+          # in a fully-built image, 0 in a partial one. Hydra, App and Gateway appear in 0 chunks of
+          # the login page even when correctly built, so they are NOT asserted here; see the docs.
+          KRATOS_URL: ${{ vars.STAGING_KRATOS_URL }}
           # A public page that renders the app shell. Not `/`, which only redirects. If this route
           # ever moves, this check fails loudly rather than quietly passing — which is the correct
           # direction for it to break in.
@@ -282,8 +288,14 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${APP_URL:-}" ] || [ -z "${API_URL:-}" ]; then
-            echo "::error::vars.STAGING_APP_URL and vars.STAGING_API_URL must both be set, or the web image was built with the Dockerfile's localhost defaults" >&2
+          # A trailing slash turns every chunk fetch into `//_next/...`, which Next answers with a
+          # 308. Without -L `--fail` counts that as success with an empty body, so a CORRECT image
+          # reports red with a message blaming the build args — the worst kind of wrong, since the
+          # message sends you to fix something that is not broken.
+          APP_URL="${APP_URL%/}"
+
+          if [ -z "${APP_URL:-}" ] || [ -z "${API_URL:-}" ] || [ -z "${KRATOS_URL:-}" ]; then
+            echo "::error::vars.STAGING_APP_URL, STAGING_API_URL and STAGING_KRATOS_URL must all be set, or the web image was built with the Dockerfile's localhost defaults" >&2
             exit 1
           fi
 
@@ -293,26 +305,40 @@ jobs:
             exit 1
           fi
 
-          grep -oE '/_next/static/[^"]+\.js' /tmp/app.html | sort -u > /tmp/chunks.txt
+          # `|| true` is load-bearing: grep exits 1 when it matches nothing, `pipefail` propagates
+          # that, and `set -e` then killed the step BEFORE the diagnostic below could print. The
+          # step still failed, which is why this went unnoticed — it failed closed and silent, and
+          # a check whose failure says nothing is most of the way back to no check at all.
+          grep -oE '/_next/static/[^"]+\.js' /tmp/app.html | sort -u > /tmp/chunks.txt || true
           chunk_count=$(wc -l < /tmp/chunks.txt)
           if [ "$chunk_count" -eq 0 ]; then
             echo "::error::no /_next/static chunk URLs in $PROBE_PATH — this check cannot assert anything, treat it as failed" >&2
             exit 1
           fi
 
-          hits=0
+          # Matched WITH THE SURROUNDING DOUBLE QUOTES, so the value has to be the whole inlined
+          # string literal. A bare substring match passes on any PREFIX of what was built: with
+          # `https://staging.example.com` as the variable, a bundle built with
+          # `https://staging.example.com/api` matches and the mismatch goes unreported. Verified on
+          # a real minified chunk, which inlines it as `let r="https://staging.example.com/api",` —
+          # exact value quoted: 1 hit; prefix quoted: 0; truncated value quoted: 0.
+          api_hits=0
+          kratos_hits=0
           while IFS= read -r chunk; do
-            if curl --fail --silent --show-error --max-time 15 "$APP_URL$chunk" > /tmp/chunk.js \
-               && grep -qF "$API_URL" /tmp/chunk.js; then
-              hits=$((hits + 1))
-            fi
+            curl --fail --silent --show-error --max-time 15 "$APP_URL$chunk" > /tmp/chunk.js || continue
+            grep -qF "\"$API_URL\"" /tmp/chunk.js && api_hits=$((api_hits + 1))
+            grep -qF "\"$KRATOS_URL\"" /tmp/chunk.js && kratos_hits=$((kratos_hits + 1))
           done < /tmp/chunks.txt
 
-          if [ "$hits" -eq 0 ]; then
-            echo "::error::none of the $chunk_count served chunks contain $API_URL — the NEXT_PUBLIC_* build args did not reach this image, and browsers will call the Dockerfile's localhost defaults" >&2
+          if [ "$api_hits" -eq 0 ]; then
+            echo "::error::none of the $chunk_count served chunks contain \"$API_URL\" — the NEXT_PUBLIC_* build args did not reach this image, and browsers will call the Dockerfile's localhost defaults" >&2
             exit 1
           fi
-          echo "web app healthy: $API_URL found in $hits of $chunk_count served chunks"
+          if [ "$kratos_hits" -eq 0 ]; then
+            echo "::error::the served chunks carry $API_URL but not \"$KRATOS_URL\" — only SOME build args reached this image; check every STAGING_*_URL repo variable" >&2
+            exit 1
+          fi
+          echo "web app healthy: api in $api_hits and kratos in $kratos_hits of $chunk_count served chunks"
 
   # A push to main that does NOT deploy says so, once, instead of leaving an empty CD run that
   # looks like a successful deployment to anyone scanning the Actions tab.
