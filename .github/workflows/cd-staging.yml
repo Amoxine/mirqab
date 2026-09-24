@@ -235,13 +235,34 @@ jobs:
       # (the NEXT_PUBLIC_* build args above) — the app was "healthy" and unusable, and nothing in
       # this job would have said so.
       #
-      # The web probe asserts the SERVED BUNDLE, not just that a page renders: it fetches the app
-      # and fails if the API URL baked into it is a localhost one. That is the specific failure the
-      # build args exist to prevent, so it is the specific thing worth asserting.
+      # The web probe asserts the SERVED JAVASCRIPT, and the three details below are each a way an
+      # earlier version of it silently could not fail (all three found by worker-3):
+      #
+      #   1. it fetched `$APP_URL` and grepped the RESPONSE BODY. `/` answers 307 with a 31-byte
+      #      redirect stub, and `curl --fail` does not fail on a 3xx — so the grep ran over 31 bytes
+      #      of nothing, every time. It now fetches a page that really renders, and follows
+      #      redirects.
+      #   2. it grepped the HTML. `NEXT_PUBLIC_*` values are inlined into the JS CHUNKS, not the
+      #      document: the API URL appears 0 times in the HTML of a correctly built image. The only
+      #      place worth looking is the chunks the page references.
+      #   3. it asserted the ABSENCE of `localhost`, which would have failed a CORRECT deploy. Even
+      #      a properly built bundle ships a chunk containing the literal `localhost:33001`, from
+      #      the source fallback `"" === o ? "http://localhost:33001/api" : o`. Measured: expected
+      #      URL 0 / localhost 1 on a defaults build, expected URL 1 / localhost 1 on an args build.
+      #      Absence is therefore not a signal; PRESENCE of the expected URL is.
+      #
+      # So: fetch a public page, follow its chunk URLs, require the expected API URL to appear in
+      # what was actually served. Finding no chunks at all is a failure too — a probe that passes
+      # because it looked at nothing is the bug this whole comment is about.
       - name: Health check
         env:
           HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
           APP_URL: ${{ vars.STAGING_APP_URL }}
+          API_URL: ${{ vars.STAGING_API_URL }}
+          # A public page that renders the app shell. Not `/`, which only redirects. If this route
+          # ever moves, this check fails loudly rather than quietly passing — which is the correct
+          # direction for it to break in.
+          PROBE_PATH: /portal/auth/login
         run: |
           set -euo pipefail
 
@@ -261,21 +282,37 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${APP_URL:-}" ]; then
-            echo "::error::vars.STAGING_APP_URL is unset, so the web bundle was built with the Dockerfile's localhost defaults" >&2
+          if [ -z "${APP_URL:-}" ] || [ -z "${API_URL:-}" ]; then
+            echo "::error::vars.STAGING_APP_URL and vars.STAGING_API_URL must both be set, or the web image was built with the Dockerfile's localhost defaults" >&2
             exit 1
           fi
 
-          if ! curl --fail --silent --show-error --max-time 15 "$APP_URL" > /tmp/app.html; then
-            echo "::error::staging web app did not answer at $APP_URL" >&2
+          # -L, because the page may redirect and a 3xx is not a curl failure.
+          if ! curl --fail --silent --show-error --location --max-time 15 "$APP_URL$PROBE_PATH" > /tmp/app.html; then
+            echo "::error::staging web app did not answer at $APP_URL$PROBE_PATH" >&2
             exit 1
           fi
-          # `grep -q` on the fetched document; a hit means a localhost URL was inlined at build time.
-          if grep -q 'localhost:33001\|localhost:33005\|localhost:33012' /tmp/app.html; then
-            echo "::error::the deployed web bundle points at localhost — NEXT_PUBLIC_* build args were not applied" >&2
+
+          grep -oE '/_next/static/[^"]+\.js' /tmp/app.html | sort -u > /tmp/chunks.txt
+          chunk_count=$(wc -l < /tmp/chunks.txt)
+          if [ "$chunk_count" -eq 0 ]; then
+            echo "::error::no /_next/static chunk URLs in $PROBE_PATH — this check cannot assert anything, treat it as failed" >&2
             exit 1
           fi
-          echo "web app healthy, and its bundle carries no localhost API URL"
+
+          hits=0
+          while IFS= read -r chunk; do
+            if curl --fail --silent --show-error --max-time 15 "$APP_URL$chunk" > /tmp/chunk.js \
+               && grep -qF "$API_URL" /tmp/chunk.js; then
+              hits=$((hits + 1))
+            fi
+          done < /tmp/chunks.txt
+
+          if [ "$hits" -eq 0 ]; then
+            echo "::error::none of the $chunk_count served chunks contain $API_URL — the NEXT_PUBLIC_* build args did not reach this image, and browsers will call the Dockerfile's localhost defaults" >&2
+            exit 1
+          fi
+          echo "web app healthy: $API_URL found in $hits of $chunk_count served chunks"
 
   # A push to main that does NOT deploy says so, once, instead of leaving an empty CD run that
   # looks like a successful deployment to anyone scanning the Actions tab.
@@ -284,6 +321,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main' && vars.STAGING_DEPLOY != 'true'
+
+    # It writes one paragraph to the step summary. There is no reason for it to hold the token that
+    # can publish an image, which is what it would inherit from the workflow default.
+    permissions:
+      contents: read
+
     steps:
       - name: Explain
         run: |

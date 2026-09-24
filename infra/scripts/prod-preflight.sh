@@ -157,10 +157,14 @@ case "$EDGE_IMAGE" in
   *@sha256:*)
     _digest=${EDGE_IMAGE##*@sha256:}
     _nonhex=$(printf '%s' "$_digest" | tr -d '0-9a-f')
-    if [ "${#_digest}" -eq 64 ] && [ -z "$_nonhex" ]; then
-      ok "EDGE_IMAGE is digest-pinned"
+    if [ "${#_digest}" -ne 64 ]; then
+      bad "EDGE_IMAGE's sha256 digest is ${#_digest} characters, need 64: $EDGE_IMAGE"
+    elif [ -n "$_nonhex" ]; then
+      # Saying "got 64" for 64 non-hex characters was true and useless — it named the one thing
+      # that was right about the value.
+      bad "EDGE_IMAGE's sha256 digest is 64 characters but not hexadecimal: $EDGE_IMAGE"
     else
-      bad "EDGE_IMAGE has a malformed sha256 digest (need 64 hex characters, got ${#_digest}): $EDGE_IMAGE"
+      ok "EDGE_IMAGE is digest-pinned"
     fi
     ;;
   *)

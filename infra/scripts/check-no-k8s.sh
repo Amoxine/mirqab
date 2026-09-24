@@ -30,13 +30,19 @@ prune=(
   -name coverage
 )
 
-# Directory names that mean Kubernetes, at ANY depth. `charts` is included because a Helm chart is
-# far more often dropped in a `charts/` directory than in one called `helm/`.
+# Directory names that mean Kubernetes and nothing else, at ANY depth.
+#
+# `charts` is deliberately NOT here. It was, on the reasoning that a Helm chart usually lands in a
+# `charts/` directory — but `charts` is an ordinary English word and the repo has
+# `apps/web/src/components/analytics/charts/`, so the guard failed on legitimate UI code (found by
+# worker-3). A chart is caught by its `Chart.yaml` below at any depth anyway, which is a name that
+# means only one thing. A guard that cries wolf on a components directory gets disabled, and then
+# it guards nothing.
 while IFS= read -r dir; do
   echo "::error file=$dir::$dir exists; this repo is Compose-only (O1). Helm/Kustomize were removed in WP12b."
   fail=1
 done < <(find . \( "${prune[@]}" \) -prune -o \
-  -type d \( -name helm -o -name k8s -o -name kubernetes -o -name kustomize -o -name charts \) -print | sort)
+  -type d \( -name helm -o -name k8s -o -name kubernetes -o -name kustomize \) -print | sort)
 
 # The filenames are unique enough to search for on their own, and a chart or overlay can live in a
 # directory called anything at all — `deploy/overlays/prod/kustomization.yaml` names no directory

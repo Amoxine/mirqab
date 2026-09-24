@@ -59,8 +59,7 @@ jobs:
       # fetched an UNPINNED script from a moving branch and piped it straight into a shell with the
       # repo checked out: whatever `main` happened to contain at that second ran with full access to
       # this job. It was also, precisely, the supply-chain shape this WP exists to close — a linter
-      # that guards the workflows cannot itself be the softest way in. The release archive is now
-      # pinned by version AND verified by checksum before anything from it executes.
+      # that guards the workflows cannot itself be the softest way in.
       #
       # It runs from the official image, PINNED BY DIGEST, rather than a downloaded binary — and
       # that choice is the fix for a defect this step shipped with. actionlint runs shellcheck on

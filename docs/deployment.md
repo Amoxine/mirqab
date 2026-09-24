@@ -679,9 +679,26 @@ read, and `vars` keeps them visible in the run log where a wrong one is diagnosa
 The five URL variables are passed as **build args** to the web image. `NEXT_PUBLIC_*` values are
 inlined into the client bundle at build time and are **not** read when the container starts, so
 setting them in compose on the staging host does nothing. Left unset, the image ships
-`apps/web/Dockerfile`'s localhost defaults and every visitor's browser calls *their own* machine —
-which is why the health check now fetches the app and fails if a localhost URL is baked into what
-it served.
+`apps/web/Dockerfile`'s localhost defaults and every visitor's browser calls *their own* machine.
+
+The health check catches that, and how it does so is worth stating because the obvious version does
+not work. It fetches a public page, extracts the `/_next/static/**.js` chunk URLs that page
+references, fetches those, and requires **`STAGING_API_URL` to be present** in at least one of them.
+
+Three things it deliberately does not do, each of which made an earlier version unable to fail:
+
+- it does not probe `/`, which answers 307 with a 31-byte redirect stub that `curl --fail` treats as
+  success;
+- it does not grep the HTML, because `NEXT_PUBLIC_*` values appear **0 times** there — they are in
+  the JS chunks;
+- it does not test for the *absence* of `localhost`, which would fail a correct deploy: even a
+  properly built bundle carries a chunk with the literal `localhost:33001`, from the source fallback
+  `"" === o ? "http://localhost:33001/api" : o`.
+
+Measured against two images built from the same commit, one with the build args and one without:
+expected URL in 1 of 22 chunks versus 0 of 22, while `localhost:33001` appeared in 1 chunk of
+**both**. Presence of the expected URL is the only signal that separates them. Finding no chunks at
+all also fails, because a probe that passes by looking at nothing is the failure this replaced.
 
 #### Secrets
 
