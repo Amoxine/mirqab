@@ -99,7 +99,7 @@ export class AuditService {
 
   async record(entry: AuditEntry): Promise<void> {
     try {
-      await this.recordOrThrow(entry);
+      await this.recordOrThrow(entry, this.prisma);
     } catch (error) {
       this.logger.error(`Failed to write audit log: ${(error as Error).message}`, (error as Error).stack);
     }
@@ -114,14 +114,18 @@ export class AuditService {
    * going unaudited. Most callers want `record()`; reach for this only when a failed audit write
    * should fail the whole request.
    *
-   * `tx` is an optional interactive-transaction client (`prisma.$transaction(async (tx) => ...)`) to
-   * write through instead of the shared singleton — needed wherever the audit row and the change it
-   * documents must commit or roll back together. WP25's own adopt-from-gateway is the reason this
-   * parameter exists: live-verified (worker-8) that without it, a throwing audit write left the
-   * `ApiDefinition` override persisted with zero trace it happened, which is exactly the un-audited
-   * state P2's escape hatch exists to prevent.
+   * `tx` is the client to write through, and it is REQUIRED on purpose: inside a
+   * `prisma.$transaction(async (tx) => ...)` it must be that transaction's client, so the audit row and
+   * the change it documents commit or roll back together (WP25's adopt-from-gateway is why this
+   * exists — live-verified, worker-8, that without it a throwing audit write left the `ApiDefinition`
+   * override persisted with zero trace it happened). It used to default to the shared client, which
+   * made the unsafe call the easy one and a silent one: a caller inside a transaction who forgot `tx`
+   * wrote on a DIFFERENT connection, leaving an audit row for a change that never committed
+   * (verified empirically: one row surviving a rolled-back transaction). With no default, forgetting
+   * it is a compile error. A caller outside any transaction passes the shared client explicitly, as
+   * `record()` does.
    */
-  async recordOrThrow(entry: AuditEntry, tx: Prisma.TransactionClient | typeof this.prisma = this.prisma): Promise<void> {
+  async recordOrThrow(entry: AuditEntry, tx: Prisma.TransactionClient | typeof this.prisma): Promise<void> {
     await tx.auditLog.create({
       data: {
         tenantId: entry.tenantId ?? null,

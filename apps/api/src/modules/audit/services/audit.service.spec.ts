@@ -227,39 +227,70 @@ describe('AuditService.exportCsv', () => {
 
 describe('AuditService.record / recordOrThrow', () => {
   const entry = { action: 'UPDATED' as const, resource: 'ApiDefinition', details: { x: 1 } };
+  interface CreateMock {
+    auditLog: { create: jest.Mock };
+  }
+
+  /** The mock client `makeService` injected — i.e. the service's "shared" client in these tests. */
+  const sharedClientOf = (service: AuditService) => (service as unknown as { prisma: CreateMock }).prisma;
 
   it('record() swallows a write failure and still resolves — the fire-and-forget path', async () => {
     const { service } = makeService();
-    (service as unknown as { prisma: { auditLog: { create: jest.Mock } } }).prisma.auditLog.create = jest
-      .fn()
-      .mockRejectedValue(new Error('db down'));
+    sharedClientOf(service).auditLog.create = jest.fn().mockRejectedValue(new Error('db down'));
 
     await expect(service.record(entry)).resolves.toBeUndefined();
   });
 
+  it('record() writes through the shared client — the explicit argument replaced the old default', async () => {
+    const { service } = makeService();
+    const create = jest.fn().mockResolvedValue(undefined);
+    sharedClientOf(service).auditLog.create = create;
+
+    await service.record(entry);
+
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it('recordOrThrow() rejects on a write failure instead of swallowing it', async () => {
     const { service } = makeService();
-    (service as unknown as { prisma: { auditLog: { create: jest.Mock } } }).prisma.auditLog.create = jest
-      .fn()
-      .mockRejectedValue(new Error('db down'));
+    const shared = sharedClientOf(service);
+    shared.auditLog.create = jest.fn().mockRejectedValue(new Error('db down'));
 
-    await expect(service.recordOrThrow(entry)).rejects.toThrow('db down');
+    await expect(service.recordOrThrow(entry, shared as unknown as Parameters<typeof service.recordOrThrow>[1])).rejects.toThrow('db down');
   });
 
   // WP25's adopt-from-gateway is the reason this parameter exists: worker-8 verified live that
   // recordOrThrow() alone does not roll back a sibling write when the audit insert fails — only
   // wrapping both in one prisma.$transaction and writing the audit row THROUGH that transaction's
   // client does. This is the unit-level guarantee the wiring makes that possible.
-  it('recordOrThrow() writes through a supplied transaction client, not the default one, when given one', async () => {
+  it('recordOrThrow() writes through the supplied transaction client, not the shared one', async () => {
     const { service } = makeService();
-    const defaultCreate = jest.fn();
-    (service as unknown as { prisma: { auditLog: { create: jest.Mock } } }).prisma.auditLog.create = defaultCreate;
+    const sharedCreate = jest.fn();
+    sharedClientOf(service).auditLog.create = sharedCreate;
     const txCreate = jest.fn().mockResolvedValue(undefined);
     const tx = { auditLog: { create: txCreate } } as unknown as Parameters<typeof service.recordOrThrow>[1];
 
     await service.recordOrThrow(entry, tx);
 
     expect(txCreate).toHaveBeenCalledTimes(1);
-    expect(defaultCreate).not.toHaveBeenCalled();
+    expect(sharedCreate).not.toHaveBeenCalled();
+  });
+
+  // worker-8's empirical footgun: `tx` used to default to the shared client, so a caller inside a
+  // transaction who forgot it wrote on a DIFFERENT connection and left an audit row for a change that
+  // never committed (1 row surviving a rolled-back transaction) — silently. It is required now.
+  // Two independent guards, so neither can regress unnoticed: the compile-time one fails the build if
+  // `tx` becomes optional again (an unused @ts-expect-error is itself an error), and the runtime one
+  // fails the test if a missing `tx` ever falls through to the shared client again.
+  it('has no default for tx: omitting it is a compile error and never falls back to the shared client', async () => {
+    const { service } = makeService();
+    const sharedCreate = jest.fn().mockResolvedValue(undefined);
+    sharedClientOf(service).auditLog.create = sharedCreate;
+
+    // @ts-expect-error tx is required on purpose; this line must NOT compile if the parameter turns optional again
+    const omitted = service.recordOrThrow(entry);
+
+    await expect(omitted).rejects.toThrow();
+    expect(sharedCreate).not.toHaveBeenCalled();
   });
 });
