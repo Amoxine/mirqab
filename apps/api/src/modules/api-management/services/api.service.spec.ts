@@ -54,6 +54,7 @@ function row(overrides: Record<string, unknown> = {}) {
     authType: 'AUTH_TOKEN',
     status: 'ACTIVE',
     config: {},
+    oasDocument: null,
     syncStatus: 'SYNCED',
     syncError: null,
     lastSyncedAt: null,

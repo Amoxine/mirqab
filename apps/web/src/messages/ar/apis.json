@@ -51,6 +51,7 @@
   "tabs": {
     "overview": "نظرة عامة",
     "configuration": "الإعدادات",
+    "designer": "المصمم",
     "keys": "المفاتيح",
     "clients": "العملاء"
   },
@@ -198,6 +199,173 @@
   "authTypes": {
     "AUTH_TOKEN": "مفتاح API",
     "OAUTH": "OAuth2 (بيانات اعتماد العميل)",
-    "NONE": "بدون"
+    "NONE": "بدون",
+    "BASIC": "مصادقة أساسية",
+    "JWT": "JWT",
+    "HMAC": "توقيع HMAC"
+  },
+  "designer": {
+    "clearSection": "مسح القسم",
+    "saving": "جارٍ الحفظ...",
+    "savedToast": "تم حفظ القسم",
+    "saveError": "فشل في حفظ هذا القسم",
+    "summary": {
+      "notConfigured": "غير مُعدّ"
+    },
+    "errors": {
+      "required": "هذا الحقل مطلوب",
+      "wholeNumberInvalid": "أدخل رقمًا صحيحًا",
+      "wholeNumberTooSmall": "يجب أن يكون على الأقل {min}"
+    },
+    "endpoints": {
+      "title": "نقاط النهاية",
+      "description": "مشتقة من مستند OAS الذي تولّده الواجهة — وليست مُدخلة يدويًا.",
+      "empty": "لا توجد نقاط نهاية بعد. تظهر عند إعداد أي وسيط لكل طلب (إعادة كتابة URL، قاطع الدائرة، الرد الوهمي، تحويل النص، أو التحقق من المخطط).",
+      "method": "الطريقة",
+      "path": "المسار",
+      "operationId": "معرّف العملية"
+    },
+    "middleware": {
+      "title": "الوسيط (Middleware)"
+    },
+    "traffic": {
+      "title": "حدود حركة المرور",
+      "description": "حد المعدل، التقييد، المهلات، حجم الطلب، وقاطع الدائرة.",
+      "throttle": "التقييد",
+      "retryLimit": "حد إعادة المحاولة",
+      "retryLimitDescription": "عدد إعادات المحاولة المصفوفة بعد بلوغ حد المعدل. القيمة 0 تعطّل التقييد.",
+      "retryIntervalSeconds": "الفاصل بين المحاولات (بالثواني)",
+      "limits": "الحدود",
+      "timeoutSeconds": "مهلة الخادم الأساسي (بالثواني)",
+      "timeoutDescription": "تجيب البوابة بـ 504 بعد تجاوز هذه المدة. اتركه فارغًا لعدم وجود حد.",
+      "noLimitPlaceholder": "بلا حد",
+      "sizeLimitBytes": "حد حجم الطلب (بايت)",
+      "sizeLimitDescription": "محدود بـ {max} بايت، وهو حد الحافة (edge) نفسه. اتركه فارغًا لعدم وجود حد.",
+      "sizeLimitRangeError": "يجب أن يكون بين 1 وحد حجم النص عند الحافة",
+      "circuitBreaker": "قاطع الدائرة",
+      "circuitBreakerDescription": "يُفعَّل بعد عدد كافٍ من الأخطاء ضمن عيّنة، ثم يدخل في فترة تهدئة قبل محاولة جديدة.",
+      "threshold": "عتبة الخطأ (0-1)",
+      "thresholdError": "أدخل رقمًا بين 0 و 1",
+      "sampleSize": "حجم العيّنة",
+      "coolDownSeconds": "مدة التهدئة (بالثواني)"
+    },
+    "loadBalancing": {
+      "title": "موازنة الحمل",
+      "description": "خوادم أساسية إضافية يُوزَّع عليها حركة المرور، إلى جانب عنوان URL الأساسي الخاص بالواجهة.",
+      "targets": "الأهداف",
+      "targetsDescription": "زوج \"url weight\" واحد في كل سطر.",
+      "lineFormatError": "يجب أن يكون كل سطر بالشكل \"http(s)://host weight\"",
+      "skipUnavailable": "تخطي الخوادم غير المتاحة",
+      "skipUnavailableDescription": "تجاوز أي هدف وضعه اختبار التوفر كغير متاح.",
+      "summary": "{count} أهداف"
+    },
+    "uptimeTests": {
+      "title": "اختبارات التوفر",
+      "description": "فحوصات تُجريها البوابة على فترات لحساب حالة صحة هذه الواجهة.",
+      "probes": "الفحوصات",
+      "probesDescription": "سطر واحد بالشكل \"url method timeoutSeconds\" (الطريقة والمهلة اختياريتان). بحد أقصى {max}.",
+      "lineFormatError": "يجب أن يبدأ كل سطر بعنوان http(s)، مع طريقة ومهلة اختياريتين",
+      "tooManyError": "بحد أقصى {max} فحوصات",
+      "summary": "{count} فحوصات"
+    },
+    "headerTransform": {
+      "title": "تحويل الرؤوس",
+      "description": "رؤوس تُضاف إلى الطلب والاستجابة أو تُحذف منهما.",
+      "request": "الطلب",
+      "response": "الاستجابة",
+      "add": "إضافة",
+      "addDescription": "سطر واحد بالشكل \"الاسم: القيمة\" لكل رأس.",
+      "addLineFormatError": "يجب أن يكون كل سطر بالشكل \"الاسم: القيمة\"",
+      "remove": "إزالة",
+      "removeDescription": "اسم رأس واحد في كل سطر."
+    },
+    "urlRewrite": {
+      "title": "إعادة كتابة URL",
+      "description": "يعيد كتابة مسار الطلب (بعد إزالة مسار الاستماع) قبل وصوله إلى الخادم الأساسي.",
+      "enable": "تفعيل إعادة كتابة URL",
+      "pattern": "النمط",
+      "patternDescription": "تعبير نمطي (regex) يُقارَن بالمسار بعد إزالة البادئة.",
+      "rewriteTo": "إعادة الكتابة إلى"
+    },
+    "bodyTransform": {
+      "title": "تحويل النص",
+      "description": "قالب Go يُطبَّق على نص الطلب و/أو الاستجابة.",
+      "request": "تحويل نص الطلب",
+      "response": "تحويل نص الاستجابة",
+      "format": "الصيغة",
+      "template": "القالب",
+      "templateDescription": "قالب Go. ناتجه يحل محل النص."
+    },
+    "mock": {
+      "title": "رد وهمي",
+      "description": "يقصر الطلب مباشرة — لا يتم استدعاء الخادم الأساسي أبدًا.",
+      "enable": "تفعيل الرد الوهمي",
+      "statusCode": "رمز الحالة",
+      "codeRangeError": "أدخل رمز حالة بين 100 و 599",
+      "body": "النص",
+      "headers": "رؤوس الاستجابة",
+      "summary": "يُرجع {code}"
+    },
+    "cache": {
+      "title": "ذاكرة التخزين المؤقت للاستجابة",
+      "description": "يخزّن استجابات الخادم الأساسي مؤقتًا، مع إجراء إبطال عند الطلب.",
+      "enable": "تفعيل ذاكرة التخزين المؤقت للاستجابة",
+      "timeoutSeconds": "مدة صلاحية التخزين المؤقت (بالثواني)",
+      "allSafeRequests": "تخزين كل الطلبات الآمنة مؤقتًا",
+      "allSafeRequestsDescription": "طلبات GET وHEAD وOPTIONS، بغض النظر عن رمز الاستجابة.",
+      "responseCodes": "رموز الاستجابة القابلة للتخزين المؤقت",
+      "summary": "مدة صلاحية {seconds} ثانية",
+      "invalidateNow": "إبطال التخزين المؤقت الآن",
+      "invalidateNowDescription": "يحذف الاستجابات المخزنة مؤقتًا لهذه الواجهة على كل عُقد البوابة.",
+      "invalidating": "جارٍ الإبطال...",
+      "invalidatedToast": "تم إبطال التخزين المؤقت (تم حذف {count} مفتاح)",
+      "invalidateNoOpToast": "لا يوجد ما يُبطَل — التخزين المؤقت فارغ بالفعل",
+      "invalidateError": "فشل في إبطال التخزين المؤقت"
+    },
+    "detailedRecording": {
+      "title": "التسجيل التفصيلي",
+      "description": "تفاصيل كاملة للطلبات/الاستجابات ضمن تحليلات هذه الواجهة.",
+      "enable": "تسجيل التفاصيل الكاملة",
+      "enableDescription": "معطّل افتراضيًا — السجلات التفصيلية تتضمن الرؤوس والنصوص."
+    },
+    "ipAccess": {
+      "title": "التحكم بالوصول حسب IP",
+      "description": "يسمح بالطلبات أو يرفضها حسب عنوان IP للعميل، بعد تطبيعه من قبل الحافة (edge).",
+      "allow": "قائمة السماح",
+      "block": "قائمة الرفض",
+      "oneLinePerEntry": "عنوان IP أو CIDR واحد في كل سطر.",
+      "summary": "{count} إدخالات"
+    },
+    "requestValidation": {
+      "title": "التحقق من الطلب",
+      "description": "مخطط JSON يجب أن يستوفيه نص الطلب. أي مخالفة تُرفض من البوابة برمز 422.",
+      "schema": "مخطط JSON",
+      "schemaDescription": "اتركه فارغًا لتعطيل التحقق.",
+      "invalidJson": "أدخل JSON صالحًا",
+      "mustBeObject": "يجب أن يكون المخطط كائن JSON"
+    },
+    "authentication": {
+      "title": "المصادقة",
+      "description": "نوع مخطط المصادقة الذي تفرضه هذه الواجهة، والرأس الذي يحمل بيانات الاعتماد.",
+      "headerName": "اسم رأس المصادقة",
+      "headerNameDescription": "الافتراضي هو Authorization. هذا الإعداد يستبدل ذلك الرأس بدلاً من إضافة بديل له.",
+      "headerNameInvalid": "استخدم فقط الأحرف والأرقام والشرطات",
+      "hmacParked": "توقيع HMAC غير متاح بعد — الرابط (mapper) موجود، لكن لم يتم التحقق من أي صيغة لسلسلة التوقيع تعمل من طرف إلى طرف."
+    },
+    "testRequest": {
+      "title": "طلب تجريبي",
+      "description": "يشغّل طلبًا تجريبيًا مقابل التعريف المخزَّن لهذه الواجهة.",
+      "method": "الطريقة",
+      "path": "المسار",
+      "body": "النص",
+      "targetUrl": "استبدال الخادم الأساسي",
+      "targetUrlDescription": "اختبر على خادم أساسي مختلف دون تعديل الواجهة الفعلية. يُتحقق منه وفق نفس قائمة الرفض المستخدمة لعنوان URL الأساسي الخاص بالواجهة.",
+      "pathMustStartWithSlash": "يجب أن يبدأ المسار بـ /",
+      "run": "تشغيل",
+      "running": "جارٍ التشغيل...",
+      "close": "إغلاق",
+      "responseCode": "رمز الاستجابة",
+      "error": "فشل في تشغيل الطلب التجريبي"
+    }
   }
 }

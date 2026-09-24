@@ -51,6 +51,7 @@
   "tabs": {
     "overview": "Aperçu",
     "configuration": "Configuration",
+    "designer": "Concepteur",
     "keys": "Clés",
     "clients": "Clients"
   },
@@ -198,6 +199,173 @@
   "authTypes": {
     "AUTH_TOKEN": "Clé API",
     "OAUTH": "OAuth2 (identifiants client)",
-    "NONE": "Aucune"
+    "NONE": "Aucune",
+    "BASIC": "Authentification basique",
+    "JWT": "JWT",
+    "HMAC": "Signature HMAC"
+  },
+  "designer": {
+    "clearSection": "Effacer la section",
+    "saving": "Enregistrement...",
+    "savedToast": "Section enregistrée",
+    "saveError": "Échec de l'enregistrement de cette section",
+    "summary": {
+      "notConfigured": "Non configuré"
+    },
+    "errors": {
+      "required": "Ce champ est requis",
+      "wholeNumberInvalid": "Saisissez un nombre entier",
+      "wholeNumberTooSmall": "Doit être au moins {min}"
+    },
+    "endpoints": {
+      "title": "Points de terminaison",
+      "description": "Dérivés du document OAS généré de l'API — jamais saisis manuellement.",
+      "empty": "Aucun point de terminaison pour l'instant. Ils apparaissent dès qu'un middleware par requête (réécriture d'URL, disjoncteur, réponse simulée, transformation de corps ou validation de schéma) est configuré.",
+      "method": "Méthode",
+      "path": "Chemin",
+      "operationId": "ID d'opération"
+    },
+    "middleware": {
+      "title": "Middleware"
+    },
+    "traffic": {
+      "title": "Limites de trafic",
+      "description": "Limite de débit, throttling, délais d'expiration, taille de requête et disjoncteur.",
+      "throttle": "Throttling",
+      "retryLimit": "Limite de tentatives",
+      "retryLimitDescription": "Tentatives mises en file une fois la limite de débit atteinte. 0 désactive le throttling.",
+      "retryIntervalSeconds": "Intervalle entre tentatives (secondes)",
+      "limits": "Limites",
+      "timeoutSeconds": "Délai d'expiration amont (secondes)",
+      "timeoutDescription": "La passerelle répond 504 au-delà. Laissez vide pour aucune limite.",
+      "noLimitPlaceholder": "Aucune limite",
+      "sizeLimitBytes": "Limite de taille de requête (octets)",
+      "sizeLimitDescription": "Plafonné à {max} octets, la limite propre de l'edge. Laissez vide pour aucune limite.",
+      "sizeLimitRangeError": "Doit être compris entre 1 et la limite de taille de corps de l'edge",
+      "circuitBreaker": "Disjoncteur",
+      "circuitBreakerDescription": "Se déclenche après suffisamment d'erreurs dans un échantillon, puis observe un temps de repos avant un nouvel essai.",
+      "threshold": "Seuil d'erreur (0-1)",
+      "thresholdError": "Saisissez un nombre entre 0 et 1",
+      "sampleSize": "Taille de l'échantillon",
+      "coolDownSeconds": "Temps de repos (secondes)"
+    },
+    "loadBalancing": {
+      "title": "Répartition de charge",
+      "description": "Cibles amont supplémentaires sur lesquelles le trafic est réparti, en plus de l'URL amont propre à l'API.",
+      "targets": "Cibles",
+      "targetsDescription": "Une paire \"url poids\" par ligne.",
+      "lineFormatError": "Chaque ligne doit être \"http(s)://hôte poids\"",
+      "skipUnavailable": "Ignorer les hôtes indisponibles",
+      "skipUnavailableDescription": "Contourner une cible que le test de disponibilité a marquée comme indisponible.",
+      "summary": "{count} cibles"
+    },
+    "uptimeTests": {
+      "title": "Tests de disponibilité",
+      "description": "Sondes exécutées par la passerelle à intervalle régulier pour calculer le statut de santé de cette API.",
+      "probes": "Sondes",
+      "probesDescription": "Une ligne \"url méthode délaiSecondes\" (méthode et délai sont optionnels). {max} maximum.",
+      "lineFormatError": "Chaque ligne doit commencer par une URL http(s), avec une méthode et un délai optionnels",
+      "tooManyError": "{max} sondes maximum",
+      "summary": "{count} sondes"
+    },
+    "headerTransform": {
+      "title": "Transformation d'en-têtes",
+      "description": "En-têtes injectés dans, ou retirés de, la requête et la réponse.",
+      "request": "Requête",
+      "response": "Réponse",
+      "add": "Ajouter",
+      "addDescription": "Une ligne \"Nom: Valeur\" par en-tête.",
+      "addLineFormatError": "Chaque ligne doit être \"Nom: Valeur\"",
+      "remove": "Retirer",
+      "removeDescription": "Un nom d'en-tête par ligne."
+    },
+    "urlRewrite": {
+      "title": "Réécriture d'URL",
+      "description": "Réécrit le chemin de la requête (une fois le chemin d'écoute retiré) avant qu'il n'atteigne l'amont.",
+      "enable": "Activer la réécriture d'URL",
+      "pattern": "Motif",
+      "patternDescription": "Expression régulière comparée au chemin sans le préfixe.",
+      "rewriteTo": "Réécrire vers"
+    },
+    "bodyTransform": {
+      "title": "Transformation de corps",
+      "description": "Un template Go appliqué au corps de la requête et/ou de la réponse.",
+      "request": "Transformer le corps de la requête",
+      "response": "Transformer le corps de la réponse",
+      "format": "Format",
+      "template": "Template",
+      "templateDescription": "Un template Go. Sa sortie remplace le corps."
+    },
+    "mock": {
+      "title": "Réponse simulée",
+      "description": "Court-circuite la requête — l'amont n'est jamais appelé.",
+      "enable": "Activer la réponse simulée",
+      "statusCode": "Code de statut",
+      "codeRangeError": "Saisissez un code de statut entre 100 et 599",
+      "body": "Corps",
+      "headers": "En-têtes de réponse",
+      "summary": "Renvoie {code}"
+    },
+    "cache": {
+      "title": "Cache de réponse",
+      "description": "Met en cache les réponses amont, avec une action d'invalidation à la demande.",
+      "enable": "Activer le cache de réponse",
+      "timeoutSeconds": "Durée de vie du cache (secondes)",
+      "allSafeRequests": "Mettre en cache toute requête sûre",
+      "allSafeRequestsDescription": "Requêtes GET, HEAD et OPTIONS, quel que soit le code de réponse.",
+      "responseCodes": "Codes de réponse à mettre en cache",
+      "summary": "Durée de vie {seconds}s",
+      "invalidateNow": "Invalider le cache maintenant",
+      "invalidateNowDescription": "Supprime les réponses en cache de cette API sur tous les nœuds de la passerelle.",
+      "invalidating": "Invalidation...",
+      "invalidatedToast": "Cache invalidé ({count} clés supprimées)",
+      "invalidateNoOpToast": "Rien à invalider — le cache est déjà vide",
+      "invalidateError": "Échec de l'invalidation du cache"
+    },
+    "detailedRecording": {
+      "title": "Enregistrement détaillé",
+      "description": "Détail complet des requêtes/réponses pour les analyses de cette API.",
+      "enable": "Enregistrer le détail complet",
+      "enableDescription": "Désactivé par défaut — les enregistrements détaillés incluent en-têtes et corps."
+    },
+    "ipAccess": {
+      "title": "Contrôle d'accès par IP",
+      "description": "Autorise ou refuse les requêtes selon l'IP cliente, évaluée après normalisation par l'edge.",
+      "allow": "Liste d'autorisation",
+      "block": "Liste de refus",
+      "oneLinePerEntry": "Une IP ou un CIDR par ligne.",
+      "summary": "{count} entrées"
+    },
+    "requestValidation": {
+      "title": "Validation de requête",
+      "description": "Un schéma JSON que le corps de la requête doit respecter. Une violation est rejetée par la passerelle avec le code 422.",
+      "schema": "Schéma JSON",
+      "schemaDescription": "Laissez vide pour désactiver la validation.",
+      "invalidJson": "Saisissez un JSON valide",
+      "mustBeObject": "Le schéma doit être un objet JSON"
+    },
+    "authentication": {
+      "title": "Authentification",
+      "description": "Le schéma d'authentification appliqué par cette API, et l'en-tête qui porte l'identifiant.",
+      "headerName": "Nom de l'en-tête d'authentification",
+      "headerNameDescription": "Par défaut Authorization. Ce réglage remplace cet en-tête plutôt que d'en ajouter un autre.",
+      "headerNameInvalid": "Utilisez uniquement des lettres, chiffres et tirets",
+      "hmacParked": "La signature HMAC n'est pas encore disponible — le mapper existe, mais aucune variante de chaîne de signature n'a été vérifiée comme fonctionnelle de bout en bout."
+    },
+    "testRequest": {
+      "title": "Requête de test",
+      "description": "Exécute une requête d'exemple contre la définition stockée de cette API.",
+      "method": "Méthode",
+      "path": "Chemin",
+      "body": "Corps",
+      "targetUrl": "Amont de substitution",
+      "targetUrlDescription": "Teste vers un amont différent sans modifier l'API en production. Vérifié avec la même liste de refus que l'URL amont propre de l'API.",
+      "pathMustStartWithSlash": "Le chemin doit commencer par /",
+      "run": "Exécuter",
+      "running": "Exécution...",
+      "close": "Fermer",
+      "responseCode": "Code de réponse",
+      "error": "Échec de l'exécution de la requête de test"
+    }
   }
 }

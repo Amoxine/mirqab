@@ -65,6 +65,16 @@ export interface ApiDetail {
   lastSyncedAt: Date | null;
   healthStatus: ApiHealthStatus;
   config: ApiConfig;
+  /**
+   * The generated Tyk OAS document (WP17 Designer): `mapToTykOas` output, regenerated and
+   * overwritten on every sync tick — NOT an imported spec's original shape (that's `sourceOasDocument`,
+   * unbuilt — see the WP17 plan note). `paths` is empty unless per-operation middleware (circuit
+   * breaker, URL rewrite, mock, body transform, schema validation) is configured, in which case it
+   * holds one synthesised catch-all path (`/.*`) per method — this product proxies whole upstreams
+   * rather than describing per-endpoint contracts, so that's genuinely everything there is to list
+   * until OAS import (WP24) lands. `null` for a CLASSIC-format API.
+   */
+  oasDocument: Prisma.JsonValue | null;
   keyCount: number;
   /** WP16: null on a plain API and on a family's default; set on a child, pointing at its default. */
   parentApiId: string | null;
@@ -204,6 +214,7 @@ function toApiDetail(row: ApiRow): ApiDetail {
     lastSyncedAt: row.lastSyncedAt,
     healthStatus: row.healthStatus,
     config: readConfig(row.config),
+    oasDocument: row.oasDocument,
     keyCount: row._count.apiKeys,
     parentApiId: row.parentApiId,
     versionName: row.versionName,

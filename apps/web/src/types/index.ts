@@ -14,6 +14,8 @@ export type {
   AuthMe,
   ApiSyncStatus,
   ApiConfig,
+  ApiConfigHeader,
+  OasDocument,
   GatewayStatus,
   AnalyticsRange,
   AnalyticsMetric,

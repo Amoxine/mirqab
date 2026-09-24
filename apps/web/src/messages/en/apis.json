@@ -51,6 +51,7 @@
   "tabs": {
     "overview": "Overview",
     "configuration": "Configuration",
+    "designer": "Designer",
     "keys": "Keys",
     "clients": "Clients"
   },
@@ -198,6 +199,173 @@
   "authTypes": {
     "AUTH_TOKEN": "API Key",
     "OAUTH": "OAuth2 (client credentials)",
-    "NONE": "None"
+    "NONE": "None",
+    "BASIC": "Basic auth",
+    "JWT": "JWT",
+    "HMAC": "HMAC signing"
+  },
+  "designer": {
+    "clearSection": "Clear section",
+    "saving": "Saving...",
+    "savedToast": "Section saved",
+    "saveError": "Failed to save this section",
+    "summary": {
+      "notConfigured": "Not configured"
+    },
+    "errors": {
+      "required": "This field is required",
+      "wholeNumberInvalid": "Enter a whole number",
+      "wholeNumberTooSmall": "Must be at least {min}"
+    },
+    "endpoints": {
+      "title": "Endpoints",
+      "description": "Derived from the API's generated OAS document — not hand-entered.",
+      "empty": "No endpoints yet. They appear once a per-request middleware (URL rewrite, circuit breaker, mock response, body transform or schema validation) is configured.",
+      "method": "Method",
+      "path": "Path",
+      "operationId": "Operation ID"
+    },
+    "middleware": {
+      "title": "Middleware"
+    },
+    "traffic": {
+      "title": "Traffic limits",
+      "description": "Rate limit, throttling, timeouts, request size and the circuit breaker.",
+      "throttle": "Throttle",
+      "retryLimit": "Retry limit",
+      "retryLimitDescription": "Queued retries once the rate limit is hit. 0 disables throttling.",
+      "retryIntervalSeconds": "Retry interval (seconds)",
+      "limits": "Limits",
+      "timeoutSeconds": "Upstream timeout (seconds)",
+      "timeoutDescription": "The gateway answers 504 past this. Leave blank for no limit.",
+      "noLimitPlaceholder": "No limit",
+      "sizeLimitBytes": "Request size limit (bytes)",
+      "sizeLimitDescription": "Capped at {max} bytes, the edge's own limit. Leave blank for no limit.",
+      "sizeLimitRangeError": "Must be between 1 and the edge's body-size limit",
+      "circuitBreaker": "Circuit breaker",
+      "circuitBreakerDescription": "Trips after enough errors in a sample, then cools down before trying again.",
+      "threshold": "Error threshold (0-1)",
+      "thresholdError": "Enter a number between 0 and 1",
+      "sampleSize": "Sample size",
+      "coolDownSeconds": "Cool-down (seconds)"
+    },
+    "loadBalancing": {
+      "title": "Load balancing",
+      "description": "Extra upstream targets traffic is spread across, beyond the API's own upstream URL.",
+      "targets": "Targets",
+      "targetsDescription": "One \"url weight\" pair per line.",
+      "lineFormatError": "Each line must be \"http(s)://host weight\"",
+      "skipUnavailable": "Skip unavailable hosts",
+      "skipUnavailableDescription": "Route around a target the uptime test has marked down.",
+      "summary": "{count} targets"
+    },
+    "uptimeTests": {
+      "title": "Uptime tests",
+      "description": "Probes the gateway runs on an interval to compute this API's health status.",
+      "probes": "Probes",
+      "probesDescription": "One \"url method timeoutSeconds\" per line (method and timeout are optional). At most {max}.",
+      "lineFormatError": "Each line must start with an http(s) URL, with an optional method and timeout",
+      "tooManyError": "At most {max} probes",
+      "summary": "{count} probes"
+    },
+    "headerTransform": {
+      "title": "Header transform",
+      "description": "Headers injected into, or stripped from, the request and the response.",
+      "request": "Request",
+      "response": "Response",
+      "add": "Add",
+      "addDescription": "One \"Name: Value\" per line.",
+      "addLineFormatError": "Each line must be \"Name: Value\"",
+      "remove": "Remove",
+      "removeDescription": "One header name per line."
+    },
+    "urlRewrite": {
+      "title": "URL rewrite",
+      "description": "Rewrites the stripped request path before it reaches the upstream.",
+      "enable": "Enable URL rewrite",
+      "pattern": "Pattern",
+      "patternDescription": "Regex matched against the stripped path.",
+      "rewriteTo": "Rewrite to"
+    },
+    "bodyTransform": {
+      "title": "Body transform",
+      "description": "A Go template applied to the request and/or response body.",
+      "request": "Transform request body",
+      "response": "Transform response body",
+      "format": "Format",
+      "template": "Template",
+      "templateDescription": "A Go template. Its output replaces the body."
+    },
+    "mock": {
+      "title": "Mock response",
+      "description": "Short-circuits the request — the upstream is never called.",
+      "enable": "Enable mock response",
+      "statusCode": "Status code",
+      "codeRangeError": "Enter a status code between 100 and 599",
+      "body": "Body",
+      "headers": "Response headers",
+      "summary": "Returns {code}"
+    },
+    "cache": {
+      "title": "Response cache",
+      "description": "Caches upstream responses, plus an on-demand invalidation action.",
+      "enable": "Enable response cache",
+      "timeoutSeconds": "Cache lifetime (seconds)",
+      "allSafeRequests": "Cache every safe request",
+      "allSafeRequestsDescription": "GET, HEAD and OPTIONS requests, regardless of response code.",
+      "responseCodes": "Cacheable response codes",
+      "summary": "{seconds}s lifetime",
+      "invalidateNow": "Invalidate cache now",
+      "invalidateNowDescription": "Drops this API's cached responses on every gateway node.",
+      "invalidating": "Invalidating...",
+      "invalidatedToast": "Cache invalidated ({count} keys dropped)",
+      "invalidateNoOpToast": "Nothing to invalidate — the cache is already empty",
+      "invalidateError": "Failed to invalidate the cache"
+    },
+    "detailedRecording": {
+      "title": "Detailed recording",
+      "description": "Full request/response detail for this API's analytics.",
+      "enable": "Record full detail",
+      "enableDescription": "Off by default — detailed records carry headers and bodies."
+    },
+    "ipAccess": {
+      "title": "IP access control",
+      "description": "Allow or deny requests by client IP, evaluated after the edge normalises the address.",
+      "allow": "Allow list",
+      "block": "Deny list",
+      "oneLinePerEntry": "One IP or CIDR per line.",
+      "summary": "{count} entries"
+    },
+    "requestValidation": {
+      "title": "Request validation",
+      "description": "A JSON Schema the request body must satisfy. A violation is rejected by the gateway with 422.",
+      "schema": "JSON Schema",
+      "schemaDescription": "Leave blank to disable validation.",
+      "invalidJson": "Enter valid JSON",
+      "mustBeObject": "The schema must be a JSON object"
+    },
+    "authentication": {
+      "title": "Authentication",
+      "description": "Which auth scheme this API enforces, and which header carries the credential.",
+      "headerName": "Auth header name",
+      "headerNameDescription": "Defaults to Authorization. Setting this replaces that header rather than adding an alternative.",
+      "headerNameInvalid": "Use only letters, digits and hyphens",
+      "hmacParked": "HMAC signing is not available yet — the mapper exists, but no signing-string variant has been verified working end to end."
+    },
+    "testRequest": {
+      "title": "Test request",
+      "description": "Runs a sample request against this API's own stored definition.",
+      "method": "Method",
+      "path": "Path",
+      "body": "Body",
+      "targetUrl": "Upstream override",
+      "targetUrlDescription": "Test against a different upstream without editing the live API. Checked against the same deny list as the API's own upstream URL.",
+      "pathMustStartWithSlash": "Path must start with /",
+      "run": "Run",
+      "running": "Running...",
+      "close": "Close",
+      "responseCode": "Response code",
+      "error": "Failed to run the test request"
+    }
   }
 }

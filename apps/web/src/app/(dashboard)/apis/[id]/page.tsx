@@ -10,6 +10,7 @@ import { ApiFormSheet } from '@/components/apis/api-form-sheet';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
 import { ClientsTab } from '@/components/apis/clients-tab';
 import { DeleteApiDialog } from '@/components/apis/delete-api-dialog';
+import { DesignerTab } from '@/components/apis/designer/designer-tab';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
@@ -249,6 +250,7 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
         <TabsList>
           <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
           <TabsTrigger value="configuration">{t('tabs.configuration')}</TabsTrigger>
+          <TabsTrigger value="designer">{t('tabs.designer')}</TabsTrigger>
           {/* An OAUTH api authenticates JWTs, so a Tyk auth-token key could never work on it. */}
           {can('key:read') && !isOAuth && <TabsTrigger value="keys">{t('tabs.keys')}</TabsTrigger>}
           {can('key:read') && isOAuth && <TabsTrigger value="clients">{t('tabs.clients')}</TabsTrigger>}
@@ -316,6 +318,10 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
                 : undefined
             }
           />
+        </TabsContent>
+
+        <TabsContent value="designer" className="mt-4">
+          <DesignerTab api={apiDef} />
         </TabsContent>
 
         {can('key:read') && !isOAuth && (

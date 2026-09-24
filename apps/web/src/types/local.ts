@@ -93,7 +93,19 @@ export type AuditAction =
 
 export type ApiSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED';
 
-/** `ApiDefinition.config` JSON (spec §3.2). `rateLimit.rate` 0 disables the per-API limit. */
+/** name/value pair, e.g. one header add or one mock response header. */
+export interface ApiConfigHeader {
+  name: string;
+  value: string;
+}
+
+/**
+ * `ApiDefinition.config` JSON (spec §3.2). Mirrors `apps/api/.../dto/api-config.dto.ts` field for
+ * field — that DTO is the source of truth; this is a plain-data echo of its shape for the frontend,
+ * kept in sync by hand since the two apps do not share a types package. `rateLimit.rate` 0 disables
+ * the per-API limit. `null` on a nullable section clears it on PATCH; an absent key leaves it as-is
+ * (section-level merge, `ApiService.update`).
+ */
 export interface ApiConfig {
   rateLimit?: { rate: number; per: number } | null;
   cors?: {
@@ -107,6 +119,58 @@ export interface ApiConfig {
     maxAge: number;
   } | null;
   doNotTrack?: boolean;
+  jwt?: { jwksUrl: string; issuer: string; identityField?: string } | null;
+  /** WP15a */
+  throttle?: { retryLimit: number; intervalSeconds: number } | null;
+  /** WP15a, seconds. The gateway answers 504 past this against the upstream. */
+  timeoutSeconds?: number | null;
+  /** WP15a */
+  circuitBreaker?: { threshold: number; sampleSize: number; coolDownSeconds: number } | null;
+  /** WP15a, bytes. Capped by the DTO at the edge's own body-limit constant. */
+  requestSizeLimitBytes?: number | null;
+  /** WP15a */
+  loadBalancing?: { targets: { url: string; weight: number }[]; skipUnavailableHosts?: boolean } | null;
+  /** WP15a, at most 10 probes. Computes the API's `healthStatus`. */
+  uptimeTests?: { url: string; method?: string; timeoutSeconds?: number }[] | null;
+  /** WP15b */
+  transformRequestHeaders?: { add?: ApiConfigHeader[]; remove?: string[] } | null;
+  /** WP15b */
+  transformResponseHeaders?: { add?: ApiConfigHeader[]; remove?: string[] } | null;
+  /** WP15b */
+  urlRewrite?: { pattern: string; rewriteTo: string } | null;
+  /** WP15b. When set, the upstream is never called. */
+  mock?: { code: number; body: string; headers?: ApiConfigHeader[] } | null;
+  /** WP15b */
+  transformRequestBody?: { format: 'json' | 'xml'; body: string } | null;
+  /** WP15b */
+  transformResponseBody?: { format: 'json' | 'xml'; body: string } | null;
+  /** WP15b */
+  cache?: { timeoutSeconds: number; cacheAllSafeRequests?: boolean; cacheResponseCodes?: number[] } | null;
+  /** WP15c, evaluated against the client IP (the edge replaces X-Forwarded-For, not appends to it). */
+  ipAccessControl?: { allow?: string[]; block?: string[] } | null;
+  /** WP15c. JSON Schema; a violating request body is rejected by the gateway with 422. */
+  validateRequestSchema?: Record<string, unknown> | null;
+  /** WP15c. Defaults to Authorization; setting this REPLACES that header rather than adding to it. */
+  authHeaderName?: string;
+  /**
+   * WP15c. PARKED (worker-1, WP15c): mapper is written but no signing-string variant produced a
+   * working 200 against Tyk OSS 5.15.0 — the Designer intentionally has no editable control for
+   * this, only a disabled placeholder, so it never implies HMAC auth works end to end.
+   */
+  hmac?: { allowedAlgorithms?: string[]; allowedClockSkewMs?: number } | null;
+  /** WP15b. Off by default and per-API on purpose — detailed records carry headers and bodies. */
+  detailedRecording?: boolean;
+}
+
+/**
+ * The generated Tyk OAS document (`GET /apis/:id`, WP17). `paths` is empty unless per-operation
+ * middleware is configured, in which case it holds one synthesised catch-all path (`/.*`) per
+ * method — this product proxies whole upstreams rather than describing per-endpoint contracts, so
+ * that already is the complete endpoint list until OAS import (WP24) lands.
+ */
+export interface OasDocument {
+  paths?: Record<string, Record<string, { operationId?: string }>>;
+  [key: string]: unknown;
 }
 
 // ─── Gateway status (`GET /gateway/status`, spec §5.2) ────────────

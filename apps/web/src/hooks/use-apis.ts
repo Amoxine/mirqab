@@ -7,6 +7,7 @@ import type {
   ApiKeyStatus,
   ApiStatus,
   ApiSyncStatus,
+  OasDocument,
   PaginatedResponse,
 } from '@/types';
 
@@ -28,6 +29,8 @@ export interface ApiDefinition {
   syncError: string | null;
   lastSyncedAt: string | null;
   config: ApiConfig | null;
+  /** WP17: the generated Tyk OAS document. `null` for a CLASSIC-format API or one never synced. */
+  oasDocument: OasDocument | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,7 +45,10 @@ export interface CreateApiInput {
   slug: string;
   proxyUrl: string;
   listenPath: string;
-  authType: 'NONE' | 'AUTH_TOKEN' | 'OAUTH';
+  // JWT and HMAC are deliberately absent: JWT has no policy mapping the create/edit form offers
+  // (api-form-schema.ts), and HMAC is WP15c-PARKED (no working signing-string variant) — the
+  // Designer's Authentication Sheet offers exactly this set for the same reasons.
+  authType: 'NONE' | 'AUTH_TOKEN' | 'OAUTH' | 'BASIC';
   config: ApiConfig;
 }
 
@@ -146,5 +152,45 @@ export function useSyncApi() {
   return useMutation({
     mutationFn: (id: string) => api.post<ApiDetail>(`/apis/${id}/sync`, {}).then((res) => res.data),
     onSuccess: () => invalidateApis(qc),
+  });
+}
+
+/** `POST /apis/:id/debug` request body (Designer's "Test request"). */
+export interface DebugRequestInput {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+  path: string;
+  headers?: Record<string, string>;
+  body?: string;
+  /** Overrides the upstream for this test only; validated by the same SSRF deny list as proxyUrl. */
+  targetUrl?: string;
+}
+
+/** What `POST /tyk/debug` answers with — the upstream response plus the gateway's own log lines. */
+export interface DebugResult {
+  response?: { code?: number; headers?: Record<string, string>; body?: string };
+  logs?: { mw?: string; msg?: string; level?: string }[];
+  [key: string]: unknown;
+}
+
+/**
+ * Runs a sample request against the API's own stored definition. No cache invalidation on success —
+ * a test request changes nothing about the API itself, so there is nothing to refetch.
+ */
+export function useDebugApi(id: string) {
+  return useMutation({
+    mutationFn: (data: DebugRequestInput) => api.post<DebugResult>(`/apis/${id}/debug`, data).then((res) => res.data),
+  });
+}
+
+export interface InvalidateCacheResult {
+  invalidated: boolean;
+  keysDropped: number;
+}
+
+/** `POST /apis/:id/cache/invalidate` — drops this API's cached responses on every gateway node. */
+export function useInvalidateCache(id: string) {
+  return useMutation({
+    mutationFn: () =>
+      api.post<InvalidateCacheResult>(`/apis/${id}/cache/invalidate`, {}).then((res) => res.data),
   });
 }
