@@ -25,9 +25,23 @@
  * real browser at all) — a hand-rolled jar + manual redirect-follow over plain `fetch` says that
  * directly, where a Playwright `request` fixture bound to one `baseURL` would not.
  *
+ * This is also the POST-DEPLOY check for `web` — run it after every redeploy of that container. The
+ * WP21 regression (a rebuilt web image whose Prisma engine sat where `/oauth2/login` did not look)
+ * left `/` and the health probe answering while every login returned 500, so nothing short of a real
+ * login notices it; step 3's "lands back on the dashboard" is the check that turns that 500 red.
+ *
  * Requires the full stack up (`docker compose -f infra/docker-compose.yml ps` — api, web, hydra,
  * kratos, keto, postgres all healthy) and DATABASE_URL pointing at the HOST-published Postgres
  * (compose's own DATABASE_URL uses the in-network `postgres` hostname, which does not resolve here).
+ *
+ * Defaults target the TLS edge (https, host-published ports). The edge's CA is git-ignored and not in
+ * the system trust store, so the package script points NODE_EXTRA_CA_CERTS at `infra/edge/root.crt`
+ * (see infra/edge/README.md for how to export it). Against a plain-http dev stack, override the
+ * URLs: APP_URL, KRATOS_PUBLIC_URL, HYDRA_PUBLIC_URL, API_URL (and KRATOS_ADMIN_URL).
+ *
+ * It creates a throwaway identity + User and removes both. Its LOGIN audit row is deliberately LEFT
+ * (audit rows are not ours to delete on a shared stack) and its id is printed; the row's user_id
+ * reads NULL afterwards because audit_logs.user_id is ON DELETE SET NULL.
  *
  * Run it:
  *   pnpm --filter @open-gateway/api test:e2e:login
@@ -37,10 +51,11 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { prisma } = require('@open-gateway/database');
 
-const WEB_URL = process.env.APP_URL ?? 'http://localhost:33000';
-const KRATOS_PUBLIC_URL = process.env.KRATOS_PUBLIC_URL ?? 'http://localhost:33012';
+const WEB_URL = process.env.APP_URL ?? 'https://localhost:33000';
+const KRATOS_PUBLIC_URL = process.env.KRATOS_PUBLIC_URL ?? 'https://localhost:33012';
 const KRATOS_ADMIN_URL = process.env.KRATOS_ADMIN_URL ?? 'http://127.0.0.1:33013';
-const API_URL = process.env.API_URL ?? 'http://localhost:33001';
+const HYDRA_PUBLIC_URL = process.env.HYDRA_PUBLIC_URL ?? 'https://localhost:33010';
+const API_URL = process.env.API_URL ?? 'https://localhost:33001';
 
 const results = [];
 const check = (label, actual, expected) => {
@@ -143,8 +158,15 @@ try {
   check('a refresh_token cookie was set', Boolean(jar.get('refresh_token')), true);
 
   const accessToken = jar.get('access_token');
+  // Nothing below can say anything useful without a token; stop here and let `catch` report it.
+  if (!accessToken) throw new Error('no access_token cookie: the login did not complete');
   const claims = decodeJwtPayload(accessToken);
-  check('token issuer is this Hydra', claims.iss, 'http://localhost:33010/');
+  // Compared with what Hydra itself advertises, not a literal: the issuer is configuration
+  // (infra/ory/hydra/hydra.yml urls.self.issuer) and moved from http to https with the edge.
+  const discovery = await (await fetch(`${HYDRA_PUBLIC_URL}/.well-known/openid-configuration`)).json();
+  // Without this a missing `issuer` would compare undefined === undefined and pass.
+  if (typeof discovery.issuer !== 'string') throw new Error(`${HYDRA_PUBLIC_URL} advertises no issuer`);
+  check('token issuer is the one this Hydra advertises', claims.iss, discovery.issuer);
   check('token carries no email/role claims (see docs/security.md JWT Security)', claims.email, undefined);
 
   // 4. GET /auth/me resolves the session end to end: Hydra JWKS verification -> Postgres lookup.
@@ -161,9 +183,22 @@ try {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   check('tenant-scoped route rejects a tenant-less user', apisRes.status, 403);
+} catch (err) {
+  // A throw is a failure, not a setup nicety: record it so the exit code is non-zero and say why
+  // (`fetch failed` alone hides the cause — e.g. UNABLE_TO_VERIFY_LEAF_SIGNATURE when the edge CA
+  // is not trusted).
+  const cause = err?.cause?.code ?? err?.cause?.message;
+  console.log(`ABORTED: ${err?.message ?? err}${cause ? ` (${cause})` : ''}`);
+  results.push({ label: 'script ran to completion', ok: false });
 } finally {
   // Cleanup: the Kratos identity and the Postgres User row resolveOrProvisionUser created for it.
   if (kratosIdentityId) {
+    // Read the audit ids BEFORE the user goes: deleting it sets their user_id to NULL.
+    const user = await prisma.user.findUnique({ where: { kratosIdentityId }, select: { id: true } }).catch(() => null);
+    const rows = user
+      ? await prisma.auditLog.findMany({ where: { userId: user.id }, select: { id: true, action: true } }).catch(() => [])
+      : [];
+    console.log(`audit rows left behind: ${rows.map((r) => `#${r.id} ${r.action}`).join(', ') || 'none'}`);
     await fetch(`${KRATOS_ADMIN_URL}/admin/identities/${kratosIdentityId}`, { method: 'DELETE' }).catch(() => {});
     await prisma.user.deleteMany({ where: { kratosIdentityId } }).catch(() => {});
   }

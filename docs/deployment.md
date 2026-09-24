@@ -47,6 +47,29 @@ pnpm infra:logs
 pnpm infra:down
 ```
 
+### After redeploying `web`: run the login check
+
+A rebuilt `web` container can serve pages and pass its health checks while every login fails: an
+image once shipped with the Prisma engine where `/oauth2/login` did not look, so that route returned
+500 and nothing that only fetched a page noticed. After any rebuild or redeploy of `web`, run:
+
+```bash
+pnpm --filter @open-gateway/api test:e2e:login   # expect "11/11 checks passed" and exit 0
+```
+
+It performs a real Kratos → Hydra → `web` login as a throwaway user against the running stack, then
+deletes that user and its Kratos identity. A non-zero exit, or a line starting `ABORTED:`, means the
+redeploy is not done. Notes:
+
+- It targets the TLS edge (`https://localhost:33000` and friends) and trusts the edge CA through
+  `infra/edge/root.crt` (export it as described in `infra/edge/README.md`). For another host or a
+  plain-http stack, set `APP_URL`, `KRATOS_PUBLIC_URL`, `HYDRA_PUBLIC_URL` and `API_URL`.
+- It needs the host-published Postgres (`127.0.0.1:33002`), so it runs on the Docker host, not in CI.
+- It leaves its `LOGIN` audit row and prints the id (`audit rows left behind: #N LOGIN`); the row's
+  user reads NULL afterwards because the user is deleted.
+- The staging CD health check (see CI/CD Pipeline below) fetches the API health URL and one page; it
+  never completes a login, so it would not catch this.
+
 ### Production Docker Compose
 
 Create a `docker-compose.prod.yml` file on your production server:
