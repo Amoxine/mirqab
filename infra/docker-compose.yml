@@ -91,6 +91,18 @@ x-tyk-gateway-env: &tyk-gateway-env
     TYK_GW_POLICIES_POLICYSOURCE: file
     TYK_GW_POLICIES_POLICYPATH: /opt/tyk-gateway/policies
     TYK_GW_POLICIES_ALLOWEXPLICITPOLICYID: "true"
+    # OpenTelemetry (WP20). The gateway is the MIDDLE span of the chain: it continues the trace the
+    # edge started (W3C traceparent, injected by Caddy's `tracing` directive) and propagates it to
+    # the upstream, which is what lets one request read as edge -> gateway -> api -> postgres.
+    # In the anchor, not inline, because every node must run identical config (see above).
+    TYK_GW_OPENTELEMETRY_ENABLED: "true"
+    TYK_GW_OPENTELEMETRY_EXPORTER: grpc
+    TYK_GW_OPENTELEMETRY_ENDPOINT: otel-collector:4317
+    # `simple` exports each span as it ends. A batch processor would make every trace assertion in
+    # §6 depend on a flush interval, and this gateway's span volume is nowhere near needing batching.
+    TYK_GW_OPENTELEMETRY_SPANPROCESSORTYPE: simple
+    TYK_GW_OPENTELEMETRY_SAMPLING_TYPE: AlwaysOn
+    TYK_GW_OPENTELEMETRY_RESOURCENAME: open-gateway-tyk
 
 services:
   # ─── Edge: TLS termination + WAF (WP26b) ───────────────
@@ -111,6 +123,12 @@ services:
       # The host's LAN address, so `tls internal` also issues for https://<lan-ip>:<port>. Unset,
       # the listeners still answer on localhost. install.sh writes it into infra/.env.
       EDGE_LAN_IP: ${EDGE_LAN_IP:-127.0.0.1}
+      # WP20 — Caddy's `tracing` directive has no Caddyfile options for the exporter; it is
+      # configured entirely by the OTel SDK's own environment variables. Default protocol is gRPC,
+      # stated here rather than relied on.
+      OTEL_SERVICE_NAME: open-gateway-edge
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
     ports:
       - "33000:33000"
       - "33001:33001"
@@ -122,6 +140,10 @@ services:
       # Named volume, not bind mount: it holds the internal CA's private key, and losing it mints a
       # new root that invalidates every client which installed the old one.
       - caddy_data:/data
+      # WP20: the WAF's per-rule detections, written here by the `log waf` block in the Caddyfile
+      # and tailed by the otel-collector. Shared volume rather than the docker log driver, because
+      # reading container stdout would mean giving the collector the docker socket.
+      - edge_logs:/var/log/caddy
     healthcheck:
       # Unlike the Tyk images this one is alpine-based, so it can run its own probe. Caddy's admin
       # API is loopback-inside-the-container only; it is never published.
@@ -372,6 +394,64 @@ services:
     networks:
       - open-gateway-network
 
+  # ─── OpenTelemetry Collector (WP20) ────────────────────
+  # Traces in from the edge, the gateway and the API; WAF detections in from the edge's log file and
+  # out as a Prometheus counter. Config and reasoning: observability/otel-collector.yaml.
+  #
+  # `expose:` only, like everything else since WP26b. Nothing outside this network should be able to
+  # post spans into it, and it is not routed through the edge.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.121.0
+    container_name: open-gateway-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    expose:
+      - "4317"
+      - "4318"
+      - "8889"
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      # Read-only: the collector tails the edge's WAF log, it never writes there.
+      - edge_logs:/var/log/caddy:ro
+    # Traces go to this container's stdout (`debug` exporter, verbosity detailed) because there is
+    # no trace backend yet — Grafana/Tempo are cut, §9. Read them with
+    # `docker logs open-gateway-otel-collector | grep <trace id>`. The cap is what makes that safe:
+    # detailed span output on an unbounded json-file driver is a disk-filling accident waiting to
+    # happen, and this is the whole reason a file-on-a-volume sink was not used instead (see
+    # observability/otel-collector.yaml).
+    logging:
+      driver: json-file
+      options:
+        max-size: "32m"
+        max-file: "3"
+    networks:
+      - open-gateway-network
+
+  # ─── Prometheus (WP20) ─────────────────────────────────
+  # Scrape config in observability/prometheus.yml, alert rules in observability/rules/.
+  # Unpublished on purpose — §6's curl container is how it is queried, same as the Tyk control API.
+  # There is no Alertmanager and no Grafana (§9): "the alert fires" is read off
+  # `ALERTS{alertstate="firing"}` through the query API.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: open-gateway-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 15d of a dev stack's series is well under a gigabyte and outlives any incident here.
+      - --storage.tsdb.retention.time=15d
+    expose:
+      - "9090"
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - otel-collector
+    networks:
+      - open-gateway-network
+
   # ─── NestJS API ────────────────────────────────────────
   api:
     build:
@@ -428,8 +508,30 @@ services:
       PROXY_DENY_HOSTS: ""
       # Pump liveness probe for GET /api/analytics/health (unset = reported as not running)
       PUMP_HEALTH_URL: http://tyk-pump:8083/health
+      # WP20 — tracing is OFF unless this is set (apps/api/src/tracing.ts), so tests and a bare
+      # `pnpm dev` need no collector. HTTP/protobuf rather than gRPC to keep a native dependency out
+      # of the alpine image; the collector listens on both.
+      OTEL_SERVICE_NAME: open-gateway-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # The edge's exported root CA, read on every /api/metrics scrape for the R14 expiry gauge.
+      EDGE_ROOT_CERT_PATH: /etc/open-gateway/edge/root.crt
     expose:
       - "4000"
+    volumes:
+      # The DIRECTORY, not the file. `infra/edge/root.crt` is git-ignored and produced per install
+      # (`docker compose cp edge:/data/caddy/pki/authorities/local/root.crt`, see
+      # infra/edge/README.md), and a bind mount of a path that does not exist yet would have Docker
+      # create an empty DIRECTORY there. Mounting `./edge` — which is always present — turns "not
+      # exported yet" into a plain ENOENT, so the gauge is simply absent instead of the container
+      # coming up around a phantom directory.
+      #
+      # Read-only, and only ever the public certificate: never the `caddy_data` volume, which holds
+      # the CA's PRIVATE key next to it. That file is the artifact clients are told to install, so
+      # alerting on its expiry alerts on exactly what they trust.
+      #
+      # It has to be world-readable — `docker compose cp` preserves Caddy's 0600 and this container
+      # runs as uid 1001, so the README's export step ends with `chmod 644`.
+      - ./edge:/etc/open-gateway/edge:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -707,6 +809,11 @@ volumes:
     driver: local
   # Caddy's internal CA (pki/authorities/local/*) plus its cert store. See the edge service above.
   caddy_data:
+    driver: local
+  # WP20: the edge's WAF detection log (edge writes, otel-collector tails) and Prometheus' TSDB.
+  edge_logs:
+    driver: local
+  prometheus_data:
     driver: local
 
 networks:

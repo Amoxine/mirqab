@@ -1,0 +1,100 @@
+# Alert rules (WP20). Six rules, one per detection signal §5 names.
+#
+# There is no Alertmanager (§9): "the alert fires" means `ALERTS{alertstate="firing"}` comes back
+# from the query API. Every rule below has been driven to `firing` against the running stack, by
+# real traffic or by a named fault injection — a rule nobody has ever seen fire is a rule that does
+# not work yet.
+#
+# Thresholds marked PLACEHOLDER need a baseline from real traffic before they mean anything; they
+# are set so the condition is reachable, not so it is correct for production volume.
+
+groups:
+  - name: open-gateway
+    rules:
+      # ── 1. Latency ──────────────────────────────────────────────────────────
+      # tyk-pump's `tyk_latency` buckets are MILLISECONDS, not seconds (verified on pump 1.17.0),
+      # so "p95 > 1s" is `> 1000`. `type="total"` is what the client experienced (gateway +
+      # upstream); `type="gateway"` alone would hide a slow upstream, which is the usual cause.
+      - alert: GatewayLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le, api) (rate(tyk_latency_bucket{type="total"}[5m]))) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'p95 latency above 1s for {{ $labels.api }}'
+          description: 'p95 total latency is {{ $value | humanize }}ms, sustained for 5 minutes.'
+
+      # ── 2. Redis evictions (R3) ─────────────────────────────────────────────
+      # The instance runs `noeviction`, so in steady state this counter cannot move: an eviction
+      # here means the policy was changed out from under the deployment, and the failure mode it
+      # restores is the silent one — a live API key simply stops authenticating.
+      - alert: RedisEvictingKeys
+        expr: redis_evicted_keys > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Redis {{ $labels.redis }} has evicted keys'
+          description: '{{ $value }} keys evicted. With maxmemory-policy=noeviction this should be impossible; a live session or quota counter may have been dropped.'
+
+      # ── 3. Redis memory (R3) ────────────────────────────────────────────────
+      # `(redis_maxmemory_bytes > 0)` is a filter, not a comparison: an unbounded instance reports
+      # maxmemory 0 and would otherwise divide to +Inf and fire forever.
+      #
+      # One series per instance, so this is "both instances" whenever there are two. There is one
+      # today — spike S4(c) proved Tyk OSS 5.15 ignores TYK_GW_ANALYTICSSTORAGE_*, so the keys /
+      # analytics-buffer split R3 assumes does not exist (see infra/docker-compose.yml).
+      - alert: RedisMemoryHigh
+        expr: redis_used_memory_bytes / (redis_maxmemory_bytes > 0) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Redis {{ $labels.redis }} above 80% of maxmemory'
+          description: 'used_memory/maxmemory is {{ $value | humanizePercentage }}. Under noeviction the next step is hard write failures (ERR OOM), not eviction.'
+
+      # ── 4. WAF would-block rate (R16) ───────────────────────────────────────
+      # 949110 "Inbound Anomaly Score Exceeded" is the rule that decides a block. The engine is
+      # DetectionOnly (WP26b), so this counts requests that WOULD have been blocked; it becomes the
+      # literal block rate, with no change here, if SecRuleEngine is ever flipped on.
+      #
+      # A spike is the signature of a CRS false positive breaking real traffic: 403s at the edge
+      # that never reach Tyk, so `tyk_http_requests_total` stays flat and the dashboard shows
+      # nothing at all.
+      #
+      # PLACEHOLDER threshold: set it from the detect-first week's own baseline (WP26b, §9).
+      - alert: CorazaWouldBlockSpike
+        expr: sum(increase(coraza_rule_detections_total{rule_id="949110"}[5m])) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'WAF would-block rate spiking at the edge'
+          description: '{{ $value | humanize }} requests in 5 minutes crossed the CRS anomaly threshold. Check infra/edge/Caddyfile exclusions before assuming an attack.'
+
+      # ── 5. Edge certificate expiry (R14) ────────────────────────────────────
+      # The ROOT only, and that is measured rather than lazy: Caddy's `tls internal` issues 12-HOUR
+      # leaves off a 7-DAY intermediate (verified on the running edge), so a 14-day threshold is
+      # permanently true for both and would be a permanently firing alert. The root is the one
+      # certificate where 14 days is a real warning — it lasts 10 years, every client installs it by
+      # hand (infra/edge/README.md), and its expiry breaks all of them at once.
+      - alert: EdgeRootCertificateExpiringSoon
+        expr: edge_certificate_expiry_timestamp_seconds{role="root"} - time() < 14 * 24 * 3600
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Edge root CA {{ $labels.cn }} expires within 14 days'
+          description: 'Every client that installed infra/edge/root.crt stops trusting the edge when this expires.'
+
+      # ── 6. Node drift (R2) ──────────────────────────────────────────────────
+      # ReconcileService recomputes syncState every 60s, so `for: 2m` is two ticks — long enough
+      # that a write in flight to three nodes does not page anyone.
+      - alert: GatewayNodesOutOfSync
+        expr: gateway_nodes_in_sync < gateway_nodes_total
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Only {{ $value }} gateway nodes hold every definition identically'
+          description: 'A node is missing a definition or holds a different one. POST /apis/:id/sync re-pushes it.'

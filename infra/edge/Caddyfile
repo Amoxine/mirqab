@@ -36,12 +36,32 @@
 		output stdout
 		format json
 	}
+
+	# WP20: the per-rule WAF detections get a second sink — a file on a volume the otel-collector
+	# tails (`filelog` -> `count` -> Prometheus, observability/otel-collector.yaml). They keep going
+	# to stdout too, so `docker compose logs edge` is unchanged.
+	#
+	# `mode 0644` is load-bearing: Caddy writes log files 0600 by default and the collector runs as
+	# a different uid, so without it the tail fails with EACCES and the block-rate counter silently
+	# stays at zero — the exact invisibility R16 is about.
+	log waf {
+		include http.handlers.waf
+		output file /var/log/caddy/waf.log {
+			mode 0644
+		}
+		format json
+	}
 }
 
 # ── Shared site body ───────────────────────────────────────────────────────────
 # args[0] = in-network upstream host:port.
 (edge_site) {
 	tls internal
+
+	# Access log. Caddy does NOT log requests unless a site asks it to — the global `log` block only
+	# configures the default sink, it does not turn access logging on. This is the line WP20's trace
+	# id has to appear on.
+	log
 
 	coraza_waf {
 		load_owasp_crs
@@ -93,17 +113,51 @@
 		`
 	}
 
-	reverse_proxy {args[0]} {
-		# REPLACE, not append. Caddy's default appends the peer to whatever the client sent, so
-		# a forged X-Forwarded-For would survive into the header the API reads. The API runs
-		# `trust proxy = TRUST_PROXY_HOPS` (=1), which takes the LAST entry — this directive is
-		# what makes that entry the real client instead of the client's own claim.
-		#
-		# `caddy validate` prints "Unnecessary header_up X-Forwarded-For" here. That lint is
-		# wrong for this case and the line is load-bearing: `caddy adapt` shows the directive
-		# produces `{"set": {"X-Forwarded-For": ["{http.request.remote.host}"]}}` — a set, not
-		# the default `add`. Deleting it restores the append and reopens the spoof.
-		header_up X-Forwarded-For {remote_host}
+	# `route` rather than bare directives: it pins the written order, and three things below depend
+	# on running in exactly this sequence.
+	route {
+		# WP20 — one OTel span per edge request, exported to the collector (OTEL_* env in compose).
+		# The span is the smaller half of what this buys: the module INJECTS the resulting W3C
+		# `traceparent` into the request headers, so Tyk continues this trace instead of starting
+		# its own and the whole edge -> gateway -> api -> postgres chain lands under one trace id.
+		# Without it the chain breaks at the first hop the moment the edge is in the path. It must
+		# run before the two `log_append`s, which read the header it writes.
+		tracing {
+			span edge
+		}
+
+		# A request id the edge owns. GENERATED, never forwarded from the client, for the same
+		# reason `header_up X-Forwarded-For` below REPLACES rather than appends: a client-supplied
+		# id lets a caller collide with or poison the identifier every downstream log line is keyed
+		# on. The API reads it back as pino's reqId (apps/api/src/app.module.ts).
+		request_header X-Request-Id {http.request.uuid}
+
+		# Both ids as explicit access-log FIELDS. `request.headers` in the log line is not enough:
+		# Caddy records the headers as RECEIVED, so neither the id set just above nor the
+		# traceparent injected by `tracing` appears there — verified, both were absent. These two
+		# lines are what actually puts the trace id on the edge's access-log line and make it
+		# joinable to the Tyk span and the api span.
+		log_append request_id {http.request.uuid}
+		log_append traceparent {http.request.header.traceparent}
+
+		# WP20: /api/metrics is Prometheus' in-network scrape target (api:4000/api/metrics). It
+		# carries no secret but it does describe the deployment, and nothing outside this network
+		# has a reason to read it. Matched on every site, not just the api one, so a future site
+		# cannot publish it by accident.
+		respond /api/metrics* 404
+
+		reverse_proxy {args[0]} {
+			# REPLACE, not append. Caddy's default appends the peer to whatever the client sent, so
+			# a forged X-Forwarded-For would survive into the header the API reads. The API runs
+			# `trust proxy = TRUST_PROXY_HOPS` (=1), which takes the LAST entry — this directive is
+			# what makes that entry the real client instead of the client's own claim.
+			#
+			# `caddy validate` prints "Unnecessary header_up X-Forwarded-For" here. That lint is
+			# wrong for this case and the line is load-bearing: `caddy adapt` shows the directive
+			# produces `{"set": {"X-Forwarded-For": ["{http.request.remote.host}"]}}` — a set, not
+			# the default `add`. Deleting it restores the append and reopens the spoof.
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 }
 

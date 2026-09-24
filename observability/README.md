@@ -1,0 +1,75 @@
+# Observability (WP20)
+
+Two containers, both `expose:`-only and neither routed through the edge: an **OpenTelemetry
+Collector** and **Prometheus**. Grafana and Alertmanager are deliberately absent (§9) — Prometheus'
+own rule state is the proof that an alert works, and dashboards-as-code can wait for a viewer who
+asked for one.
+
+| File | What it configures |
+|---|---|
+| `otel-collector.yaml` | OTLP trace intake; the edge's WAF log → `coraza_rule_detections_total` |
+| `prometheus.yml` | Scrape targets and where the rules live |
+| `rules/open-gateway.yml` | The six alert rules §5's detection signals call for |
+
+Neither service publishes a port, so everything below runs from an in-network curl container — the
+same pattern the Tyk control API uses:
+
+```bash
+NET=opengatewayinfrastructure_open-gateway-network   # docker network ls, it can drift
+CURL="docker run --rm --network $NET curlimages/curl:8.15.0"
+```
+
+## Metrics
+
+```bash
+$CURL -sG --data-urlencode 'query=tyk_http_requests_total' http://prometheus:9090/api/v1/query
+$CURL -s  http://prometheus:9090/api/v1/targets?state=active
+```
+
+Three scrape targets:
+
+- **`tyk-pump:9090`** — gateway traffic. The OSS gateway exposes no Prometheus endpoint of its own,
+  so every `tyk_*` series arrives through the pump, one purge cycle (10 s) late. Two things about
+  it surprise people: `tyk_http_requests_total` is **not** a built-in — it is declared as a
+  `custom_metrics` entry in `infra/pump/pump.conf`, because pump 1.17 ships `tyk_http_status`
+  instead — and **`tyk_latency` buckets are milliseconds**, so "p95 > 1 s" is `> 1000`.
+- **`api:4000/api/metrics`** — `prom-client`, plus the Redis, node-sync and certificate gauges the
+  rules need. The edge answers **404** for this path: it is an internal target, not a published one.
+- **`otel-collector:8889`** — the WAF counter.
+
+## Alerts
+
+```bash
+$CURL -sG --data-urlencode 'query=ALERTS{alertstate="firing"}' http://prometheus:9090/api/v1/query
+$CURL -s  http://prometheus:9090/api/v1/rules
+```
+
+`rules/open-gateway.yml` carries the reasoning for each rule. Two are worth repeating here because
+they are not what the roadmap assumed:
+
+- **`RedisEvictingKeys` cannot fire in steady state.** The instance runs `noeviction`, so
+  `evicted_keys` is pinned at 0 by configuration. That is the point — it fires only if someone
+  changes the policy, which is the condition R3 wants to hear about.
+- **`EdgeRootCertificateExpiringSoon` watches the ROOT, not the served certificate.** Caddy's
+  `tls internal` issues 12-hour leaves off a 7-day intermediate, so a 14-day threshold on either
+  would be permanently firing. It reads `infra/edge/root.crt`, which must exist and be
+  world-readable — see `infra/edge/README.md`.
+
+## Traces
+
+A request through the edge produces one trace spanning **edge → gateway → api → postgres**. That
+full chain holds for an API whose upstream is the control plane itself; a normal API's trace stops
+at the gateway span, because a third-party upstream has no OTel SDK in it.
+
+The edge starts the trace (Caddy's `tracing` directive) and injects the W3C `traceparent`; Tyk
+continues it; the API's SDK continues it again and Prisma hangs the `prisma:engine:db_query` span
+underneath. The trace id is on the edge's access-log line as an explicit field:
+
+```bash
+docker logs open-gateway-edge | grep http.log.access | tail -1   # -> traceparent, request_id
+docker logs open-gateway-otel-collector | grep <trace id>
+```
+
+There is no trace backend yet, so the collector's stdout is the store (`debug` exporter, verbosity
+`detailed`, with a capped log driver). When a viewer is wanted, add a Tempo/Jaeger exporter to the
+`traces` pipeline — nothing else changes.

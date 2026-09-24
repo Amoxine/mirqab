@@ -95,6 +95,40 @@ export function computeInSync(nodes: Record<string, NodeView>): boolean {
   return new Set(views.map((v) => v.hash)).size === 1;
 }
 
+/**
+ * How many of `nodes` are in sync across every reconciled definition — the `gateway_nodes_in_sync`
+ * gauge R2 alerts on (`< gateway_nodes_total`).
+ *
+ * A node counts only when EVERY state reports it present with a hash no peer contradicts. When two
+ * nodes both answer with different hashes neither counts, which is deliberate: the hashes say the
+ * cluster diverged, not which side is right, and an operator has to look either way. Definitions
+ * that have never been reconciled carry no `syncState` and are not passed in — no evidence is not
+ * evidence of drift.
+ *
+ * Only nodes in `nodes` are considered, on both sides: a node dropped from `TYK_ADMIN_URLS` still
+ * appears in stored states until the next tick rewrites them, and counting it would pin the gauge
+ * low — an alert about a machine that is no longer part of the deployment.
+ */
+export function nodesInSync(states: readonly SyncState[], nodes: readonly string[]): number {
+  // A Map per state rather than `state.nodes[node]`: indexing a `Record<string, NodeView>` is typed
+  // as always present, while a state written before this node joined `TYK_ADMIN_URLS` simply has no
+  // entry for it. `Map.get` is the lookup whose type tells the truth.
+  const views = states.map((state) => new Map(Object.entries(state.nodes)));
+
+  return nodes.filter((node) =>
+    views.every((byNode) => {
+      const view = byNode.get(node);
+      if (!view?.present || view.hash === null) return false;
+      // A peer that is MISSING the definition is out of sync itself; it must not drag down the node
+      // that actually holds it. Only a peer that answered with a DIFFERENT hash is a contradiction.
+      return nodes.every((peer) => {
+        const other = byNode.get(peer);
+        return !other?.present || other.hash === null || other.hash === view.hash;
+      });
+    }),
+  ).length;
+}
+
 @Injectable()
 export class ReconcileService implements OnModuleInit {
   private readonly logger = new Logger(ReconcileService.name);

@@ -47,6 +47,13 @@ const DENIED_HOSTS = new Set([
   'tyk-gateway-multinode-init',
   'tyk-pump',
   'tyk-healthcheck',
+  // WP20. Neither has any authentication — "only reachable inside the compose network" is the whole
+  // of their protection, same as the Ory admin APIs above. Prometheus' query API hands out every
+  // metric the stack produces (node lists, Redis sizing, WAF detection rates) and its /-/reload and
+  // admin endpoints are one flag away; the collector's OTLP receivers accept spans from anyone who
+  // can reach them, which is how a proxied upstream would poison the trace store.
+  'prometheus',
+  'otel-collector',
   'api',
   'web',
   'ory-db-init',

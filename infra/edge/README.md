@@ -30,7 +30,12 @@ stack:
 ```bash
 docker compose -f infra/docker-compose.yml cp \
   edge:/data/caddy/pki/authorities/local/root.crt infra/edge/root.crt
+chmod 644 infra/edge/root.crt
 ```
+
+The `chmod` is not cosmetic: `cp` preserves Caddy's 0600, and the `api` container reads this file as
+uid 1001 for WP20's certificate-expiry gauge. Left at 0600, the gauge is silently absent and the
+`EdgeRootCertificateExpiringSoon` rule has nothing to evaluate — see `observability/rules/`.
 
 `infra/edge/root.crt` is **git-ignored on purpose**: the CA's private key lives in the `caddy_data`
 volume of whichever machine ran the stack first, so committing one install's root would ask everyone

@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { computeInSync, definitionHash, type NodeView } from './reconcile.service';
+import { computeInSync, definitionHash, nodesInSync, type NodeView, type SyncState } from './reconcile.service';
 
 jest.mock('@open-gateway/database', () => ({ prisma: {} }));
 
@@ -69,5 +69,38 @@ describe('computeInSync', () => {
 
   it('is true for a single-node stack, which is the default deployment', () => {
     expect(computeInSync({ only: view('h') })).toBe(true);
+  });
+});
+
+describe('nodesInSync — the gauge R2 alerts on', () => {
+  const state = (nodes: Record<string, NodeView>): SyncState => ({
+    checkedAt: '2026-09-24T00:00:00.000Z',
+    inSync: computeInSync(nodes),
+    nodes,
+  });
+
+  it('counts every node when all of them hold every definition identically', () => {
+    const states = [state({ n1: view('a'), n2: view('a') }), state({ n1: view('b'), n2: view('b') })];
+    expect(nodesInSync(states, ['n1', 'n2'])).toBe(2);
+  });
+
+  it('drops a node that is missing one definition, and only that node', () => {
+    const states = [
+      state({ n1: view('a'), n2: view('a') }),
+      state({ n1: view('b'), n2: { present: false, hash: null, error: 'not present' } }),
+    ];
+    expect(nodesInSync(states, ['n1', 'n2'])).toBe(1);
+  });
+
+  it('counts neither node when two disagree — the hashes do not say which one is right', () => {
+    expect(nodesInSync([state({ n1: view('a'), n2: view('DIFFERENT') })], ['n1', 'n2'])).toBe(0);
+  });
+
+  it('equals the node count when nothing has been reconciled yet — no evidence is not drift', () => {
+    expect(nodesInSync([], ['n1', 'n2', 'n3'])).toBe(3);
+  });
+
+  it('ignores a node that is no longer configured, so a removed node cannot pin the gauge low', () => {
+    expect(nodesInSync([state({ n1: view('a'), retired: view(null, { error: 'gone' }) })], ['n1'])).toBe(1);
   });
 });

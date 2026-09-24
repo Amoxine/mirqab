@@ -1,0 +1,34 @@
+# Prometheus (WP20). Unpublished — `expose:` only, queried from the in-network curl container:
+#
+#   docker run --rm --network opengatewayinfrastructure_open-gateway-network curlimages/curl \
+#     -sG --data-urlencode 'query=tyk_http_requests_total' http://prometheus:9090/api/v1/query
+#
+# Alertmanager is CUT (§9): alerting is proven by rule state (`ALERTS{alertstate="firing"}`) through
+# this same query API, not by a notification channel. There is no `alerting:` block on purpose —
+# adding one without a receiver would only produce "no alertmanager configured" warnings.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # Gateway traffic. tyk-pump's prometheus pump (infra/pump/pump.conf) — the gateway itself exposes
+  # no Prometheus endpoint on OSS, so every tyk_* series arrives one purge cycle (10s) late.
+  - job_name: tyk-pump
+    static_configs:
+      - targets: ['tyk-pump:9090']
+
+  # Control plane. 4000 is the in-network port; 33001 is the edge's host-side HTTPS mapping, and the
+  # edge answers 404 for /api/metrics so this stays an internal target.
+  - job_name: open-gateway-api
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ['api:4000']
+
+  # WAF detections, counted out of the edge's per-rule log by the collector.
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8889']

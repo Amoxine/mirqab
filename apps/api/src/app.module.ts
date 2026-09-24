@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { randomUUID } from 'node:crypto';
+import { LoggerModule } from 'nestjs-pino';
 import { CommonModule } from './common/common.module';
 import { DatabaseModule } from './common/database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -17,6 +19,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { PortalModule } from './modules/portal/portal.module';
+import { ObservabilityModule } from './modules/observability/observability.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -24,6 +27,25 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env.local', '.env'] }),
+    // `pino` and `nestjs-pino` have been installed and unused since the first commit; WP20 is what
+    // finally wires them. One structured JSON line per request, on the same stdout the edge and the
+    // gateway already write JSON to, so `docker compose logs` is greppable by request id.
+    //
+    // `genReqId` prefers the edge's X-Request-Id (infra/edge/Caddyfile sets it from
+    // {http.request.uuid}) so one id spans the edge access log and every api log line for that
+    // request; `traceparent` is copied onto each line so a log can be joined to the trace the
+    // collector received. No transport: this is a container log, and pino-pretty in front of it
+    // would cost a worker thread to make JSON un-greppable.
+    LoggerModule.forRoot({
+      pinoHttp: {
+        genReqId: (req) => (typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : randomUUID()),
+        customProps: (req) => ({ traceparent: req.headers.traceparent }),
+        // Prometheus scrapes every 15s and the container HEALTHCHECK polls every 30s; logging both
+        // buries every real request.
+        autoLogging: { ignore: (req) => req.url === '/api/metrics' || req.url === '/api/health' },
+        redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-tyk-authorization"]'],
+      },
+    }),
     // The ONLY forRoot: AuthModule used to call it again with limit 5, and the last registration won
     // for every route in the app. ThrottlerModule is @Global(), so any per-route @Throttle() override
     // would resolve against this one — none exist today (see docs/security.md). Per-IP baseline,
@@ -43,6 +65,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     ProductsModule,
     AnalyticsModule,
     AuditModule,
+    ObservabilityModule,
     PortalModule,
   ],
   controllers: [AppController],

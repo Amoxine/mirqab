@@ -1,5 +1,8 @@
+// FIRST, before anything that touches http or Prisma — see the file for why the order matters.
+import './tracing';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { Logger as PinoLogger } from 'nestjs-pino';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -15,7 +18,10 @@ import { parseTrustProxyHops } from './common/config/env';
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // bufferLogs + useLogger: everything Nest logs during bootstrap is replayed through pino instead
+  // of being printed by the default logger before the app's own logger exists.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(PinoLogger));
   const configService = app.get(ConfigService);
 
   /* eslint-disable @typescript-eslint/no-unnecessary-type-arguments --

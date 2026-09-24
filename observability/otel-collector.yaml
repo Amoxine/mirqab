@@ -1,0 +1,97 @@
+# OpenTelemetry Collector (WP20) — otel/opentelemetry-collector-contrib.
+#
+# Two jobs, nothing more:
+#
+#   1. Collect traces. The edge (Caddy's `tracing` directive), the gateway (TYK_GW_OPENTELEMETRY_*)
+#      and the API (apps/api/src/tracing.ts) all export OTLP here. Grafana/Tempo/Jaeger are CUT
+#      (§9), so the sink is this container's own stdout:
+#
+#        docker logs open-gateway-otel-collector | grep <trace id>
+#
+#      A `file` exporter onto a named volume was tried first and rejected: Docker creates a fresh
+#      named volume root-owned 0755, the collector image is distroless and runs as uid 10001, so
+#      every span was dropped with "permission denied" until something chowned the volume — a third
+#      container, or a manual step no fresh install would ever run. stdout needs neither. The
+#      compose service caps its log driver so `detailed` cannot fill a disk.
+#
+#   2. Turn the edge's WAF detections into a Prometheus counter. A CRS block never reaches Tyk, so
+#      it consumes no quota and writes no analytics row — without this it is invisible (R16). The
+#      counter is built on the PER-RULE lines Coraza writes to Caddy's `http.handlers.waf` logger,
+#      not on the audit record's `is_interrupted` (false for the whole DetectionOnly rollout, so a
+#      counter on it reads zero forever). Rule 949110 "Inbound Anomaly Score Exceeded" fires exactly
+#      when the request WOULD have been blocked, which makes `coraza_rule_detections_total{rule_id="949110"}`
+#      a would-block rate today and a literal block rate the day `SecRuleEngine On` is flipped, with
+#      no rewrite here.
+
+receivers:
+  otlp:
+    protocols:
+      # 4317 gRPC for Caddy and Tyk (both default to gRPC), 4318 HTTP for the API (whose exporter is
+      # the HTTP one, to keep a native gRPC dependency out of an alpine Node image).
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  filelog/waf:
+    include: [/var/log/caddy/waf.log]
+    # `end`, not `beginning`: on a restart the backlog is history, and this counter is a rate.
+    # No file_storage extension, so offsets are not kept across restarts — a restart can drop the
+    # lines written while the collector was down. Acceptable for a spike alert; not for an audit.
+    start_at: end
+    operators:
+      - type: json_parser
+        parse_from: body
+        parse_to: attributes
+      # The rule id only exists inside Coraza's formatted message:
+      #   [client "..."] Coraza: Warning. ... [id "949110"] [msg "..."] ...
+      # A line with no `[id "..."]` is not a detection, so it is dropped rather than counted.
+      - type: regex_parser
+        parse_from: attributes.msg
+        parse_to: attributes
+        regex: '\[id "(?P<rule_id>\d+)"\]'
+        on_error: drop_quiet
+
+processors:
+  batch:
+    timeout: 2s
+
+  # The `count` connector emits DELTA sums. The prometheus exporter renders whatever it is given,
+  # so without this the counter resets to each interval's delta instead of accumulating — observed
+  # directly: 12 detections in the log read back as `4`, then `1`, and `increase()` over it is
+  # meaningless. This makes it the monotonic counter the alert rule assumes.
+  deltatocumulative: {}
+
+connectors:
+  count:
+    logs:
+      coraza_rule_detections:
+        description: OWASP CRS rule detections at the edge, by rule id
+        attributes:
+          - key: rule_id
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+  # `detailed` prints the trace id, span id, parent span id and name of every span. That is the
+  # whole point — `normal` prints batch counts, which cannot answer "is this one trace or three".
+  debug/traces:
+    verbosity: detailed
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug/traces]
+    logs/waf:
+      receivers: [filelog/waf]
+      exporters: [count]
+    metrics/waf:
+      receivers: [count]
+      processors: [deltatocumulative]
+      exporters: [prometheus]
