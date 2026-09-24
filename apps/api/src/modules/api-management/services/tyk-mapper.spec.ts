@@ -26,6 +26,7 @@ function apiDef(overrides: Partial<ApiDefinition> = {}): ApiDefinition {
     syncState: null,
     defFormat: 'CLASSIC',
     oasDocument: null,
+    adoptedFromGateway: null,
     syncError: null,
     lastSyncedAt: null,
     healthStatus: 'UNKNOWN',

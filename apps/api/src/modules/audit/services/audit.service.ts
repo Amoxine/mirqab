@@ -99,21 +99,34 @@ export class AuditService {
 
   async record(entry: AuditEntry): Promise<void> {
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          tenantId: entry.tenantId ?? null,
-          userId: entry.userId ?? null,
-          action: entry.action,
-          resource: entry.resource,
-          // A nullable Json column needs Prisma's own null sentinel; plain `null` is not accepted.
-          details: entry.details ? (entry.details as Prisma.InputJsonValue) : Prisma.DbNull,
-          ipAddress: entry.ipAddress ?? null,
-          corrId: entry.correlationId ?? null,
-        },
-      });
+      await this.recordOrThrow(entry);
     } catch (error) {
       this.logger.error(`Failed to write audit log: ${(error as Error).message}`, (error as Error).stack);
     }
+  }
+
+  /**
+   * As `record()`, but a write failure is the caller's problem, not swallowed here — for the rare
+   * action where the audit entry IS the control, not a courtesy: `record()`'s own catch makes it
+   * unsuitable there, since `await this.auditService.record(...)` always resolves even when the
+   * insert failed, silently, which is exactly wrong for something like WP25's "adopt from gateway"
+   * (P2) — an operator override to config of record that must not be able to report success while
+   * going unaudited. Most callers want `record()`; reach for this only when a failed audit write
+   * should fail the whole request.
+   */
+  async recordOrThrow(entry: AuditEntry): Promise<void> {
+    await this.prisma.auditLog.create({
+      data: {
+        tenantId: entry.tenantId ?? null,
+        userId: entry.userId ?? null,
+        action: entry.action,
+        resource: entry.resource,
+        // A nullable Json column needs Prisma's own null sentinel; plain `null` is not accepted.
+        details: entry.details ? (entry.details as Prisma.InputJsonValue) : Prisma.DbNull,
+        ipAddress: entry.ipAddress ?? null,
+        corrId: entry.correlationId ?? null,
+      },
+    });
   }
 
   async findAll(tenantId: string | undefined, filters: AuditFilters = {}) {
