@@ -60,6 +60,11 @@ enum ApiAuthType {
   AUTH_TOKEN
   JWT
   OAUTH
+  /// Signed-request auth (WP15c): the caller signs a date header with a shared secret held on the key.
+  HMAC
+  /// Username/password on the key (WP15c). Weakest of the options; offered because upstreams migrating
+  /// from an old proxy often still need it.
+  BASIC
 }
 
 enum ApiKeyStatus {

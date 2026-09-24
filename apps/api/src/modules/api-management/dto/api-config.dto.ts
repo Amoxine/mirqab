@@ -5,10 +5,12 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsNumber,
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -327,6 +329,51 @@ export class ApiCacheDto {
   cacheResponseCodes?: number[];
 }
 
+
+/**
+ * IP allow / deny, evaluated by the gateway against the CLIENT ip.
+ *
+ * Only meaningful because the edge REPLACES `X-Forwarded-For` with the real peer rather than
+ * appending to it (infra/edge/Caddyfile) and the gateway reads the last entry (`xff_depth: 1`).
+ * Without both, a caller could name an allowed IP in the header and walk straight through — which
+ * is what `wp15c-acceptance.ts` asserts cannot happen.
+ */
+export class ApiIpAccessControlDto {
+  @ApiPropertyOptional({ type: [String], example: ['10.0.0.0/8'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LIST_MAX)
+  @IsString({ each: true })
+  @MaxLength(ITEM_MAX, { each: true })
+  allow?: string[];
+
+  @ApiPropertyOptional({ type: [String], example: ['203.0.113.7'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(LIST_MAX)
+  @IsString({ each: true })
+  @MaxLength(ITEM_MAX, { each: true })
+  block?: string[];
+}
+
+export class ApiHmacDto {
+  @ApiPropertyOptional({ type: [String], example: ['hmac-sha256'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  allowedAlgorithms?: string[];
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Permitted clock skew in ms; 0 disables the check' })
+  @IsOptional()
+  @Raw()
+  @IsInt()
+  @Min(0)
+  @Max(600_000)
+  allowedClockSkewMs?: number;
+}
+
 /** `ApiDefinition.config` JSON (spec §3.2). `null` on a section clears it; an absent section is left as-is. */
 export class ApiConfigDto {
   @ApiPropertyOptional({ type: ApiRateLimitDto, nullable: true })
@@ -441,6 +488,40 @@ export class ApiConfigDto {
   @ValidateNested()
   @Type(() => ApiCacheDto)
   cache?: ApiCacheDto | null;
+
+  @ApiPropertyOptional({ type: ApiIpAccessControlDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiIpAccessControlDto)
+  ipAccessControl?: ApiIpAccessControlDto | null;
+
+  @ApiPropertyOptional({
+    description:
+      'JSON Schema the request body must satisfy. A violation is rejected by the GATEWAY with 422, ' +
+      'so a malformed body never reaches the upstream.',
+  })
+  @IsOptional()
+  @IsObject()
+  validateRequestSchema?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    example: 'X-Api-Key',
+    description:
+      'Header the API key is read from. Defaults to Authorization. Setting it REPLACES that header ' +
+      'rather than adding an alternative — a key sent in Authorization is then rejected.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  @Matches(/^[A-Za-z0-9-]+$/, { message: 'authHeaderName may only contain letters, digits and hyphens' })
+  authHeaderName?: string;
+
+  @ApiPropertyOptional({ type: ApiHmacDto, nullable: true, description: 'Only read when authType is HMAC' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiHmacDto)
+  hmac?: ApiHmacDto | null;
+
 
   @ApiPropertyOptional({
     description:

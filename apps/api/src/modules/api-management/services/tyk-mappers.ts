@@ -141,7 +141,9 @@ export function mapToTykFormat(
     rateLimit, cors, doNotTrack, jwt, throttle, timeoutSeconds, circuitBreaker, requestSizeLimitBytes,
     loadBalancing, uptimeTests, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
     transformRequestBody, transformResponseBody, cache, detailedRecording,
+    ipAccessControl, validateRequestSchema, authHeaderName, hmac,
   } = readConfig(apiDef.config);
+  const authHeader = authHeaderName ?? 'Authorization';
 
   // Classic keeps per-path middleware under `extended_paths`, so an API-WIDE timeout, size limit or
   // circuit breaker is expressed as a single entry whose path matches everything. `/.*` is Tyk's
@@ -216,6 +218,16 @@ export function mapToTykFormat(
   if (cache) {
     extendedPaths.cache = ['/.*'];
   }
+  if (validateRequestSchema) {
+    // Classic carries the schema inline per path; OAS instead validates against the document's own
+    // `requestBody`. Same behaviour, but the schema lives in a different place in each format.
+    extendedPaths.validate_json = CATCH_ALL_METHODS.map((method) => ({
+      path: '/.*',
+      method,
+      schema: validateRequestSchema,
+      error_response_code: 422,
+    }));
+  }
   if (circuitBreaker) {
     extendedPaths.circuit_breakers = CATCH_ALL_METHODS.map((method) => ({
       path: '/.*',
@@ -266,7 +278,21 @@ export function mapToTykFormat(
     ...(apiDef.authType === 'JWT' && jwt
       ? jwtFieldsForBringYourOwnJwks(apiDef.id, jwt.jwksUrl, jwt.identityField)
       : {}),
-    auth: { auth_header_name: 'Authorization' },
+    auth: { auth_header_name: authHeader },
+    // `use_basic_auth` / `enable_signature_checking` are what actually switch those middlewares on;
+    // the auth block above only says which header carries the credential.
+    use_basic_auth: apiDef.authType === 'BASIC',
+    enable_signature_checking: apiDef.authType === 'HMAC',
+    ...(apiDef.authType === 'HMAC' && hmac?.allowedAlgorithms ? { hmac_allowed_algorithms: hmac.allowedAlgorithms } : {}),
+    ...(apiDef.authType === 'HMAC' && hmac?.allowedClockSkewMs !== undefined
+      ? { hmac_allowed_clock_skew: hmac.allowedClockSkewMs }
+      : {}),
+    ...(ipAccessControl?.allow
+      ? { enable_ip_whitelisting: true, allowed_ips: ipAccessControl.allow }
+      : {}),
+    ...(ipAccessControl?.block
+      ? { enable_ip_blacklisting: true, blacklisted_ips: ipAccessControl.block }
+      : {}),
     active: apiDef.status === ApiStatus.ACTIVE,
     ...(rateLimit
       ? { global_rate_limit: { rate: rateLimit.rate, per: rateLimit.per, disabled: rateLimit.rate === 0 } }
@@ -336,7 +362,7 @@ const rateLimitPer = (seconds: number): string => `${String(seconds)}s`;
  * array. A classic definition needs none of that; an OAS definition missing any of the three simply
  * does not authenticate (verified during S6).
  */
-const SCHEME_NAME = { token: 'authToken', jwt: 'jwtAuth' } as const;
+const SCHEME_NAME = { token: 'authToken', jwt: 'jwtAuth', hmac: 'hmacAuth', basic: 'basicAuth' } as const;
 
 /**
  * Methods an API-wide middleware entry is expanded across.
@@ -391,7 +417,12 @@ export function mapToTykOas(
     rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests,
     circuitBreaker, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
     transformRequestBody, transformResponseBody, cache, detailedRecording,
+    ipAccessControl, validateRequestSchema, authHeaderName, hmac,
   } = readConfig(apiDef.config);
+  // One place decides which header carries the key, so every scheme below agrees (WP15c).
+  const authHeader = authHeaderName ?? 'Authorization';
+  const isHmac = apiDef.authType === 'HMAC';
+  const isBasic = apiDef.authType === 'BASIC';
   const isOAuth = apiDef.authType === 'OAUTH';
 
   const isJwt = apiDef.authType === 'JWT';
@@ -406,17 +437,18 @@ export function mapToTykOas(
     securitySchemes[SCHEME_NAME.token] = {
       enabled: true,
       // classic `auth.auth_header_name` -> per-scheme `header.name` (it is per scheme in OAS, not
-      // one global setting).
-      header: { enabled: true, name: 'Authorization' },
+      // one global setting). Naming a custom header REPLACES Authorization rather than adding to
+      // it, which is what makes the same key in Authorization fail.
+      header: { enabled: true, name: authHeader },
     };
-    componentSchemes[SCHEME_NAME.token] = { type: 'apiKey', in: 'header', name: 'Authorization' };
+    componentSchemes[SCHEME_NAME.token] = { type: 'apiKey', in: 'header', name: authHeader };
     security.push({ [SCHEME_NAME.token]: [] });
   }
 
   if (isOAuth || isJwt) {
     securitySchemes[SCHEME_NAME.jwt] = {
       enabled: true,
-      header: { enabled: true, name: 'Authorization' },
+      header: { enabled: true, name: authHeader },
       signingMethod: 'rsa',
       // OAUTH pins Hydra's base64 PEM; JWT (O3) points at the tenant's own JWKS URL. Tyk's `source`
       // accepts either, exactly as the classic `jwt_source` does.
@@ -431,6 +463,28 @@ export function mapToTykOas(
     };
     componentSchemes[SCHEME_NAME.jwt] = { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' };
     security.push({ [SCHEME_NAME.jwt]: [] });
+  }
+
+  // HMAC config is emitted but NOT verified end to end (WP15c). Tyk accepts the definition and
+  // finds the key, but every signing string tried was rejected — `date: <v>`, the bare value,
+  // `(request-target)` + date, a URL-encoded signature, an `x-tyk-date` header, and `keyId` as the
+  // key hash (which regresses to "Key ID does not exist", confirming the raw key is correct and
+  // ruling out `hash_keys`). Parked with the owner rather than claimed as working; see
+  // `wp15c-acceptance.ts` for the full list before spending time on it again.
+  if (isHmac) {
+    securitySchemes[SCHEME_NAME.hmac] = {
+      enabled: true,
+      header: { enabled: true, name: authHeader },
+      ...(hmac?.allowedAlgorithms ? { allowedAlgorithms: hmac.allowedAlgorithms } : {}),
+      ...(hmac?.allowedClockSkewMs === undefined ? {} : { allowedClockSkew: hmac.allowedClockSkewMs }),
+    };
+    componentSchemes[SCHEME_NAME.hmac] = { type: 'apiKey', in: 'header', name: authHeader };
+    security.push({ [SCHEME_NAME.hmac]: [] });
+  }
+  if (isBasic) {
+    securitySchemes[SCHEME_NAME.basic] = { enabled: true, header: { enabled: true, name: authHeader } };
+    componentSchemes[SCHEME_NAME.basic] = { type: 'http', scheme: 'basic' };
+    security.push({ [SCHEME_NAME.basic]: [] });
   }
 
   const authenticated = Object.keys(securitySchemes).length > 0;
@@ -523,6 +577,11 @@ export function mapToTykOas(
       body: transformRequestBody.body,
     };
   }
+  if (validateRequestSchema) {
+    // Tyk validates against the OAS `requestBody` schema on the operation, so the schema has to be
+    // published in the document itself — see the catch-all path builder below, which attaches it.
+    perOperation.validateRequest = { enabled: true, errorResponseCode: 422 };
+  }
   if (transformResponseBody) {
     perOperation.transformResponseBody = {
       enabled: true,
@@ -539,7 +598,13 @@ export function mapToTykOas(
     };
     for (const method of CATCH_ALL_METHODS) {
       const operationId = catchAllOperationId(method);
-      pathItem[method.toLowerCase()] = { operationId, responses: { '200': { description: 'ok' } } };
+      pathItem[method.toLowerCase()] = {
+        operationId,
+        responses: { '200': { description: 'ok' } },
+        ...(validateRequestSchema
+          ? { requestBody: { required: true, content: { 'application/json': { schema: validateRequestSchema } } } }
+          : {}),
+      };
       operations[operationId] = { ...perOperation };
     }
     catchAllPaths[CATCH_ALL_PATH] = pathItem;
@@ -632,6 +697,15 @@ export function mapToTykOas(
         // `middleware.global.trafficLogs` — trafficLogs is whether to record at all, this is how
         // much. Detailed records carry request and response bodies, which is why it is per-API.
         ...(detailedRecording === undefined ? {} : { detailedActivityLogs: { enabled: detailedRecording } }),
+        ...(ipAccessControl
+          ? {
+              ipAccessControl: {
+                enabled: true,
+                ...(ipAccessControl.allow ? { allow: ipAccessControl.allow } : {}),
+                ...(ipAccessControl.block ? { block: ipAccessControl.block } : {}),
+              },
+            }
+          : {}),
       },
       ...(Object.keys(globalMiddleware).length > 0 || Object.keys(operations).length > 0
         ? {

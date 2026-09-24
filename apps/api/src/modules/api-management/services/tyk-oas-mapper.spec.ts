@@ -114,16 +114,18 @@ const cors = {
  * green on a wholesale regeneration and tell us nothing about coverage.
  *
  * Counts, re-verified against the current `mapToTykFormat` rather than taken from the plan:
- *   NONE / AUTH_TOKEN -> 13 named keys
- *   OAUTH             -> 13 + 5 (`jwtFieldsForOAuth`)             = 18
- *   JWT   (O3)        -> 13 + 4 (`jwtFieldsForBringYourOwnJwks`)  = 17
+ *   NONE / AUTH_TOKEN -> 15 named keys  (13 + WP15c's two auth-middleware flags)
+ *   OAUTH             -> 15 + 5 (`jwtFieldsForOAuth`)             = 20
+ *   JWT   (O3)        -> 15 + 4 (`jwtFieldsForBringYourOwnJwks`)  = 19
  * The plan documents only the first two; the JWT shape arrived with WP12b's O3 fix and emits no
  * `jwt_policy_field_name`, so 17 is a third shape S6 never saw.
  */
 describe('mapToTykOas — golden file against every classic key', () => {
-  it('classic emits exactly the 13 named top-level keys this file covers (fully configured)', () => {
-    // Guards the checklist itself: a 14th key added to the classic mapper must fail here rather
-    // than quietly go unmapped in OAS.
+  it('classic emits exactly the 15 named top-level keys this file covers (fully configured)', () => {
+    // Guards the checklist itself: a new key on the classic mapper must fail here rather than
+    // quietly go unmapped in OAS. It has already done that job once — WP15c added
+    // `use_basic_auth` and `enable_signature_checking` (always emitted, since they are the flags
+    // that switch those middlewares on) and this test caught the count moving 13 -> 15.
     const keys = Object.keys(classic({ config: { rateLimit: { rate: 10, per: 60 }, cors, doNotTrack: true } }));
     expect(keys.sort()).toEqual(
       [
@@ -140,9 +142,13 @@ describe('mapToTykOas — golden file against every classic key', () => {
         'use_keyless',
         'use_standard_auth',
         'version_data',
+        // WP15c: which middleware handles the credential. Always present, because `false` is a
+        // meaningful value here — it is what turns the middleware OFF.
+        'use_basic_auth',
+        'enable_signature_checking',
       ].sort(),
     );
-    expect(keys).toHaveLength(13);
+    expect(keys).toHaveLength(15);
   });
 
   it('1. name -> info.title and x-tyk info.name', () => {
@@ -261,8 +267,8 @@ describe('mapToTykOas — golden file against every classic key', () => {
     const over = { authType: 'OAUTH' as const, config: { rateLimit: { rate: 10, per: 60 }, cors, doNotTrack: true } };
     const scheme = () => schemes(oas(over, 'BASE64-PEM')).jwtAuth;
 
-    it('classic emits 18 keys for OAUTH', () => {
-      expect(Object.keys(classic(over, 'BASE64-PEM'))).toHaveLength(18);
+    it('classic emits 20 keys for OAUTH (15 + the 5 jwt_* fields)', () => {
+      expect(Object.keys(classic(over, 'BASE64-PEM'))).toHaveLength(20);
     });
 
     it('14-18. signing method, source, identity field, policy field and default policies', () => {
@@ -293,9 +299,9 @@ describe('mapToTykOas — golden file against every classic key', () => {
     };
     const scheme = () => schemes(oas(over)).jwtAuth;
 
-    it('classic emits 17 keys, NOT 18 — no jwt_policy_field_name', () => {
+    it('classic emits 19 keys, NOT 20 — no jwt_policy_field_name', () => {
       const keys = Object.keys(classic(over));
-      expect(keys).toHaveLength(17);
+      expect(keys).toHaveLength(19);
       expect(keys).not.toContain('jwt_policy_field_name');
     });
 

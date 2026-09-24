@@ -106,6 +106,11 @@ describe('mapToTykFormat', () => {
       enable_jwt: false,
       auth: { auth_header_name: 'Authorization' },
       active: true,
+      // WP15c: which middleware handles the credential. Always emitted, because `false` is what
+      // switches these OFF — omitting them would leave a previously-HMAC api still checking
+      // signatures after being switched to token auth.
+      use_basic_auth: false,
+      enable_signature_checking: false,
     });
   });
 
