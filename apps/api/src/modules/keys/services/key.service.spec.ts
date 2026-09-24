@@ -4,6 +4,7 @@ import { ApiKeyStatus, Prisma, QuotaPeriod } from '@prisma/client';
 import { prisma } from '@open-gateway/database';
 import type { TykClientService } from '../../tyk-integration/services/tyk-client.service';
 import type { QuotaService } from '../../quotas/services/quota.service';
+import type { McpService } from '../../mcp/services/mcp.service';
 import { analyticsWindow, keyRollupQuery } from '../../analytics/services/pump-query.builder';
 import { KeyService } from './key.service';
 
@@ -94,7 +95,14 @@ describe('KeyService', () => {
     // the tenant's org through `loadTenantScope` (WP12c).
     (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({ tykOrgId: 'og-tenant-1', slug: 'tenant-1' });
     jest.spyOn(Date, 'now').mockReturnValue(NOW_MS);
-    service = new KeyService(tyk as unknown as TykClientService, quotas as unknown as QuotaService);
+    // WP28: `keyAccessRight` returns null for every test here — none of them scopes a key to an MCP
+    // server, and a null scope is exactly the "no MCP" path, so the existing expectations are
+    // unaffected. The MCP-scoped path has its own coverage in mcp-mapper.spec.ts.
+    service = new KeyService(
+      tyk as unknown as TykClientService,
+      quotas as unknown as QuotaService,
+      { keyAccessRight: jest.fn().mockResolvedValue(null) } as unknown as McpService,
+    );
   });
 
   afterEach(() => {

@@ -3,6 +3,7 @@ import { Prisma, type Plan } from '@prisma/client';
 import { prisma } from '@open-gateway/database';
 import { TykClientService, type NodeOutcome } from '../../tyk-integration/services/tyk-client.service';
 import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
+import { McpService } from '../../mcp/services/mcp.service';
 import { buildPlanPolicy } from './plan-policy';
 import type { CreatePlanDto, UpdatePlanDto } from '../dto/plan.dto';
 
@@ -47,7 +48,24 @@ const nameTaken = (name: string): string =>
 export class PlanService {
   private readonly logger = new Logger(PlanService.name);
 
-  constructor(private readonly tykClient: TykClientService) {}
+  constructor(
+    private readonly tykClient: TykClientService,
+    private readonly mcpService: McpService,
+  ) {}
+
+  /**
+   * The `access_rights` this plan's policy carries (WP28).
+   *
+   * Empty for a tenant with no MCP server, which is the `{}` WP18 always produced — a plan is still
+   * a limit tier, not a grant of APIs, and this policy still has `partitions.acl: false`. What goes
+   * in is strictly rate-limit material: the per-primitive limits of the MCP tools this plan grants.
+   * They have to live here because `mcp_primitives` is honoured only by the policy that owns the
+   * `rate_limit` partition; on a key's ACL policy it is stored and silently ignored (verified both
+   * ways against v5.15.0 — see mcp-mapper.ts).
+   */
+  private async accessRights(tenantId: string, planId: string): Promise<Record<string, unknown>> {
+    return this.mcpService.planAccessRights(tenantId, planId);
+  }
 
   /**
    * Create the row, then push its policy to every node.
@@ -86,7 +104,9 @@ export class PlanService {
     }
 
     try {
-      await this.tykClient.upsertPolicy(buildPlanPolicy(row, tykOrgId));
+      await this.tykClient.upsertPolicy(
+        buildPlanPolicy(row, tykOrgId, await this.accessRights(tenantId, row.id)),
+      );
     } catch (err) {
       await prisma.plan.delete({ where: { id: row.id } }).catch((cleanupErr: unknown) => {
         // The row now outlives its failed policy push. Say so loudly — it is the one state this
@@ -147,7 +167,9 @@ export class PlanService {
       throw err;
     }
 
-    await this.tykClient.upsertPolicy(buildPlanPolicy(row, tykOrgId));
+    await this.tykClient.upsertPolicy(
+      buildPlanPolicy(row, tykOrgId, await this.accessRights(tenantId, row.id)),
+    );
     return toDetail(row);
   }
 
@@ -172,7 +194,9 @@ export class PlanService {
   async syncPolicy(id: string, tenantId: string): Promise<NodeOutcome[]> {
     const row = await this.findRow(id, tenantId);
     const { tykOrgId } = await loadTenantScope(tenantId);
-    return this.tykClient.upsertPolicy(buildPlanPolicy(row, tykOrgId));
+    return this.tykClient.upsertPolicy(
+      buildPlanPolicy(row, tykOrgId, await this.accessRights(tenantId, row.id)),
+    );
   }
 
   /** Tenant-scoped lookup. Scoping the WHERE (not filtering after) is what makes this isolated. */

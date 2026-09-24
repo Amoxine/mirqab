@@ -83,4 +83,16 @@ export class CreateKeyDto {
   @IsOptional()
   @IsUUID('4')
   planId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'MCP server this key may call (WP28). Independent of `apiDefId`: an MCP proxy is its own ' +
+      'gateway API with its own credential. Which TOOLS the key may call is not chosen here — it ' +
+      'follows from `planId` against each tool’s own plan binding, so a tool bound to another plan ' +
+      'answers 403 and is hidden from this key’s `tools/list`.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  mcpServerId?: string;
 }

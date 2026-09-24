@@ -28,8 +28,9 @@ import {
   toNumber,
   type RollupRow,
 } from '../../analytics/services/pump-query.builder';
-import { buildTykKeyDef, buildKeyAclPolicy, applyKeyUpdate } from './tyk-key-mapper';
+import { buildTykKeyDef, buildKeyAclPolicy, applyKeyUpdate, type KeyApiScope } from './tyk-key-mapper';
 import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
+import { McpService } from '../../mcp/services/mcp.service';
 
 /** Tyk answers a missing key with 404 "Key not found" / "There is no such key found". */
 const TYK_KEY_MISSING = /not found|no such key/i;
@@ -57,6 +58,7 @@ export class KeyService {
   constructor(
     private readonly tykClient: TykClientService,
     private readonly quotaService: QuotaService,
+    private readonly mcpService: McpService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -106,10 +108,27 @@ export class KeyService {
 
     const orgId = (await loadTenantScope(tenantId)).tykOrgId;
 
+    // WP28: an MCP proxy is a second, independent scope — its own gateway API with its own
+    // credential, not the source REST API's. `mcpTools` is the tool grant this key's PLAN produces
+    // (`mcpToolGrants`), which is what makes a key on the wrong plan answer 403 on a bound tool.
+    const mcpScope = dto.mcpServerId
+      ? await this.mcpService.keyAccessRight(dto.mcpServerId, tenantId, dto.planId ?? null)
+      : null;
+    if (dto.mcpServerId && !mcpScope) {
+      throw new BadRequestException(
+        `MCP server ${dto.mcpServerId} not found in this tenant, or not synced to the gateway yet`,
+      );
+    }
+    const scopes: KeyApiScope[] = [
+      ...(apiDef ? [apiDef] : []),
+      ...(mcpScope ? [mcpScope.scope] : []),
+    ];
+
     // Step 1: a planned key needs a companion ACL policy pushed BEFORE the key references it — see
     // buildKeyAclPolicy's doc comment for why the plan's own policy cannot carry this key's access.
-    // Null when there is nothing to grant (no synced apiDef), same as a non-plan apiDef-less key.
-    const aclPolicy = dto.planId ? buildKeyAclPolicy(randomUUID(), apiDef, orgId) : null;
+    // Null when there is nothing to grant (no synced apiDef and no MCP server), same as a non-plan
+    // apiDef-less key.
+    const aclPolicy = dto.planId ? buildKeyAclPolicy(randomUUID(), scopes, orgId) : null;
     if (aclPolicy) {
       try {
         await this.tykClient.upsertPolicy(aclPolicy);
@@ -123,7 +142,7 @@ export class KeyService {
     const aclPolicyId = aclPolicy ? (aclPolicy.id as string) : undefined;
 
     // Step 2: Build Tyk key definition
-    const tykKeyDef = buildTykKeyDef(dto, apiDef, orgId, undefined, aclPolicyId);
+    const tykKeyDef = buildTykKeyDef(dto, scopes, orgId, undefined, aclPolicyId);
 
     // Step 3: Create key in Tyk
     let tykResult: { keyHash: string; key: string };
@@ -164,6 +183,7 @@ export class KeyService {
           status: ApiKeyStatus.ACTIVE,
           expiresAt,
           apiDefId: dto.apiDefId ?? null,
+          mcpServerId: dto.mcpServerId ?? null,
           planId: dto.planId ?? null,
           tykAclPolicyId: aclPolicyId ?? null,
         },

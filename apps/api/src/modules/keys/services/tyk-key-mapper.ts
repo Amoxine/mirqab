@@ -13,6 +13,13 @@ const PERIOD_SECONDS: Record<QuotaPeriod, number> = {
 export interface KeyApiScope {
   name: string;
   tykApiId: string | null;
+  /**
+   * WP28: present only for an MCP proxy — the tool names this key may call, derived from its plan
+   * against each tool's own binding (`mcpToolGrants`). An empty array is meaningful and is NOT the
+   * same as omitting the field: it grants no tool at all, which is what a key whose plan matches
+   * none of the bindings should get.
+   */
+  mcpTools?: string[];
 }
 
 /** Limit fields shared by CreateKeyDto and UpdateKeyDto. `0` means "unlimited" for both limits. */
@@ -57,7 +64,19 @@ function accessRightsFor(apis: KeyApiScopes): Record<string, unknown> | undefine
   if (withTykId.length === 0) return undefined;
 
   return Object.fromEntries(
-    withTykId.map((api) => [api.tykApiId, { api_id: api.tykApiId, api_name: api.name, versions: ['Default'] }]),
+    withTykId.map((api) => [
+      api.tykApiId,
+      {
+        api_id: api.tykApiId,
+        api_name: api.name,
+        versions: ['Default'],
+        // WP28 (TBAC). Only the policy that owns the `acl` partition is read for this — a key's
+        // companion ACL policy, or an unplanned key's own inline session, both of which are built
+        // from here. On a plan's policy the same field is stored and silently ignored, verified
+        // against v5.15.0; see mcp-mapper.ts.
+        ...(api.mcpTools ? { mcp_access_rights: { tools: { allowed: api.mcpTools } } } : {}),
+      },
+    ]),
   );
 }
 

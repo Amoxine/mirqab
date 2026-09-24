@@ -313,6 +313,50 @@ export class TykClientService {
   }
 
   /**
+   * Upsert an MCP proxy on every node (WP28).
+   *
+   * `/tyk/mcps` is a lifecycle of its own, NOT a view over `/tyk/apis`: an MCP proxy cannot be
+   * created by `POST /tyk/apis/oas` and `DELETE /tyk/apis/{id}` answers 500 for one. POST is an
+   * upsert keyed by `x-tyk-api-gateway.info.id`, the same as `/apis/oas` (verified on v5.15.0:
+   * re-posting an existing id answers `action: "modified"`).
+   *
+   * The caller must ensure the PAIRED SOURCE API is already loaded on each node before this runs —
+   * the gateway validates the pairing against the loaded spec, not the stored one, so an MCP proxy
+   * pushed in the same breath as a new source API is checked against the source's previous state
+   * and refused. `upsertOasApi` reloads before returning, which is what makes ordering the two
+   * calls sufficient.
+   */
+  async upsertMcp(tykDef: Record<string, unknown>): Promise<NodeOutcome[]> {
+    this.logger.debug('Upserting MCP proxy in Tyk');
+
+    return this.fanOut(async (nodeUrl) => {
+      const body = await this.request('/mcps', { method: 'POST', body: JSON.stringify(tykDef) }, nodeUrl);
+      await this.reloadNode(nodeUrl);
+      return body;
+    });
+  }
+
+  /** Read one MCP proxy definition from a node. 404s when the node has not loaded it. */
+  async getMcpFromNode(apiId: string, nodeUrl: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(`/mcps/${encodeURIComponent(apiId)}`, {}, nodeUrl);
+  }
+
+  /** Remove an MCP proxy from every node. */
+  async deleteMcp(apiId: string): Promise<NodeOutcome[]> {
+    this.logger.debug(`Deleting MCP proxy ${apiId} from Tyk`);
+
+    return this.fanOut(async (nodeUrl) => {
+      const body = await this.request(
+        `/mcps/${encodeURIComponent(apiId)}`,
+        { method: 'DELETE' },
+        nodeUrl,
+      );
+      await this.reloadNode(nodeUrl);
+      return body;
+    });
+  }
+
+  /**
    * Drop this API's cached responses on every node.
    *
    * Fans out because the response cache is per-node in-memory as well as Redis-backed: invalidating
@@ -608,6 +652,15 @@ export class TykClientService {
    * distinguishes them, with 404 `Policy not found`). Without it a caller could never finish a
    * half-done revoke, because "already gone" would keep reading as "the gateway refused".
    */
+  /**
+   * Read one policy back. The only way to edit a policy in place without losing what else it
+   * carries: `POST /tyk/policies` replaces the whole document, so a caller changing one
+   * `access_rights` entry has to start from the current one (WP28's tool-grant refresh does).
+   */
+  async getPolicy(policyId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(`/policies/${encodeURIComponent(policyId)}`);
+  }
+
   async deletePolicy(policyId: string): Promise<NodeOutcome[]> {
     this.logger.debug(`Deleting policy ${policyId} from Tyk`);
     const path = `/policies/${encodeURIComponent(policyId)}`;

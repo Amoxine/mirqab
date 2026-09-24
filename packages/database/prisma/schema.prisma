@@ -172,6 +172,8 @@ model Tenant {
   /// WP22: the portal's developer directory. A tenant runs one portal; a person's single Kratos
   /// identity can be at most one Developer, so it belongs to exactly one tenant's portal too.
   developers     Developer[]
+  /// WP28.
+  mcpServers     McpServer[]
 
   @@map("tenants")
 }
@@ -292,6 +294,8 @@ model ApiDefinition {
   products  ProductApi[]
   parentApi ApiDefinition?  @relation("ApiVersions", fields: [parentApiId], references: [id], onDelete: Restrict)
   versions  ApiDefinition[] @relation("ApiVersions")
+  /// WP28: the MCP proxies paired to this API. `Restrict` on the far side — see McpServer.
+  mcpServers McpServer[]
 
   @@unique([tenantId, slug])
   // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
@@ -334,10 +338,20 @@ model ApiKey {
   /// alongside it, deleted alongside it — see `KeyService`.
   tykAclPolicyId String? @map("tyk_acl_policy_id")
 
+  /// WP28: the MCP server this key may call, when it is an MCP key. Independent of `apiDefId` —
+  /// an MCP proxy is its own gateway API with its own credential, deliberately NOT the source REST
+  /// API's (Tyk treats the proxy as a separate consumer of that API). Which TOOLS the key may call
+  /// is not stored here: it is derived from the key's plan against `McpServer.tools[].planId`
+  /// (see `mcpToolGrants`), so re-binding a tool to a different plan changes access without
+  /// rewriting a single key row.
+  mcpServerId String? @map("mcp_server_id")
+
   tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiDef   ApiDefinition? @relation(fields: [apiDefId], references: [id], onDelete: SetNull)
   apiDefId String?        @map("api_def_id")
+  /// SetNull for the same reason as `plan`: deleting an MCP server must not destroy live credentials.
+  mcpServer McpServer?    @relation(fields: [mcpServerId], references: [id], onDelete: SetNull)
   /// SetNull, not Cascade: deleting a plan must not delete the customer's keys. They fall back to
   /// unlimited-by-policy and are visible as plan-less in the UI, which is recoverable; deleting
   /// live credentials because a commercial plan was retired is not.
@@ -349,7 +363,57 @@ model ApiKey {
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([userId])
   @@index([apiDefId])
+  @@index([mcpServerId])
   @@map("api_keys")
+}
+
+/// An MCP (Model Context Protocol) server this tenant publishes (WP28).
+///
+/// It is NOT a second kind of API definition: on the gateway it is a **REST-as-MCP proxy**, a
+/// separate object with its own lifecycle under `/tyk/mcps` — Tyk's `/tyk/apis` CRUD cannot create
+/// or delete it. The proxy is *paired* to exactly one source `ApiDefinition`, which must be
+/// OAS-format and already synced: Tyk synthesises the MCP server from that API's OpenAPI document
+/// (`upstream.url = tyk://<sourceTykApiId>/mcp`) and translates each `tools/call` into the REST
+/// operation the tool names. The source API is never modified.
+///
+/// Pairing is org-scoped by the gateway itself — "Paired REST API belongs to a different OrgID",
+/// live-verified on v5.15.0 — so the tenant isolation `Tenant.tykOrgId` already provides extends to
+/// MCP for free, and a cross-tenant pairing is refused by the gateway even if this row's own
+/// tenant check were ever bypassed.
+model McpServer {
+  id          String        @id @default(uuid())
+  tenantId    String        @map("tenant_id")
+  /// The paired REST API. `Restrict`, not Cascade or SetNull: an MCP proxy with no source is not a
+  /// degraded proxy, it is a definition the gateway refuses to load. Delete the proxy first.
+  sourceApiId String        @map("source_api_id")
+  name        String
+  slug        String
+  /// What the user types; what reaches the gateway is `/{tenant.slug}{listenPath}`, exactly as for
+  /// an ApiDefinition. The MCP endpoint itself is `POST {listenPath}/mcp` — streamable HTTP is the
+  /// only transport Tyk 5.15.0 serves for an MCP proxy.
+  listenPath  String        @map("listen_path")
+  /// `McpToolDto[]`: which source operations are exposed as MCP tools, each with its optional
+  /// per-primitive rate limit and its optional plan binding (TBAC). Stored as one JSON column
+  /// rather than a child table because a tool is never read, written or synced on its own — the
+  /// whole definition is re-pushed to the gateway on every change.
+  tools       Json          @default("[]")
+  tykApiId    String?       @unique @map("tyk_api_id")
+  status      ApiStatus     @default(ACTIVE)
+  syncStatus  ApiSyncStatus @default(PENDING) @map("sync_status")
+  syncError   String?       @map("sync_error")
+  lastSyncedAt DateTime?    @map("last_synced_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceApi ApiDefinition @relation(fields: [sourceApiId], references: [id], onDelete: Restrict)
+  apiKeys   ApiKey[]
+
+  @@unique([tenantId, slug])
+  @@unique([tenantId, listenPath])
+  @@index([tenantId])
+  @@index([sourceApiId])
+  @@map("mcp_servers")
 }
 
 /// A commercial plan (WP18): one Tyk policy, shared by every key assigned to it.

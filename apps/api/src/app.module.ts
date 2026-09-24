@@ -19,6 +19,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { PortalModule } from './modules/portal/portal.module';
+import { McpModule } from './modules/mcp/mcp.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -67,6 +68,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     AuditModule,
     ObservabilityModule,
     PortalModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [
