@@ -96,6 +96,45 @@
     "successToast": "تمت إزالة {email}",
     "errorToast": "تعذّرت إزالة العضو"
   },
+  "quota": {
+    "columnHeader": "حصة المؤسسة",
+    "unlimited": "غير محدودة",
+    "editAction": "تعديل الحصة",
+    "sheetTitle": "حصة المؤسسة — {name}",
+    "sheetDescription": "السقف الذي يعلو كل المفاتيح التي تصدرها هذه المؤسسة.",
+    "quotaMaxLabel": "سقف الحصة",
+    "quotaMaxHint": "-1 تعني غير محدود (اصطلاح Tyk) ؛ 0 ترفض كل طلب.",
+    "periodLabel": "فترة التجديد",
+    "periods": {
+      "HOURLY": "ساعي",
+      "DAILY": "يومي",
+      "WEEKLY": "أسبوعي",
+      "MONTHLY": "شهري"
+    },
+    "isInactiveLabel": "قطع هذه المؤسسة تمامًا",
+    "isInactiveHint": "يرفض كل طلب من هذه المؤسسة، بصرف النظر عن الحصة.",
+    "submitSave": "حفظ الحصة",
+    "submitSaving": "جارٍ الحفظ...",
+    "saveSuccess": "تم تحديث الحصة",
+    "saveFailed": "تعذّر تحديث الحصة",
+    "loading": "جارٍ تحميل الحصة...",
+    "errors": {
+      "quotaMaxInvalid": "يجب أن يكون رقمًا صحيحًا لا يقل عن -1"
+    },
+    "inactiveNotice": "هذه المؤسسة مقطوعة حاليًا — يُرفض كل طلب.",
+    "resetSuccess": "تمت إعادة ضبط عداد الاستخدام",
+    "resetFailed": "تعذّرت إعادة ضبط الاستخدام"
+  },
+  "usage": {
+    "title": "الاستخدام",
+    "description": "الطلبات المقاسة مقابل حصة هذه المؤسسة على مستوى المؤسسة.",
+    "quota": "الحصة",
+    "quotaUsed": "{used} / {max} مستخدَم",
+    "quotaUsedAria": "الحصة المستخدَمة",
+    "noQuota": "لا توجد حصة مؤسسة مضبوطة لهذه المؤسسة.",
+    "loadFailed": "تعذّر تحميل بيانات الاستخدام.",
+    "resetButton": "إعادة ضبط الاستخدام"
+  },
   "statusDialog": {
     "suspend": {
       "title": "تعليق هذه المؤسسة؟",

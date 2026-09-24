@@ -1,6 +1,10 @@
 {
   "title": "Paramètres",
   "description": "Configuration de la passerelle, affichée en lecture seule. L'enregistrement des nœuds et la rotation des secrets sont des actions d'opérateur en dehors de ce tableau de bord.",
+  "rolesCard": {
+    "title": "Rôles et permissions",
+    "description": "Rôles personnalisés par organisation et matrice des permissions."
+  },
   "tabs": {
     "general": "Général",
     "nodes": "Nœuds de la passerelle"

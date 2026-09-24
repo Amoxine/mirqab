@@ -26,6 +26,8 @@ export function makeKeyFormSchema(t: (key: string) => string) {
   return z.object({
     name: z.string().trim().min(1, t('form.errors.nameRequired')).max(100, t('form.errors.nameTooLong')),
     apiDefId: z.string(),
+    // WP19: a select, and optional — '' means "no plan", which is a fully-functional key, not an error.
+    planId: z.string(),
     expiresAt: z
       .string()
       .refine((v) => v === '' || endOfDayUtc(v).getTime() > Date.now(), t('form.errors.expiryMustBeFuture')),
@@ -47,6 +49,7 @@ export type KeyFormValues = z.infer<ReturnType<typeof makeKeyFormSchema>>;
 export const emptyKeyFormValues: KeyFormValues = {
   name: '',
   apiDefId: '',
+  planId: '',
   expiresAt: '',
   rateLimitPerSecond: '',
   quotaLimit: '',
@@ -63,6 +66,7 @@ export function valuesFromKey(key: KeyDetail): KeyFormValues {
   return {
     name: key.name,
     apiDefId: key.apiDefId ?? '',
+    planId: key.planId ?? '',
     expiresAt: key.expiresAt ? key.expiresAt.slice(0, 10) : '',
     rateLimitPerSecond:
       tyk && tyk.rate > 0 ? String(Math.max(1, Math.round(tyk.rate / Math.max(tyk.per, 1)))) : '',
@@ -77,6 +81,7 @@ export function toCreatePayload(v: KeyFormValues): CreateKeyPayload {
   return {
     name: v.name.trim(),
     apiDefId: v.apiDefId,
+    ...(v.planId ? { planId: v.planId } : {}),
     ...(v.expiresAt ? { expiresAt: endOfDayUtc(v.expiresAt).toISOString() } : {}),
     ...(rate > 0 ? { rateLimitPerSecond: rate } : {}),
     ...(v.quotaLimit ? { quotaLimit: Number(v.quotaLimit), quotaPeriod: v.quotaPeriod } : {}),

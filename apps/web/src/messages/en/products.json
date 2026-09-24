@@ -1,0 +1,51 @@
+{
+  "list": {
+    "title": "Products",
+    "description": "Bundles of APIs a developer browses. Access still comes from a key's own rights.",
+    "createButton": "Create Product",
+    "openMenu": "Open menu",
+    "empty": "No products found.",
+    "noApis": "No APIs bundled",
+    "moreApis": "+{count} more",
+    "columns": {
+      "apis": "APIs"
+    }
+  },
+  "fields": {
+    "slug": "Slug",
+    "description": "Description",
+    "apis": "APIs bundled"
+  },
+  "form": {
+    "createTitle": "Create product",
+    "editTitle": "Edit product",
+    "createDescription": "Group APIs together for developers to browse as one product.",
+    "editDescription": "Sending a new API list replaces the bundle's membership.",
+    "namePlaceholder": "Payments Suite",
+    "slugPlaceholder": "payments-suite",
+    "apisHint": "Select the APIs this product bundles.",
+    "apisLoading": "Loading APIs...",
+    "noApis": "No APIs yet. Create one first.",
+    "submitCreate": "Create product",
+    "submitCreating": "Creating...",
+    "submitSave": "Save changes",
+    "submitSaving": "Saving...",
+    "createSuccess": "Product created",
+    "updateSuccess": "Product updated",
+    "createFailed": "Failed to create product",
+    "updateFailed": "Failed to update product",
+    "errors": {
+      "nameTooShort": "Must be at least 2 characters",
+      "nameTooLong": "Must be at most 100 characters",
+      "slugInvalid": "Lowercase alphanumeric with hyphens only"
+    }
+  },
+  "deleteDialog": {
+    "title": "Delete this product?",
+    "description": "{name} will be removed. The APIs it bundled are untouched.",
+    "confirm": "Delete product",
+    "pending": "Deleting...",
+    "success": "Product \"{name}\" deleted",
+    "failed": "Failed to delete product"
+  }
+}

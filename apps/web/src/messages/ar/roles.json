@@ -1,0 +1,61 @@
+{
+  "backToSettings": "الرجوع إلى الإعدادات",
+  "list": {
+    "title": "الأدوار",
+    "description": "أدوار مخصصة لهذه المؤسسة والصلاحيات التي يمنحها كل دور.",
+    "createButton": "إنشاء دور",
+    "openMenu": "فتح القائمة",
+    "empty": "لم يتم العثور على أي دور مخصص.",
+    "permissionCount": "{count} صلاحية",
+    "columns": {
+      "permissions": "الصلاحيات",
+      "members": "الأعضاء"
+    }
+  },
+  "fields": {
+    "description": "الوصف",
+    "permissions": "الصلاحيات"
+  },
+  "form": {
+    "createTitle": "إنشاء دور",
+    "editTitle": "تعديل الدور — {name}",
+    "createDescription": "مجموعة صلاحيات مسمّاة يمكن تخصيصها لأعضاء هذه المؤسسة.",
+    "editDescription": "تسري التغييرات على كل عضو يحمل هذا الدور مع طلبه التالي — دون الحاجة لإعادة تسجيل الدخول.",
+    "namePlaceholder": "مشاهد-الفواتير",
+    "permissionsHint": "حدّد كل صلاحية يجب أن يمنحها هذا الدور.",
+    "submitCreate": "إنشاء الدور",
+    "submitCreating": "جارٍ الإنشاء...",
+    "submitSave": "حفظ التغييرات",
+    "submitSaving": "جارٍ الحفظ...",
+    "createSuccess": "تم إنشاء الدور",
+    "updateSuccess": "تم تحديث الدور",
+    "createFailed": "تعذّر إنشاء الدور",
+    "updateFailed": "تعذّر تحديث الدور",
+    "reservedNotice": "«{name}» دور على مستوى النظام ولا يمكن تعديله هنا.",
+    "errors": {
+      "nameTooShort": "يجب أن يتكون من حرفين على الأقل",
+      "nameTooLong": "يجب ألا يتجاوز 60 حرفًا",
+      "nameReserved": "«{name}» اسم دور على مستوى النظام ولا يمكن استخدامه هنا"
+    }
+  },
+  "matrix": {
+    "resource": "المورد",
+    "actions": {
+      "read": "قراءة",
+      "create": "إنشاء",
+      "update": "تعديل",
+      "delete": "حذف",
+      "revoke": "إلغاء",
+      "sync": "مزامنة",
+      "export": "تصدير"
+    }
+  },
+  "deleteDialog": {
+    "title": "هل تريد حذف هذا الدور؟",
+    "description": "سيُحذف {name}. يُرفض الحذف طالما يحمله أحد الأعضاء.",
+    "confirm": "حذف الدور",
+    "pending": "جارٍ الحذف...",
+    "success": "تم حذف الدور «{name}»",
+    "failed": "تعذّر حذف الدور"
+  }
+}

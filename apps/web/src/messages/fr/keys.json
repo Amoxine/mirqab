@@ -7,6 +7,7 @@
     "viewDetails": "Voir les détails",
     "columns": {
       "api": "API",
+      "plan": "Forfait",
       "expires": "Expire"
     },
     "never": "Jamais",
@@ -26,7 +27,11 @@
   },
   "actions": {
     "revoke": "Révoquer",
-    "revoking": "Révocation en cours..."
+    "revoking": "Révocation en cours...",
+    "rotate": "Régénérer",
+    "rotating": "Régénération en cours...",
+    "delete": "Supprimer",
+    "deleting": "Suppression en cours..."
   },
   "detail": {
     "backToKeys": "Retour aux clés API",
@@ -99,6 +104,13 @@
     "noActiveApis": "Aucune API active pour l'instant. Créez et activez une API d'abord.",
     "apiSyncHint": "L'API doit être synchronisée avec la passerelle avant de pouvoir créer des clés pour elle.",
     "apiNotEditable": "Une clé ne peut pas être déplacée vers une autre API.",
+    "planLabel": "Forfait",
+    "planPlaceholder": "Sélectionner un forfait",
+    "planLoading": "Chargement des forfaits...",
+    "noPlan": "Aucun forfait",
+    "planNotEditable": "Le forfait d'une clé ne peut pas être modifié après sa création.",
+    "planHint": "Facultatif — une clé sans forfait fonctionne pleinement, en utilisant les limites ci-dessous.",
+    "limitsFromPlan": "Défini par le forfait à la place.",
     "expiresLabel": "Date d'expiration (facultatif)",
     "expiresHint": "Valide jusqu'à la fin de cette journée (UTC). Laissez vide pour aucune expiration.",
     "rateLimitLabel": "Limite de débit (requêtes / seconde)",
@@ -140,5 +152,18 @@
     "confirm": "Révoquer la clé",
     "success": "Clé « {name} » révoquée",
     "failed": "Impossible de révoquer la clé"
+  },
+  "rotateDialog": {
+    "title": "Régénérer cette clé API ?",
+    "description": "Le justificatif actuel de {keyName} cesse de fonctionner immédiatement et est remplacé par un nouveau, affiché une seule fois.",
+    "confirm": "Régénérer la clé",
+    "failed": "Impossible de régénérer la clé"
+  },
+  "deleteDialog": {
+    "title": "Supprimer cette clé API ?",
+    "description": "{keyName} sera définitivement supprimée. Cette action est irréversible.",
+    "confirm": "Supprimer la clé",
+    "success": "Clé « {name} » supprimée",
+    "failed": "Impossible de supprimer la clé"
   }
 }

@@ -13,6 +13,8 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
+  Layers,
+  Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,7 +24,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 
 interface NavItem {
   /** Key into the `nav` message namespace. */
-  labelKey: 'dashboard' | 'apis' | 'keys' | 'tenants' | 'analytics' | 'auditLogs' | 'settings';
+  labelKey: 'dashboard' | 'apis' | 'keys' | 'plans' | 'products' | 'tenants' | 'analytics' | 'auditLogs' | 'settings';
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   /** Permission required to see the entry; omitted = always visible. */
@@ -33,6 +35,8 @@ const navigation: NavItem[] = [
   { labelKey: 'dashboard', href: '/', icon: LayoutDashboard },
   { labelKey: 'apis', href: '/apis', icon: ShieldCheck, permission: 'api:read' },
   { labelKey: 'keys', href: '/keys', icon: KeyRound, permission: 'key:read' },
+  { labelKey: 'plans', href: '/plans', icon: Layers, permission: 'plan:read' },
+  { labelKey: 'products', href: '/products', icon: Package, permission: 'product:read' },
   { labelKey: 'tenants', href: '/tenants', icon: Users, permission: 'tenant:read' },
   { labelKey: 'analytics', href: '/analytics', icon: BarChart3, permission: 'analytics:read' },
   { labelKey: 'auditLogs', href: '/audit-logs', icon: FileText, permission: 'audit:read' },

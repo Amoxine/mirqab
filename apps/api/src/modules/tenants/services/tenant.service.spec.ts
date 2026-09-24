@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import 'reflect-metadata';
 import { TenantService } from './tenant.service';
+import type { OrgQuotaService } from '../../quotas/services/org-quota.service';
 import type { UserPayload } from '../../../common/types';
 import { ketoCheck, ketoDeleteMembership, ketoWriteMembership } from '../../../common/ory/keto';
 import type * as KetoModule from '../../../common/ory/keto';
@@ -125,7 +126,9 @@ function makeService(options: {
     Promise.resolve({ count: _args.data.length }),
   );
 
-  const service = new TenantService();
+  // None of these tests exercise the WP19 quota routes — a stub is enough to satisfy the constructor.
+  const orgQuota = { get: jest.fn(), set: jest.fn(), reset: jest.fn(), resetKey: jest.fn() };
+  const service = new TenantService(orgQuota as unknown as OrgQuotaService);
   const prisma: Record<string, unknown> = {
     tenant: {
       findMany: tenantFindMany,
@@ -388,6 +391,21 @@ describe('TenantService Keto write compensation', () => {
   });
 });
 
+// WP19: the same escalation gap as updateMemberRole's guard below, on the other path that writes
+// `UserTenant.role` — inviting a brand new member straight in as "super_admin".
+describe('TenantService.assignUser escalation guard', () => {
+  it('403s an attempt to invite a member in as super_admin, before touching Keto or Postgres', async () => {
+    const { service, userTenantCreate } = makeService();
+
+    await expect(
+      service.assignUser('t1', 'u2', 'super_admin', caller(['admin'])),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(ketoWriteMembership).not.toHaveBeenCalled();
+    expect(userTenantCreate).not.toHaveBeenCalled();
+  });
+});
+
 // WP6: worker-4/WP2 flagged and deliberately left this gap — a role change or removal wrote/deleted
 // the Postgres UserTenant row but never touched the matching Keto tuple, so the OLD relation kept
 // granting access (e.g. demoting admin -> viewer without deleting the `admin` tuple left `manage`
@@ -401,6 +419,24 @@ describe('TenantService.updateMemberRole', () => {
     ).rejects.toThrow(NotFoundException);
     expect(ketoDeleteMembership).not.toHaveBeenCalled();
     expect(ketoWriteMembership).not.toHaveBeenCalled();
+  });
+
+  // WP19: `UserTenant.role` is matched by plain string against `Role.name`, and `isSuperAdmin`
+  // matches that string globally with no tenant scoping — a tenant admin (who already clears
+  // `assertPermit(..., 'manage')` in their own tenant) could otherwise self-grant the platform-wide
+  // bypass with no header forgery. Rejected before the membership lookup, case-insensitively.
+  it('403s an attempt to grant super_admin, before touching Keto or the membership row', async () => {
+    const { service, userTenantUpdate } = makeService({ memberRoles: { u2: 'viewer' } });
+
+    await expect(
+      service.updateMemberRole('t1', 'u2', 'super_admin', caller(['admin'])),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.updateMemberRole('t1', 'u2', 'SUPER_ADMIN', caller(['admin'])),
+    ).rejects.toThrow(ForbiddenException);
+    expect(ketoDeleteMembership).not.toHaveBeenCalled();
+    expect(ketoWriteMembership).not.toHaveBeenCalled();
+    expect(userTenantUpdate).not.toHaveBeenCalled();
   });
 
   it('skips Keto entirely when the coarse relation is unchanged (operator -> viewer are both "member")', async () => {

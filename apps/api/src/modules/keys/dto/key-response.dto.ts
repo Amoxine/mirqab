@@ -25,6 +25,9 @@ export class KeyResponseDto {
 
   @ApiPropertyOptional({ format: 'uuid' })
   apiDefId?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'WP19: null is a valid, fully-functional state' })
+  planId?: string | null;
 }
 
 export class KeyListItemDto {
@@ -48,6 +51,12 @@ export class KeyListItemDto {
 
   @ApiPropertyOptional()
   apiDefName!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'WP19: null is a valid, fully-functional state' })
+  planId!: string | null;
+
+  @ApiPropertyOptional()
+  planName!: string | null;
 }
 
 export class KeyListResponseDto {
@@ -105,6 +114,12 @@ export class KeyDetailResponseDto {
 
   @ApiPropertyOptional()
   apiDefName!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'WP19: null is a valid, fully-functional state' })
+  planId!: string | null;
+
+  @ApiPropertyOptional()
+  planName!: string | null;
 
   @ApiProperty({
     type: KeyTykStateDto,

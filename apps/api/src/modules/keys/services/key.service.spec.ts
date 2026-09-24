@@ -5,6 +5,7 @@ import { prisma } from '@open-gateway/database';
 import type { TykClientService } from '../../tyk-integration/services/tyk-client.service';
 import type { QuotaService } from '../../quotas/services/quota.service';
 import type { McpService } from '../../mcp/services/mcp.service';
+import type { OrgQuotaService } from '../../quotas/services/org-quota.service';
 import { analyticsWindow, keyRollupQuery } from '../../analytics/services/pump-query.builder';
 import { KeyService } from './key.service';
 
@@ -12,7 +13,14 @@ jest.mock('@open-gateway/database', () => ({
   prisma: {
     // WP12c: every gateway write resolves the tenant's org through `loadTenantScope`.
     tenant: { findUniqueOrThrow: jest.fn().mockResolvedValue({ tykOrgId: 'og-tenant-1', slug: 'tenant-1' }) },
-    apiKey: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn() },
+    apiKey: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
     apiDefinition: { findUnique: jest.fn() },
     // WP18: create() looks up a planId's ownership before building the key.
     plan: { findFirst: jest.fn() },
@@ -22,7 +30,7 @@ jest.mock('@open-gateway/database', () => ({
 }));
 
 interface MockDb {
-  apiKey: Record<'findUnique' | 'findMany' | 'count' | 'create' | 'update', jest.Mock>;
+  apiKey: Record<'findUnique' | 'findMany' | 'count' | 'create' | 'update' | 'delete', jest.Mock>;
   apiDefinition: { findUnique: jest.Mock };
   plan: { findFirst: jest.Mock };
   quota: { deleteMany: jest.Mock };
@@ -83,6 +91,7 @@ describe('KeyService', () => {
     deletePolicy: jest.fn(),
   };
   const quotas = { create: jest.fn(), upsert: jest.fn() };
+  const orgQuota = { resetKey: jest.fn() };
   let service: KeyService;
 
   beforeAll(() => {
@@ -102,6 +111,7 @@ describe('KeyService', () => {
       tyk as unknown as TykClientService,
       quotas as unknown as QuotaService,
       { keyAccessRight: jest.fn().mockResolvedValue(null) } as unknown as McpService,
+      orgQuota as unknown as OrgQuotaService,
     );
   });
 
@@ -723,6 +733,96 @@ describe('KeyService', () => {
 
       await expect(service.getUsage(KEY_ID, TENANT)).resolves.toMatchObject({ requests: 0 });
       expect(db.$queryRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rotate', () => {
+    const NEW_HASH = 'a1b2c3d4e5f6';
+    const NEW_RAW_KEY = 'new-raw-secret-value';
+
+    it('404s a key belonging to another tenant, before touching the gateway', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ tenantId: OTHER_TENANT }));
+
+      await expect(service.rotate(KEY_ID, TENANT)).rejects.toThrow(NotFoundException);
+      expect(tyk.getKey).not.toHaveBeenCalled();
+    });
+
+    it('refuses to rotate a key that is not active', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ status: ApiKeyStatus.REVOKED }));
+
+      await expect(service.rotate(KEY_ID, TENANT)).rejects.toThrow(ConflictException);
+      expect(tyk.getKey).not.toHaveBeenCalled();
+    });
+
+    it('mints a new gateway key with the live settings, repoints the row, then drops the old key', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow());
+      tyk.getKey.mockResolvedValue(tykState);
+      tyk.createKey.mockResolvedValue({ keyHash: NEW_HASH, key: NEW_RAW_KEY });
+      db.apiKey.update.mockResolvedValue(keyRow({ tykKeyId: NEW_HASH }));
+      tyk.deleteKey.mockResolvedValue(undefined);
+
+      const result = await service.rotate(KEY_ID, TENANT);
+
+      expect(result).toEqual({ id: KEY_ID, keyValue: NEW_RAW_KEY });
+      // The new key carries the live session's rate/quota/access_rights unchanged — see
+      // applyKeyUpdate's doc comment for why an empty patch is what achieves that.
+      expect(tyk.createKey).toHaveBeenCalledWith(expect.objectContaining({ ...tykState, org_id: 'og-tenant-1' }));
+      expect(db.apiKey.update).toHaveBeenCalledWith({
+        where: { id: KEY_ID },
+        data: { tykKeyId: NEW_HASH, keyHash: expect.any(String) as string },
+      });
+      // The old gateway key is deleted only AFTER the row is repointed at the new one.
+      expect(tyk.deleteKey).toHaveBeenCalledWith(HASH);
+    });
+
+    it('still reports success when deleting the old (now-orphaned) gateway key fails', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow());
+      tyk.getKey.mockResolvedValue(tykState);
+      tyk.createKey.mockResolvedValue({ keyHash: NEW_HASH, key: NEW_RAW_KEY });
+      db.apiKey.update.mockResolvedValue(keyRow({ tykKeyId: NEW_HASH }));
+      tyk.deleteKey.mockRejectedValue(new Error('gateway unreachable'));
+
+      await expect(service.rotate(KEY_ID, TENANT)).resolves.toEqual({ id: KEY_ID, keyValue: NEW_RAW_KEY });
+    });
+
+    it('surfaces a gateway failure reading the live session as a 502, without minting anything', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow());
+      tyk.getKey.mockRejectedValue(new Error('gateway down'));
+
+      await expect(service.rotate(KEY_ID, TENANT)).rejects.toThrow(BadGatewayException);
+      expect(tyk.createKey).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetUsage', () => {
+    it('delegates to OrgQuotaService.resetKey', async () => {
+      orgQuota.resetKey.mockResolvedValue({ apiKeyId: KEY_ID, gatewayReset: true });
+
+      await expect(service.resetUsage(KEY_ID, TENANT)).resolves.toEqual({ apiKeyId: KEY_ID, gatewayReset: true });
+      expect(orgQuota.resetKey).toHaveBeenCalledWith(KEY_ID, TENANT);
+    });
+  });
+
+  describe('remove', () => {
+    it('404s a key belonging to another tenant', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ tenantId: OTHER_TENANT }));
+
+      await expect(service.remove(KEY_ID, TENANT)).rejects.toThrow(NotFoundException);
+      expect(db.apiKey.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses to delete an active key — it must be revoked first', async () => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ status: ApiKeyStatus.ACTIVE }));
+
+      await expect(service.remove(KEY_ID, TENANT)).rejects.toThrow(ConflictException);
+      expect(db.apiKey.delete).not.toHaveBeenCalled();
+    });
+
+    it.each([ApiKeyStatus.REVOKED, ApiKeyStatus.EXPIRED])('hard-deletes a %s key', async (status) => {
+      db.apiKey.findUnique.mockResolvedValue(keyRow({ status }));
+
+      await service.remove(KEY_ID, TENANT);
+      expect(db.apiKey.delete).toHaveBeenCalledWith({ where: { id: KEY_ID } });
     });
   });
 });

@@ -1,6 +1,10 @@
 {
   "title": "Settings",
   "description": "Gateway configuration, shown read-only. Node registration and secret rotation are operator actions outside this dashboard.",
+  "rolesCard": {
+    "title": "Roles & permissions",
+    "description": "Custom roles per tenant and the permission matrix."
+  },
   "tabs": {
     "general": "General",
     "nodes": "Gateway nodes"

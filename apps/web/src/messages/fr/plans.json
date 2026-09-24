@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "Forfaits",
+    "description": "Niveaux de débit et de quota commerciaux, chacun adossé à une politique de passerelle.",
+    "createButton": "Créer un forfait",
+    "openMenu": "Ouvrir le menu",
+    "empty": "Aucun forfait trouvé.",
+    "unlimited": "Illimité",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "columns": {
+      "rate": "Limite de débit",
+      "quota": "Quota",
+      "keys": "Clés"
+    }
+  },
+  "fields": {
+    "description": "Description",
+    "rate": "Limite de débit",
+    "per": "Par (secondes)",
+    "quotaMax": "Plafond du quota",
+    "quotaPeriod": "Période du quota",
+    "active": "Actif"
+  },
+  "form": {
+    "createTitle": "Créer un forfait",
+    "editTitle": "Modifier le forfait",
+    "createDescription": "Définissez un niveau de débit et de quota ; les clés qui lui sont assignées partagent ces limites.",
+    "editDescription": "Modifier ce forfait change la limite de toutes les clés qui lui sont assignées.",
+    "namePlaceholder": "Niveau Pro",
+    "rateUnlimited": "Illimité",
+    "rateHint": "Requêtes autorisées sur la fenêtre ci-dessous. Laissez vide pour illimité.",
+    "perHint": "La fenêtre de la limite de débit, en secondes.",
+    "quotaUnlimited": "Illimité",
+    "quotaMaxHint": "-1 est illimité (convention Tyk) ; 0 refuse tout.",
+    "activeHint": "Les forfaits inactifs ne peuvent pas être assignés à de nouvelles clés.",
+    "submitCreate": "Créer le forfait",
+    "submitCreating": "Création...",
+    "submitSave": "Enregistrer les modifications",
+    "submitSaving": "Enregistrement...",
+    "createSuccess": "Forfait créé",
+    "updateSuccess": "Forfait mis à jour",
+    "createFailed": "Impossible de créer le forfait",
+    "updateFailed": "Impossible de mettre à jour le forfait",
+    "quotaPeriods": {
+      "HOURLY": "Horaire",
+      "DAILY": "Journalier",
+      "WEEKLY": "Hebdomadaire",
+      "MONTHLY": "Mensuel"
+    },
+    "errors": {
+      "nameTooShort": "Doit comporter au moins 2 caractères",
+      "nameTooLong": "Doit comporter au plus 60 caractères",
+      "rateInvalid": "Doit être un nombre entier d’au moins 0",
+      "perInvalid": "Doit être un nombre entier d’au moins 1",
+      "quotaInvalid": "Doit être un nombre entier d’au moins -1"
+    }
+  },
+  "deleteDialog": {
+    "title": "Supprimer ce forfait ?",
+    "description": "{name} et sa politique de passerelle seront supprimés. Cette action est irréversible.",
+    "confirm": "Supprimer le forfait",
+    "pending": "Suppression en cours...",
+    "success": "Forfait « {name} » supprimé",
+    "successWithKeys": "Forfait « {name} » supprimé — {count} clé(s) n'ont désormais plus de forfait",
+    "failed": "Impossible de supprimer le forfait"
+  }
+}

@@ -10,6 +10,7 @@ import {
 import {
   TenantStatus,
   TenantPlan,
+  QuotaPeriod,
   Prisma,
 } from '@prisma/client';
 import { prisma, tykOrgIdFor } from '@open-gateway/database';
@@ -29,6 +30,7 @@ import {
   relationForRole,
   type TenantPermit,
 } from '../../../common/ory/keto';
+import { OrgQuotaService, type OrgQuotaState } from '../../quotas/services/org-quota.service';
 
 /**
  * Default roles seeded for every NEW tenant, mirroring packages/database/prisma/seed.ts's
@@ -64,6 +66,8 @@ const DEFAULT_TENANT_ROLE_PERMISSIONS: Record<string, (permission: { name: strin
 @Injectable()
 export class TenantService {
   private readonly prisma = prisma;
+
+  constructor(private readonly orgQuota: OrgQuotaService) {}
 
   /**
    * The gate on every `:id` route: the caller must belong to THAT tenant (UserTenant) and Keto must
@@ -103,6 +107,20 @@ export class TenantService {
           ? 'Access denied: you are not an admin of this tenant'
           : 'Access denied: you do not have access to this tenant',
       );
+    }
+  }
+
+  /**
+   * `UserTenant.role` is a plain string matched by name against `Role.name` (see AuthService), and
+   * `isSuperAdmin` (PermissionsGuard, TenantService#assertPermit) matches on that same string alone,
+   * with no tenant scoping — so `role: 'super_admin'` here grants the GLOBAL bypass regardless of
+   * which tenant is doing the assigning or what permissions any Role row actually holds. WP19: a
+   * tenant admin holds `assertPermit(..., 'manage')` in their own tenant, which is enough to reach
+   * both callers below — reject the one role name that turns that into a platform-wide escalation.
+   */
+  private assertNotReservedRole(role: string): void {
+    if (isSuperAdmin([role])) {
+      throw new ForbiddenException(`"${role}" is a system-wide role and cannot be assigned here`);
     }
   }
 
@@ -428,6 +446,7 @@ export class TenantService {
     caller: UserPayload,
   ): Promise<TenantUserResponseDto> {
     await this.assertPermit(caller, tenantId, 'manage');
+    this.assertNotReservedRole(role);
 
     // Verify tenant exists
     const tenant = await this.prisma.tenant.findUnique({
@@ -563,6 +582,7 @@ export class TenantService {
     caller: UserPayload,
   ): Promise<TenantUserResponseDto> {
     await this.assertPermit(caller, tenantId, 'manage');
+    this.assertNotReservedRole(role);
 
     const existing = await this.prisma.userTenant.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
@@ -645,5 +665,53 @@ export class TenantService {
 
     await ketoDeleteMembership(tenantId, relationForRole(existing.role), userId);
     await this.prisma.userTenant.delete({ where: { userId_tenantId: { userId, tenantId } } });
+  }
+
+  // ─── ORG QUOTA (U13/U14) ────────────────────────────────────────────────
+
+  /**
+   * The tenant's org-level ceiling, surfaced by `:id` rather than "the caller's own active tenant"
+   * (`OrgQuotaController`'s `/quotas/org`, WP18) — `/tenants` is a cross-tenant ADMIN list
+   * (super_admin sees every tenant), so its quota column/editor needs an arbitrary id, not the
+   * caller's session tenant. Both routes end at the same `OrgQuotaService`; this just adds the
+   * membership/Keto gate `/quotas/org` doesn't need (it already scopes to the caller's own org).
+   */
+  async getQuota(tenantId: string, caller: UserPayload): Promise<OrgQuotaState> {
+    await this.assertPermit(caller, tenantId, 'view');
+    return this.orgQuota.get(tenantId);
+  }
+
+  async setQuota(
+    tenantId: string,
+    dto: { quotaMax: number; period?: QuotaPeriod; isInactive?: boolean },
+    caller: UserPayload,
+  ): Promise<OrgQuotaState> {
+    await this.assertPermit(caller, tenantId, 'manage');
+    await this.orgQuota.set(tenantId, dto);
+    return this.orgQuota.get(tenantId);
+  }
+
+  /** Zero the tenant's accumulated org usage; the ceiling itself is kept (U14's "org quota reset"). */
+  async resetQuota(tenantId: string, caller: UserPayload): Promise<{ tykOrgId: string; restored: boolean }> {
+    await this.assertPermit(caller, tenantId, 'manage');
+    return this.orgQuota.reset(tenantId);
+  }
+
+  /**
+   * Metered calls vs the plan allowance (U14's Usage tab), derived from the same org quota state:
+   * `used = quotaMax - quotaRemaining` once a ceiling is set, `null` when there is none to measure
+   * against — same "no quota" convention as `KeyUsageDto`.
+   */
+  async getUsage(
+    tenantId: string,
+    caller: UserPayload,
+  ): Promise<{ quotaMax: number | null; quotaRemaining: number | null; used: number | null; isInactive: boolean }> {
+    await this.assertPermit(caller, tenantId, 'view');
+    const state = await this.orgQuota.get(tenantId);
+    const used =
+      state.quotaMax !== null && state.quotaMax >= 0 && state.quotaRemaining !== null
+        ? state.quotaMax - state.quotaRemaining
+        : null;
+    return { quotaMax: state.quotaMax, quotaRemaining: state.quotaRemaining, used, isInactive: state.isInactive };
   }
 }

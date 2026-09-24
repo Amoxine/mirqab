@@ -7,6 +7,7 @@
     "viewDetails": "View details",
     "columns": {
       "api": "API",
+      "plan": "Plan",
       "expires": "Expires"
     },
     "never": "Never",
@@ -26,7 +27,11 @@
   },
   "actions": {
     "revoke": "Revoke",
-    "revoking": "Revoking..."
+    "revoking": "Revoking...",
+    "rotate": "Rotate",
+    "rotating": "Rotating...",
+    "delete": "Delete",
+    "deleting": "Deleting..."
   },
   "detail": {
     "backToKeys": "Back to API keys",
@@ -99,6 +104,13 @@
     "noActiveApis": "No active APIs yet. Create and activate an API first.",
     "apiSyncHint": "The API must be synced to the gateway before keys can be created for it.",
     "apiNotEditable": "A key cannot be moved to another API.",
+    "planLabel": "Plan",
+    "planPlaceholder": "Select a plan",
+    "planLoading": "Loading plans...",
+    "noPlan": "No plan",
+    "planNotEditable": "A key's plan cannot be changed after creation.",
+    "planHint": "Optional — a key with no plan works fully, using the limits below instead.",
+    "limitsFromPlan": "Set by the plan instead.",
     "expiresLabel": "Expiration date (optional)",
     "expiresHint": "Valid through the end of this day (UTC). Leave blank for no expiry.",
     "rateLimitLabel": "Rate limit (requests / second)",
@@ -140,5 +152,18 @@
     "confirm": "Revoke key",
     "success": "Key \"{name}\" revoked",
     "failed": "Failed to revoke key"
+  },
+  "rotateDialog": {
+    "title": "Rotate this API key?",
+    "description": "{keyName}'s current credential stops working immediately and is replaced with a new one, shown once.",
+    "confirm": "Rotate key",
+    "failed": "Failed to rotate key"
+  },
+  "deleteDialog": {
+    "title": "Delete this API key?",
+    "description": "{keyName} will be permanently removed. This cannot be undone.",
+    "confirm": "Delete key",
+    "success": "Key \"{name}\" deleted",
+    "failed": "Failed to delete key"
   }
 }

@@ -80,6 +80,8 @@ describe('valuesFromKey', () => {
     status: 'ACTIVE' as const,
     apiDefId: 'api-1',
     apiDefName: 'API',
+    planId: null,
+    planName: null,
     expiresAt: '2030-01-31T23:59:59.999Z',
     createdAt: '2026-01-01T00:00:00.000Z',
     tyk: { rate: 25, per: 1, quotaMax: 500, quotaRemaining: 10, quotaRenewalRate: 86400, quotaRenewsAt: 0 },
@@ -89,6 +91,7 @@ describe('valuesFromKey', () => {
     expect(valuesFromKey(key)).toEqual({
       name: 'K',
       apiDefId: 'api-1',
+      planId: '',
       expiresAt: '2030-01-31',
       rateLimitPerSecond: '25',
       quotaLimit: '500',

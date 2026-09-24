@@ -31,6 +31,7 @@ import {
 import { buildTykKeyDef, buildKeyAclPolicy, applyKeyUpdate, type KeyApiScope } from './tyk-key-mapper';
 import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
 import { McpService } from '../../mcp/services/mcp.service';
+import { OrgQuotaService } from '../../quotas/services/org-quota.service';
 
 /** Tyk answers a missing key with 404 "Key not found" / "There is no such key found". */
 const TYK_KEY_MISSING = /not found|no such key/i;
@@ -59,6 +60,7 @@ export class KeyService {
     private readonly tykClient: TykClientService,
     private readonly quotaService: QuotaService,
     private readonly mcpService: McpService,
+    private readonly orgQuota: OrgQuotaService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -89,6 +91,7 @@ export class KeyService {
     createdAt: Date;
     keyValue: string;
     apiDefId: string | null;
+    planId: string | null;
   }> {
     // Validate apiDefId if provided
     const apiDef = dto.apiDefId ? await this.validateApiDef(dto.apiDefId, tenantId) : null;
@@ -220,6 +223,7 @@ export class KeyService {
       createdAt: apiKey.createdAt,
       keyValue: tykResult.key,
       apiDefId: apiKey.apiDefId,
+      planId: apiKey.planId,
     };
   }
 
@@ -262,13 +266,19 @@ export class KeyService {
           createdAt: true,
           apiDefId: true,
           apiDef: { select: { name: true } },
+          planId: true,
+          plan: { select: { name: true } },
         },
       }),
       prisma.apiKey.count({ where }),
     ]);
 
     return {
-      data: rows.map(({ apiDef, ...key }) => ({ ...key, apiDefName: apiDef?.name ?? null })),
+      data: rows.map(({ apiDef, plan, ...key }) => ({
+        ...key,
+        apiDefName: apiDef?.name ?? null,
+        planName: plan?.name ?? null,
+      })),
       meta: {
         page: safePage,
         pageSize: take,
@@ -287,9 +297,8 @@ export class KeyService {
     const apiKey = await prisma.apiKey.findUnique({
       where: { id },
       include: {
-        apiDef: {
-          select: { name: true },
-        },
+        apiDef: { select: { name: true } },
+        plan: { select: { name: true } },
       },
     });
 
@@ -305,6 +314,8 @@ export class KeyService {
       createdAt: apiKey.createdAt,
       apiDefId: apiKey.apiDefId,
       apiDefName: apiKey.apiDef?.name ?? null,
+      planId: apiKey.planId,
+      planName: apiKey.plan?.name ?? null,
       tyk: apiKey.status === ApiKeyStatus.ACTIVE ? await this.readTykState(apiKey) : null,
     };
   }
@@ -392,6 +403,70 @@ export class KeyService {
     this.logger.log(`API key ${id} revoked for tenant ${tenantId}`);
 
     return revoked;
+  }
+
+  /**
+   * Mint a brand new gateway key with the SAME live settings (rate/quota/access_rights/policies) and
+   * point this row at it, then drop the old one (WP19, U11).
+   *
+   * `applyKeyUpdate(current, {}, null, orgId)` is reused rather than reconstructed: an empty patch
+   * makes it exactly "the live session, unchanged, with org_id re-set" — the same normalisation PUT
+   * already relies on to resend `current` safely — which is precisely what a fresh `POST /keys/create`
+   * needs (see that function's doc comment for why the raw `getKey` response is not safe to resend
+   * as-is). The old key is deleted only AFTER the new one is confirmed minted and the row updated, so
+   * a failure anywhere in between never leaves the tenant with neither.
+   */
+  async rotate(id: string, tenantId: string): Promise<{ id: string; keyValue: string }> {
+    const apiKey = await prisma.apiKey.findUnique({ where: { id } });
+    if (apiKey?.tenantId !== tenantId) {
+      throw new NotFoundException('API key not found');
+    }
+    if (apiKey.status !== ApiKeyStatus.ACTIVE) {
+      throw new ConflictException(`API key is ${apiKey.status.toLowerCase()} and can no longer be rotated`);
+    }
+    const tykKeyId = apiKey.tykKeyId;
+    if (!tykKeyId) {
+      throw new ConflictException('API key is not linked to a gateway key');
+    }
+
+    const { tykOrgId } = await loadTenantScope(tenantId);
+    const current = await this.viaGateway('read', id, () => this.tykClient.getKey(tykKeyId));
+    const newKeyDef = applyKeyUpdate(current, {}, null, tykOrgId);
+    const tykResult = await this.viaGateway('rotate', id, () => this.tykClient.createKey(newKeyDef));
+    const keyHash = this.hashKey(tykResult.key);
+
+    await prisma.apiKey.update({ where: { id }, data: { tykKeyId: tykResult.keyHash, keyHash } });
+
+    await this.tykClient.deleteKey(tykKeyId).catch((err: unknown) => {
+      this.logger.error(
+        `Old gateway key ${tykKeyId} for rotated key ${id} could not be deleted; delete it manually: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    });
+
+    return { id: apiKey.id, keyValue: tykResult.key };
+  }
+
+  /** Zero this key's usage counter, on both sides — thin delegate to WP18's OrgQuotaService, which
+   * already resets the local `Quota.used` row and the gateway's live counter together. */
+  async resetUsage(id: string, tenantId: string): Promise<{ apiKeyId: string; gatewayReset: boolean }> {
+    return this.orgQuota.resetKey(id, tenantId);
+  }
+
+  /**
+   * Hard-delete a key row. Refused while the key is still ACTIVE — revoke it first, so a delete can
+   * never remove a credential the gateway still honours. `Quota` cascades on the FK; nothing else
+   * references `ApiKey` by foreign key (AuditLog stores an id string, not a relation).
+   */
+  async remove(id: string, tenantId: string): Promise<void> {
+    const apiKey = await prisma.apiKey.findUnique({ where: { id } });
+    if (apiKey?.tenantId !== tenantId) {
+      throw new NotFoundException('API key not found');
+    }
+    if (apiKey.status === ApiKeyStatus.ACTIVE) {
+      throw new ConflictException('Revoke this key before deleting it');
+    }
+    await prisma.apiKey.delete({ where: { id } });
   }
 
   /**

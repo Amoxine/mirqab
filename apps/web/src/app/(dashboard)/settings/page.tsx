@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useTranslations } from 'next-intl';
-import { RefreshCw } from 'lucide-react';
+import { ChevronRight, RefreshCw, Shield } from 'lucide-react';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/sonner';
@@ -148,6 +149,30 @@ function NodesTab() {
   );
 }
 
+/** Roles is its own page (DataTable + Sheet, not a same-page tab) — linked from here rather than
+ * added as a third TabsTrigger. */
+function RolesLinkCard() {
+  const t = useTranslations('settings');
+  return (
+    <PermissionGate permission="role:read">
+      <Link href="/settings/roles">
+        <Card className="transition-colors hover:bg-accent/50">
+          <CardContent className="flex items-center justify-between gap-4 py-4">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+              <div>
+                <CardTitle className="text-base">{t('rolesCard.title')}</CardTitle>
+                <CardDescription>{t('rolesCard.description')}</CardDescription>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          </CardContent>
+        </Card>
+      </Link>
+    </PermissionGate>
+  );
+}
+
 function SettingsView() {
   const t = useTranslations('settings');
 
@@ -157,6 +182,7 @@ function SettingsView() {
         <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
         <p className="text-sm text-muted-foreground">{t('description')}</p>
       </div>
+      <RolesLinkCard />
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>

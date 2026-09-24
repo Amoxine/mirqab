@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import type { PaginatedResponse } from '@/types';
+import type { QuotaPeriod } from './use-keys';
 
 export interface Tenant {
   id: string;
@@ -29,6 +30,28 @@ export interface UserLookupResult {
   email: string;
   name: string;
   isMember: boolean;
+}
+
+/** `GET /tenants/:id/quota` — the org-level ceiling (U13/U14). `-1` is Tyk's "unlimited". */
+export interface TenantQuota {
+  tykOrgId: string;
+  quotaMax: number | null;
+  quotaRemaining: number | null;
+  isInactive: boolean;
+}
+
+export interface SetTenantQuotaPayload {
+  quotaMax: number;
+  period?: QuotaPeriod;
+  isInactive?: boolean;
+}
+
+/** `GET /tenants/:id/usage` — metered calls vs the plan allowance (U14's Usage tab). */
+export interface TenantUsage {
+  quotaMax: number | null;
+  quotaRemaining: number | null;
+  used: number | null;
+  isInactive: boolean;
 }
 
 export interface CreateTenantInput {
@@ -134,5 +157,46 @@ export function useRemoveMember(tenantId: string) {
   return useMutation({
     mutationFn: (userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tenants.members(tenantId) }),
+  });
+}
+
+export function useTenantQuota(id: string) {
+  return useQuery({
+    queryKey: queryKeys.tenants.quota(id),
+    queryFn: () => api.get<TenantQuota>(`/tenants/${id}/quota`).then((res) => res.data),
+    enabled: !!id,
+  });
+}
+
+export function useSetTenantQuota(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SetTenantQuotaPayload) =>
+      api.patch<TenantQuota>(`/tenants/${id}/quota`, data).then((res) => res.data),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.tenants.quota(id) }),
+        qc.invalidateQueries({ queryKey: queryKeys.tenants.usage(id) }),
+      ]),
+  });
+}
+
+export function useResetTenantQuota(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ tykOrgId: string; restored: boolean }>(`/tenants/${id}/quota/reset`, {}).then((res) => res.data),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.tenants.quota(id) }),
+        qc.invalidateQueries({ queryKey: queryKeys.tenants.usage(id) }),
+      ]),
+  });
+}
+
+export function useTenantUsage(id: string) {
+  return useQuery({
+    queryKey: queryKeys.tenants.usage(id),
+    queryFn: () => api.get<TenantUsage>(`/tenants/${id}/usage`).then((res) => res.data),
+    enabled: !!id,
   });
 }

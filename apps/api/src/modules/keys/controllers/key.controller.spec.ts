@@ -14,6 +14,11 @@ const ROUTES: Record<string, { permission: string; audit?: string }> = {
   update: { permission: 'key:update', audit: 'key:updated' },
   revoke: { permission: 'key:revoke', audit: 'key:revoked' },
   getUsage: { permission: 'key:read' },
+  // WP19 (U11). `remove` is gated on key:revoke, not an invented key:delete — the permission
+  // catalogue has no such entry, and this WP wasn't authorized to add one.
+  rotate: { permission: 'key:update', audit: 'key:rotated' },
+  resetUsage: { permission: 'key:update', audit: 'key:usage_reset' },
+  remove: { permission: 'key:revoke', audit: 'key:deleted' },
 };
 
 describe('KeyController wiring', () => {

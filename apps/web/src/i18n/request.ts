@@ -16,6 +16,9 @@ import enAnalytics from '@/messages/en/analytics.json';
 import enDashboard from '@/messages/en/dashboard.json';
 import enPortal from '@/messages/en/portal.json';
 import enSettings from '@/messages/en/settings.json';
+import enPlans from '@/messages/en/plans.json';
+import enProducts from '@/messages/en/products.json';
+import enRoles from '@/messages/en/roles.json';
 
 import frCommon from '@/messages/fr/common.json';
 import frNav from '@/messages/fr/nav.json';
@@ -28,6 +31,9 @@ import frAnalytics from '@/messages/fr/analytics.json';
 import frDashboard from '@/messages/fr/dashboard.json';
 import frPortal from '@/messages/fr/portal.json';
 import frSettings from '@/messages/fr/settings.json';
+import frPlans from '@/messages/fr/plans.json';
+import frProducts from '@/messages/fr/products.json';
+import frRoles from '@/messages/fr/roles.json';
 
 import arCommon from '@/messages/ar/common.json';
 import arNav from '@/messages/ar/nav.json';
@@ -40,6 +46,9 @@ import arAnalytics from '@/messages/ar/analytics.json';
 import arDashboard from '@/messages/ar/dashboard.json';
 import arPortal from '@/messages/ar/portal.json';
 import arSettings from '@/messages/ar/settings.json';
+import arPlans from '@/messages/ar/plans.json';
+import arProducts from '@/messages/ar/products.json';
+import arRoles from '@/messages/ar/roles.json';
 
 const MESSAGES = {
   en: {
@@ -54,6 +63,9 @@ const MESSAGES = {
     dashboard: enDashboard,
     portal: enPortal,
     settings: enSettings,
+    plans: enPlans,
+    products: enProducts,
+    roles: enRoles,
   },
   fr: {
     common: frCommon,
@@ -67,6 +79,9 @@ const MESSAGES = {
     dashboard: frDashboard,
     portal: frPortal,
     settings: frSettings,
+    plans: frPlans,
+    products: frProducts,
+    roles: frRoles,
   },
   ar: {
     common: arCommon,
@@ -80,6 +95,9 @@ const MESSAGES = {
     dashboard: arDashboard,
     portal: arPortal,
     settings: arSettings,
+    plans: arPlans,
+    products: arProducts,
+    roles: arRoles,
   },
 };
 

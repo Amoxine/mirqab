@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -69,6 +70,7 @@ export class KeyController {
       createdAt: result.createdAt,
       keyValue: result.keyValue,
       apiDefId: result.apiDefId,
+      planId: result.planId,
     };
   }
 
@@ -178,5 +180,44 @@ export class KeyController {
   ): Promise<KeyUsageResponseDto> {
     const usage = await this.keyService.getUsage(id, tenantId, query.range);
     return { data: usage };
+  }
+
+  @Post(':id/rotate')
+  @Permissions('key:update')
+  @Audit('key:rotated')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mint a new gateway credential for this key, keeping its settings' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'New raw key value — shown ONCE' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Key not found' })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Key is not active' })
+  async rotate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+  ): Promise<{ id: string; keyValue: string }> {
+    return this.keyService.rotate(id, tenantId);
+  }
+
+  @Post(':id/usage/reset')
+  @Permissions('key:update')
+  @Audit('key:usage_reset')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Zero this key's usage counter, locally and on the gateway" })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Key not found' })
+  async resetUsage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+  ): Promise<{ apiKeyId: string; gatewayReset: boolean }> {
+    return this.keyService.resetUsage(id, tenantId);
+  }
+
+  @Delete(':id')
+  @Permissions('key:revoke')
+  @Audit('key:deleted')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Permanently delete a revoked or expired key row' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Key not found' })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Key is still active — revoke it first' })
+  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentTenant() tenantId: string): Promise<void> {
+    await this.keyService.remove(id, tenantId);
   }
 }

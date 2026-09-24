@@ -2,6 +2,8 @@
   "dashboard": "Dashboard",
   "apis": "APIs",
   "keys": "Keys",
+  "plans": "Plans",
+  "products": "Products",
   "tenants": "Tenants",
   "analytics": "Analytics",
   "auditLogs": "Audit Logs",

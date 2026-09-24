@@ -1,0 +1,61 @@
+{
+  "backToSettings": "Retour aux paramètres",
+  "list": {
+    "title": "Rôles",
+    "description": "Rôles personnalisés pour cette organisation et les permissions que chacun accorde.",
+    "createButton": "Créer un rôle",
+    "openMenu": "Ouvrir le menu",
+    "empty": "Aucun rôle personnalisé trouvé.",
+    "permissionCount": "{count} permission(s)",
+    "columns": {
+      "permissions": "Permissions",
+      "members": "Membres"
+    }
+  },
+  "fields": {
+    "description": "Description",
+    "permissions": "Permissions"
+  },
+  "form": {
+    "createTitle": "Créer un rôle",
+    "editTitle": "Modifier le rôle — {name}",
+    "createDescription": "Un ensemble nommé de permissions assignable aux membres de cette organisation.",
+    "editDescription": "Les modifications prennent effet pour chaque membre détenant ce rôle dès sa prochaine requête — aucune reconnexion nécessaire.",
+    "namePlaceholder": "lecteur-facturation",
+    "permissionsHint": "Cochez chaque permission que ce rôle doit accorder.",
+    "submitCreate": "Créer le rôle",
+    "submitCreating": "Création...",
+    "submitSave": "Enregistrer les modifications",
+    "submitSaving": "Enregistrement...",
+    "createSuccess": "Rôle créé",
+    "updateSuccess": "Rôle mis à jour",
+    "createFailed": "Impossible de créer le rôle",
+    "updateFailed": "Impossible de mettre à jour le rôle",
+    "reservedNotice": "« {name} » est un rôle système et ne peut pas être modifié ici.",
+    "errors": {
+      "nameTooShort": "Doit comporter au moins 2 caractères",
+      "nameTooLong": "Doit comporter au plus 60 caractères",
+      "nameReserved": "« {name} » est un nom de rôle système et ne peut pas être utilisé ici"
+    }
+  },
+  "matrix": {
+    "resource": "Ressource",
+    "actions": {
+      "read": "Lecture",
+      "create": "Création",
+      "update": "Modification",
+      "delete": "Suppression",
+      "revoke": "Révocation",
+      "sync": "Synchronisation",
+      "export": "Export"
+    }
+  },
+  "deleteDialog": {
+    "title": "Supprimer ce rôle ?",
+    "description": "{name} sera supprimé. Refusé tant qu'un membre le détient encore.",
+    "confirm": "Supprimer le rôle",
+    "pending": "Suppression en cours...",
+    "success": "Rôle « {name} » supprimé",
+    "failed": "Impossible de supprimer le rôle"
+  }
+}

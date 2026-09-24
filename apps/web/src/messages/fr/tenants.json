@@ -96,6 +96,45 @@
     "successToast": "{email} retiré(e)",
     "errorToast": "Impossible de retirer ce membre"
   },
+  "quota": {
+    "columnHeader": "Quota d'organisation",
+    "unlimited": "Illimité",
+    "editAction": "Modifier le quota",
+    "sheetTitle": "Quota d'organisation — {name}",
+    "sheetDescription": "Le plafond au-dessus de toutes les clés émises par cette organisation.",
+    "quotaMaxLabel": "Plafond du quota",
+    "quotaMaxHint": "-1 est illimité (convention Tyk) ; 0 refuse toute requête.",
+    "periodLabel": "Période de renouvellement",
+    "periods": {
+      "HOURLY": "Horaire",
+      "DAILY": "Journalier",
+      "WEEKLY": "Hebdomadaire",
+      "MONTHLY": "Mensuel"
+    },
+    "isInactiveLabel": "Couper entièrement cette organisation",
+    "isInactiveHint": "Refuse toute requête de cette organisation, quel que soit le quota.",
+    "submitSave": "Enregistrer le quota",
+    "submitSaving": "Enregistrement...",
+    "saveSuccess": "Quota mis à jour",
+    "saveFailed": "Impossible de mettre à jour le quota",
+    "loading": "Chargement du quota...",
+    "errors": {
+      "quotaMaxInvalid": "Doit être un nombre entier d’au moins -1"
+    },
+    "inactiveNotice": "Cette organisation est actuellement coupée — toute requête est refusée.",
+    "resetSuccess": "Compteur d'utilisation réinitialisé",
+    "resetFailed": "Impossible de réinitialiser l'utilisation"
+  },
+  "usage": {
+    "title": "Utilisation",
+    "description": "Appels mesurés par rapport au quota d'organisation de cette organisation.",
+    "quota": "Quota",
+    "quotaUsed": "{used} / {max} utilisés",
+    "quotaUsedAria": "Quota utilisé",
+    "noQuota": "Aucun quota d'organisation configuré pour cette organisation.",
+    "loadFailed": "Impossible de charger l'utilisation.",
+    "resetButton": "Réinitialiser l'utilisation"
+  },
   "statusDialog": {
     "suspend": {
       "title": "Suspendre cette organisation ?",

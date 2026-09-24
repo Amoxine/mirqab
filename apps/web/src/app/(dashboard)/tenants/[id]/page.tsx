@@ -17,6 +17,7 @@ import { InviteMemberSheet } from '@/components/tenants/invite-member-sheet';
 import { RemoveMemberDialog } from '@/components/tenants/remove-member-dialog';
 import { TenantFormSheet } from '@/components/tenants/tenant-form-sheet';
 import { TenantStatusDialog } from '@/components/tenants/tenant-status-dialog';
+import { TenantUsageCard } from '@/components/tenants/tenant-usage-card';
 import { useTenant, useTenantMembers, useUpdateMemberRole, type Tenant, type TenantMember } from '@/hooks/use-tenants';
 import { usePermissions } from '@/hooks/use-permissions';
 import { ApiRequestError } from '@/lib/api-client';
@@ -248,6 +249,7 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
   const t = useTranslations('tenants');
   const tCommon = useTranslations('common');
   const router = useRouter();
+  const { can } = usePermissions();
   const [editOpen, setEditOpen] = useState(false);
   const [statusAction, setStatusAction] = useState<'suspend' | 'reactivate' | 'archive' | null>(null);
 
@@ -337,6 +339,8 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
       <PermissionGate permission="user:read">
         <MembersCard tenantId={tenant.id} />
       </PermissionGate>
+
+      <TenantUsageCard tenantId={tenant.id} tenantName={tenant.name} canManage={can('tenant:update')} />
 
       <TenantFormSheet mode="edit" tenant={tenant} open={editOpen} onOpenChange={setEditOpen} />
       <TenantStatusDialog

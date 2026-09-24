@@ -8,7 +8,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { Archive, MoreHorizontal, Pencil, Play, Plus, ShieldOff } from 'lucide-react';
+import { Archive, Gauge, MoreHorizontal, Pencil, Play, Plus, ShieldOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
@@ -19,10 +19,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
 import { TenantFormSheet } from '@/components/tenants/tenant-form-sheet';
+import { TenantQuotaSheet } from '@/components/tenants/tenant-quota-sheet';
 import { TenantStatusDialog } from '@/components/tenants/tenant-status-dialog';
-import { useTenants, type Tenant } from '@/hooks/use-tenants';
+import { useTenantQuota, useTenants, type Tenant } from '@/hooks/use-tenants';
 
 function tenantStatusColor(status: string) {
   switch (status) {
@@ -44,15 +46,30 @@ interface StatusTarget {
   action: 'suspend' | 'reactivate' | 'archive';
 }
 
+/** Own fetch per row: TanStack Query dedupes/caches, and each row loads independently rather than
+ * blocking the whole table on one combined request. */
+function QuotaCell({ tenantId }: { tenantId: string }) {
+  const t = useTranslations('tenants');
+  const { data, isLoading, isError } = useTenantQuota(tenantId);
+  const quotaMax = data?.quotaMax;
+  if (isLoading) return <Skeleton className="h-4 w-16" />;
+  if (isError || quotaMax === null || quotaMax === undefined || quotaMax < 0) {
+    return <span className="text-muted-foreground">{t('quota.unlimited')}</span>;
+  }
+  return <span className="tabular-nums">{quotaMax.toLocaleString()}</span>;
+}
+
 function TenantRowActions({
   tenant,
   onEdit,
+  onQuota,
   onStatusChange,
   t,
   tCommon,
 }: {
   tenant: Tenant;
   onEdit: (tenant: Tenant) => void;
+  onQuota: (tenant: Tenant) => void;
   onStatusChange: (target: StatusTarget) => void;
   t: Translate;
   tCommon: Translate;
@@ -76,6 +93,14 @@ function TenantRowActions({
           >
             <Pencil className="h-4 w-4" />
             {tCommon('edit')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              onQuota(tenant);
+            }}
+          >
+            <Gauge className="h-4 w-4" />
+            {t('quota.editAction')}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
@@ -110,6 +135,7 @@ function TenantRowActions({
 
 function getColumns(
   onEdit: (tenant: Tenant) => void,
+  onQuota: (tenant: Tenant) => void,
   onStatusChange: (target: StatusTarget) => void,
   t: Translate,
   tCommon: Translate,
@@ -140,6 +166,11 @@ function getColumns(
       cell: ({ row }) => <Badge variant="outline">{t(`plan.${row.original.plan}`)}</Badge>,
     },
     {
+      id: 'quota',
+      header: t('quota.columnHeader'),
+      cell: ({ row }) => <QuotaCell tenantId={row.original.id} />,
+    },
+    {
       accessorKey: 'createdAt',
       header: tCommon('createdAt'),
       cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
@@ -150,6 +181,7 @@ function getColumns(
         <TenantRowActions
           tenant={row.original}
           onEdit={onEdit}
+          onQuota={onQuota}
           onStatusChange={onStatusChange}
           t={t}
           tCommon={tCommon}
@@ -166,12 +198,13 @@ function TenantsView() {
   const [pageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Tenant | null>(null);
+  const [quotaTarget, setQuotaTarget] = useState<Tenant | null>(null);
   const [statusTarget, setStatusTarget] = useState<StatusTarget | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useTenants(page, pageSize);
 
   const columns = useMemo(
-    () => getColumns(setEditTarget, setStatusTarget, t, tCommon),
+    () => getColumns(setEditTarget, setQuotaTarget, setStatusTarget, t, tCommon),
     [t, tCommon],
   );
 
@@ -221,6 +254,16 @@ function TenantsView() {
           setStatusTarget(null);
         }}
       />
+      {quotaTarget && (
+        <TenantQuotaSheet
+          tenantId={quotaTarget.id}
+          tenantName={quotaTarget.name}
+          open
+          onOpenChange={(open) => {
+            if (!open) setQuotaTarget(null);
+          }}
+        />
+      )}
 
       <DataTable
         table={table}

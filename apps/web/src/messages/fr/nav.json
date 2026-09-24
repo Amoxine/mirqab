@@ -2,6 +2,8 @@
   "dashboard": "Tableau de bord",
   "apis": "API",
   "keys": "Clés",
+  "plans": "Forfaits",
+  "products": "Produits",
   "tenants": "Locataires",
   "analytics": "Analytique",
   "auditLogs": "Journaux d'audit",

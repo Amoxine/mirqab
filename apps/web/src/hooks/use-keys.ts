@@ -12,6 +12,9 @@ export interface ApiKey {
   status: ApiKeyStatus;
   apiDefId: string | null;
   apiDefName: string | null;
+  /** WP19: null is a valid, fully-functional state — a key needs no plan. */
+  planId: string | null;
+  planName: string | null;
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -36,6 +39,8 @@ export interface KeyDetail {
   status: ApiKeyStatus;
   apiDefId: string | null;
   apiDefName: string | null;
+  planId: string | null;
+  planName: string | null;
   expiresAt: string | null;
   createdAt: string;
   tyk: KeyTyk | null;
@@ -47,8 +52,15 @@ export interface KeyCreated {
   name: string;
   status: ApiKeyStatus;
   apiDefId: string | null;
+  planId: string | null;
   expiresAt: string | null;
   createdAt: string;
+  keyValue: string;
+}
+
+/** `POST /keys/:id/rotate` response — a new raw key value, returned exactly once. */
+export interface KeyRotated {
+  id: string;
   keyValue: string;
 }
 
@@ -68,6 +80,8 @@ export interface KeyUsage {
 export interface CreateKeyPayload {
   name: string;
   apiDefId: string;
+  /** WP19: a select, and optional — a key with no plan still works fully. */
+  planId?: string;
   /** ISO 8601 — only sent when set */
   expiresAt?: string;
   rateLimitPerSecond?: number;
@@ -147,6 +161,34 @@ export function useRevokeKey() {
   return useMutation({
     mutationFn: (id: string) =>
       api.post(`/keys/${id}/revoke`, {}).then((res) => res.data),
+    onSuccess: () => invalidateKeys(qc),
+  });
+}
+
+export function useRotateKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<KeyRotated>(`/keys/${id}/rotate`, {}).then((res) => res.data),
+    onSuccess: () => invalidateKeys(qc),
+  });
+}
+
+export function useResetKeyUsage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ apiKeyId: string; gatewayReset: boolean }>(`/keys/${id}/usage/reset`, {}).then((res) => res.data),
+    // Every range's usage query shares the `keys.all` prefix, so this invalidates all of them —
+    // narrower than that would miss whichever range the usage card happens to be showing.
+    onSuccess: () => invalidateKeys(qc),
+  });
+}
+
+/** Hard-delete — only a revoked or expired key can be removed (the API 409s otherwise). */
+export function useDeleteKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/keys/${id}`),
     onSuccess: () => invalidateKeys(qc),
   });
 }

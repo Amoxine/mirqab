@@ -1,0 +1,61 @@
+{
+  "backToSettings": "Back to Settings",
+  "list": {
+    "title": "Roles",
+    "description": "Custom roles for this tenant and the permissions each one grants.",
+    "createButton": "Create Role",
+    "openMenu": "Open menu",
+    "empty": "No custom roles found.",
+    "permissionCount": "{count} permission(s)",
+    "columns": {
+      "permissions": "Permissions",
+      "members": "Members"
+    }
+  },
+  "fields": {
+    "description": "Description",
+    "permissions": "Permissions"
+  },
+  "form": {
+    "createTitle": "Create role",
+    "editTitle": "Edit role — {name}",
+    "createDescription": "A named set of permissions members of this tenant can be assigned.",
+    "editDescription": "Changes take effect for every member holding this role on their next request — no re-login needed.",
+    "namePlaceholder": "billing-viewer",
+    "permissionsHint": "Check every permission this role should grant.",
+    "submitCreate": "Create role",
+    "submitCreating": "Creating...",
+    "submitSave": "Save changes",
+    "submitSaving": "Saving...",
+    "createSuccess": "Role created",
+    "updateSuccess": "Role updated",
+    "createFailed": "Failed to create role",
+    "updateFailed": "Failed to update role",
+    "reservedNotice": "\"{name}\" is a system-wide role and cannot be edited here.",
+    "errors": {
+      "nameTooShort": "Must be at least 2 characters",
+      "nameTooLong": "Must be at most 60 characters",
+      "nameReserved": "\"{name}\" is a system-wide role name and cannot be used here"
+    }
+  },
+  "matrix": {
+    "resource": "Resource",
+    "actions": {
+      "read": "Read",
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
+      "revoke": "Revoke",
+      "sync": "Sync",
+      "export": "Export"
+    }
+  },
+  "deleteDialog": {
+    "title": "Delete this role?",
+    "description": "{name} will be removed. Refused while any member still holds it.",
+    "confirm": "Delete role",
+    "pending": "Deleting...",
+    "success": "Role \"{name}\" deleted",
+    "failed": "Failed to delete role"
+  }
+}

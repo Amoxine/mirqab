@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { prisma } from '@open-gateway/database';
 import { TenantController } from './controllers/tenant.controller';
 import { TenantService } from './services/tenant.service';
+import { QuotasModule } from '../quotas/quotas.module';
 
 /**
  * Tenant Management Module
@@ -17,6 +18,7 @@ import { TenantService } from './services/tenant.service';
  *  - PrismaClient (from @open-gateway/database) — provided directly
  */
 @Module({
+  imports: [QuotasModule],
   controllers: [TenantController],
   providers: [
     TenantService,

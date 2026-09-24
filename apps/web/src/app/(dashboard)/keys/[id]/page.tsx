@@ -2,14 +2,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Pencil } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, Ban, Pencil, RotateCw, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
+import { DeleteKeyDialog } from '@/components/keys/delete-key-dialog';
+import { KeyCreatedDialog } from '@/components/keys/key-created-dialog';
 import { KeyFormSheet } from '@/components/keys/key-form-sheet';
 import { KeyUsageCard } from '@/components/keys/key-usage-card';
 import { QUOTA_PERIODS, formatQuotaPeriod, formatRate, keyStatusVariant, toDate } from '@/components/keys/key-utils';
 import { RevokeKeyDialog } from '@/components/keys/revoke-key-dialog';
+import { RotateKeyDialog } from '@/components/keys/rotate-key-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,9 +60,13 @@ function KeyDetailPage() {
     string
   >;
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { data: key, isLoading, isError, error, refetch, isFetching } = useKey(id);
   const [editOpen, setEditOpen] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [rotatedKey, setRotatedKey] = useState<string | null>(null);
 
   if (isLoading) return <DetailSkeleton />;
 
@@ -92,6 +99,8 @@ function KeyDetailPage() {
   }
 
   const isRevoked = key.status === 'REVOKED';
+  // Matches KeyService.remove()'s own gate: any non-ACTIVE key can be deleted, not just revoked ones.
+  const canDelete = key.status !== 'ACTIVE';
   const { tyk } = key;
   const renewsAt = toDate(tyk?.quotaRenewsAt);
 
@@ -122,6 +131,17 @@ function KeyDetailPage() {
                 {tCommon('edit')}
               </Button>
             </PermissionGate>
+            <PermissionGate permission="key:update">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRotateTarget({ id: key.id, name: key.name });
+                }}
+              >
+                <RotateCw className="me-2 h-4 w-4" />
+                {t('actions.rotate')}
+              </Button>
+            </PermissionGate>
             <PermissionGate permission="key:revoke">
               <Button variant="destructive" onClick={() => {
                   setRevokeTarget({ id: key.id, name: key.name });
@@ -131,6 +151,19 @@ function KeyDetailPage() {
               </Button>
             </PermissionGate>
           </div>
+        )}
+        {canDelete && (
+          <PermissionGate permission="key:revoke">
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDeleteTarget({ id: key.id, name: key.name });
+              }}
+            >
+              <Trash2 className="me-2 h-4 w-4" />
+              {t('actions.delete')}
+            </Button>
+          </PermissionGate>
         )}
       </div>
 
@@ -151,6 +184,7 @@ function KeyDetailPage() {
                 )}
               </Field>
               <Field label={tCommon('status')}>{t(`status.${key.status}`)}</Field>
+              <Field label={t('form.planLabel')}>{key.planName ?? t('form.noPlan')}</Field>
               <Field label={t('detail.detailsCard.created')}>{new Date(key.createdAt).toLocaleString()}</Field>
               <Field label={t('detail.detailsCard.expires')}>
                 {key.expiresAt ? new Date(key.expiresAt).toLocaleString() : t('list.never')}
@@ -202,6 +236,28 @@ function KeyDetailPage() {
       <RevokeKeyDialog target={revokeTarget} onOpenChange={(open) => {
           if (!open) setRevokeTarget(null);
         }} />
+      <RotateKeyDialog
+        target={rotateTarget}
+        onOpenChange={(open) => {
+          if (!open) setRotateTarget(null);
+        }}
+        onRotated={setRotatedKey}
+      />
+      <KeyCreatedDialog
+        keyValue={rotatedKey}
+        onClose={() => {
+          setRotatedKey(null);
+        }}
+      />
+      <DeleteKeyDialog
+        target={deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onDeleted={() => {
+          router.push('/keys');
+        }}
+      />
     </div>
   );
 }

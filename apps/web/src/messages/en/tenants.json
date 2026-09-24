@@ -96,6 +96,45 @@
     "successToast": "Removed {email}",
     "errorToast": "Failed to remove member"
   },
+  "quota": {
+    "columnHeader": "Org quota",
+    "unlimited": "Unlimited",
+    "editAction": "Edit quota",
+    "sheetTitle": "Org quota — {name}",
+    "sheetDescription": "The ceiling above every key this tenant issues.",
+    "quotaMaxLabel": "Quota ceiling",
+    "quotaMaxHint": "-1 is unlimited (Tyk convention); 0 refuses every request.",
+    "periodLabel": "Renewal period",
+    "periods": {
+      "HOURLY": "Hourly",
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly"
+    },
+    "isInactiveLabel": "Cut this tenant off entirely",
+    "isInactiveHint": "Refuses every request from this tenant, regardless of quota.",
+    "submitSave": "Save quota",
+    "submitSaving": "Saving...",
+    "saveSuccess": "Quota updated",
+    "saveFailed": "Failed to update quota",
+    "loading": "Loading quota...",
+    "errors": {
+      "quotaMaxInvalid": "Must be a whole number of at least -1"
+    },
+    "inactiveNotice": "This tenant is currently cut off — every request is refused.",
+    "resetSuccess": "Usage counter reset",
+    "resetFailed": "Failed to reset usage"
+  },
+  "usage": {
+    "title": "Usage",
+    "description": "Metered calls against this tenant's org-level quota.",
+    "quota": "Quota",
+    "quotaUsed": "{used} / {max} used",
+    "quotaUsedAria": "Quota used",
+    "noQuota": "No org quota configured for this tenant.",
+    "loadFailed": "Failed to load usage.",
+    "resetButton": "Reset usage"
+  },
   "statusDialog": {
     "suspend": {
       "title": "Suspend this tenant?",

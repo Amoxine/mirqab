@@ -21,6 +21,9 @@ describe('TenantController — @Audit wiring (WP21)', () => {
     ['assignUser', 'tenant:assigned'],
     ['updateMemberRole', 'tenant:role_changed'],
     ['removeMember', 'tenant:unassigned'],
+    // WP19 (U13/U14).
+    ['setQuota', 'tenant:quota_updated'],
+    ['resetQuota', 'tenant:quota_reset'],
   ] as const)('%s carries @Audit(%s)', (methodName, expectedAction) => {
     expect(auditOf(methodName)?.action).toBe(expectedAction);
   });

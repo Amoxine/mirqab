@@ -31,6 +31,10 @@ import {
   TenantUserResponseDto,
   UserLookupResponseDto,
 } from '../dto/tenant-response.dto';
+// Reused rather than duplicated (WP18 already validates/documents this shape) — U13/U14 differ from
+// `/quotas/org` only in resolving the org from an explicit `:id` instead of the caller's own tenant.
+import { SetOrgQuotaDto } from '../../quotas/controllers/org-quota.controller';
+import type { OrgQuotaState } from '../../quotas/services/org-quota.service';
 
 interface PaginatedResponse<T> {
   success: true;
@@ -264,5 +268,51 @@ export class TenantController {
     @CurrentUser() user: UserPayload,
   ): Promise<void> {
     await this.tenantService.removeMember(id, userId, user);
+  }
+
+  // ─── ORG QUOTA (U13/U14) ────────────────────────────────────────────────
+
+  @Get(':id/quota')
+  @Permissions('tenant:read')
+  @ApiOperation({ summary: "Read a tenant's org-level quota ceiling" })
+  async getQuota(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UserPayload,
+  ): Promise<SingleResponse<OrgQuotaState>> {
+    return { success: true, data: await this.tenantService.getQuota(id, user) };
+  }
+
+  @Patch(':id/quota')
+  @Permissions('tenant:update')
+  @Audit('tenant:quota_updated', 'Tenant')
+  @ApiOperation({ summary: "Set a tenant's org-level quota ceiling" })
+  async setQuota(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetOrgQuotaDto,
+    @CurrentUser() user: UserPayload,
+  ): Promise<SingleResponse<OrgQuotaState>> {
+    return { success: true, data: await this.tenantService.setQuota(id, dto, user) };
+  }
+
+  @Post(':id/quota/reset')
+  @Permissions('tenant:update')
+  @Audit('tenant:quota_reset', 'Tenant')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Zero the tenant's org usage counter; the ceiling is kept" })
+  async resetQuota(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UserPayload,
+  ): Promise<SingleResponse<{ tykOrgId: string; restored: boolean }>> {
+    return { success: true, data: await this.tenantService.resetQuota(id, user) };
+  }
+
+  @Get(':id/usage')
+  @Permissions('tenant:read')
+  @ApiOperation({ summary: "Metered calls vs the tenant's plan allowance" })
+  async getUsage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UserPayload,
+  ): Promise<SingleResponse<{ quotaMax: number | null; quotaRemaining: number | null; used: number | null; isInactive: boolean }>> {
+    return { success: true, data: await this.tenantService.getUsage(id, user) };
   }
 }

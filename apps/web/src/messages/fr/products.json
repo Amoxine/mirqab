@@ -1,0 +1,51 @@
+{
+  "list": {
+    "title": "Produits",
+    "description": "Regroupements d'API que les développeurs parcourent. L'accès provient toujours des droits propres à une clé.",
+    "createButton": "Créer un produit",
+    "openMenu": "Ouvrir le menu",
+    "empty": "Aucun produit trouvé.",
+    "noApis": "Aucune API regroupée",
+    "moreApis": "+{count} de plus",
+    "columns": {
+      "apis": "API"
+    }
+  },
+  "fields": {
+    "slug": "Slug",
+    "description": "Description",
+    "apis": "API regroupées"
+  },
+  "form": {
+    "createTitle": "Créer un produit",
+    "editTitle": "Modifier le produit",
+    "createDescription": "Regroupez des API pour que les développeurs les parcourent comme un seul produit.",
+    "editDescription": "Envoyer une nouvelle liste d'API remplace la composition du regroupement.",
+    "namePlaceholder": "Suite Paiements",
+    "slugPlaceholder": "suite-paiements",
+    "apisHint": "Sélectionnez les API que ce produit regroupe.",
+    "apisLoading": "Chargement des API...",
+    "noApis": "Aucune API pour l'instant. Créez-en une d'abord.",
+    "submitCreate": "Créer le produit",
+    "submitCreating": "Création...",
+    "submitSave": "Enregistrer les modifications",
+    "submitSaving": "Enregistrement...",
+    "createSuccess": "Produit créé",
+    "updateSuccess": "Produit mis à jour",
+    "createFailed": "Impossible de créer le produit",
+    "updateFailed": "Impossible de mettre à jour le produit",
+    "errors": {
+      "nameTooShort": "Doit comporter au moins 2 caractères",
+      "nameTooLong": "Doit comporter au plus 100 caractères",
+      "slugInvalid": "Lettres minuscules, chiffres et tirets uniquement"
+    }
+  },
+  "deleteDialog": {
+    "title": "Supprimer ce produit ?",
+    "description": "{name} sera supprimé. Les API qu'il regroupait ne sont pas affectées.",
+    "confirm": "Supprimer le produit",
+    "pending": "Suppression en cours...",
+    "success": "Produit « {name} » supprimé",
+    "failed": "Impossible de supprimer le produit"
+  }
+}

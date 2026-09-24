@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "Plans",
+    "description": "Commercial rate and quota tiers, each backed by one gateway policy.",
+    "createButton": "Create Plan",
+    "openMenu": "Open menu",
+    "empty": "No plans found.",
+    "unlimited": "Unlimited",
+    "active": "Active",
+    "inactive": "Inactive",
+    "columns": {
+      "rate": "Rate limit",
+      "quota": "Quota",
+      "keys": "Keys"
+    }
+  },
+  "fields": {
+    "description": "Description",
+    "rate": "Rate limit",
+    "per": "Per (seconds)",
+    "quotaMax": "Quota ceiling",
+    "quotaPeriod": "Quota period",
+    "active": "Active"
+  },
+  "form": {
+    "createTitle": "Create plan",
+    "editTitle": "Edit plan",
+    "createDescription": "Define a rate and quota tier; keys assigned to it share these limits.",
+    "editDescription": "Editing this plan changes the limit for every key assigned to it.",
+    "namePlaceholder": "Pro tier",
+    "rateUnlimited": "Unlimited",
+    "rateHint": "Requests allowed per the window below. Leave blank for unlimited.",
+    "perHint": "The rate limit window, in seconds.",
+    "quotaUnlimited": "Unlimited",
+    "quotaMaxHint": "-1 is unlimited (Tyk convention); 0 refuses everything.",
+    "activeHint": "Inactive plans cannot be assigned to new keys.",
+    "submitCreate": "Create plan",
+    "submitCreating": "Creating...",
+    "submitSave": "Save changes",
+    "submitSaving": "Saving...",
+    "createSuccess": "Plan created",
+    "updateSuccess": "Plan updated",
+    "createFailed": "Failed to create plan",
+    "updateFailed": "Failed to update plan",
+    "quotaPeriods": {
+      "HOURLY": "Hourly",
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly"
+    },
+    "errors": {
+      "nameTooShort": "Must be at least 2 characters",
+      "nameTooLong": "Must be at most 60 characters",
+      "rateInvalid": "Must be a whole number of at least 0",
+      "perInvalid": "Must be a whole number of at least 1",
+      "quotaInvalid": "Must be a whole number of at least -1"
+    }
+  },
+  "deleteDialog": {
+    "title": "Delete this plan?",
+    "description": "{name} and its gateway policy will be removed. This cannot be undone.",
+    "confirm": "Delete plan",
+    "pending": "Deleting...",
+    "success": "Plan \"{name}\" deleted",
+    "successWithKeys": "Plan \"{name}\" deleted — {count} key(s) are now plan-less",
+    "failed": "Failed to delete plan"
+  }
+}

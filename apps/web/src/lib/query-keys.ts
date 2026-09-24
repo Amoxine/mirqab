@@ -27,6 +27,21 @@ export const queryKeys = {
     list: (params: Record<string, string>) => [...queryKeys.tenants.lists(), params] as const,
     detail: (id: string) => [...queryKeys.tenants.all, 'detail', id] as const,
     members: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'members'] as const,
+    quota: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'quota'] as const,
+    usage: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'usage'] as const,
+  },
+  plans: {
+    all: ['plans'] as const,
+    detail: (id: string) => [...queryKeys.plans.all, 'detail', id] as const,
+  },
+  products: {
+    all: ['products'] as const,
+    detail: (id: string) => [...queryKeys.products.all, 'detail', id] as const,
+  },
+  roles: {
+    all: ['roles'] as const,
+    detail: (id: string) => [...queryKeys.roles.all, 'detail', id] as const,
+    permissions: ['roles', 'permissions'] as const,
   },
   analytics: {
     all: ['analytics'] as const,

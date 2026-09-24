@@ -51,6 +51,9 @@ interface KeyFormSheetProps {
   /** Create only: APIs a key can be scoped to. */
   apis?: { id: string; name: string }[];
   apisLoading?: boolean;
+  /** Create only: plans a key can be assigned (WP19, U11/U12) — a select, never required. */
+  plans?: { id: string; name: string }[];
+  plansLoading?: boolean;
   /** Edit only: the key being edited (with its live gateway limits). */
   keyData?: KeyDetail;
   /** Create only: receives the raw key, which the API returns exactly once. */
@@ -59,11 +62,23 @@ interface KeyFormSheetProps {
 
 type KeyFormProps = Omit<KeyFormSheetProps, 'open'>;
 
+/** Radix Select forbids an empty-string item value, so "no plan" needs a sentinel. */
+const NO_PLAN = 'NONE';
+
 /**
  * Mounted only while the sheet is open, so every open starts from fresh defaults
  * (blank for create, the key's live values for edit).
  */
-function KeyForm({ mode, onOpenChange, apis = [], apisLoading = false, keyData, onCreated }: KeyFormProps) {
+function KeyForm({
+  mode,
+  onOpenChange,
+  apis = [],
+  apisLoading = false,
+  plans = [],
+  plansLoading = false,
+  keyData,
+  onCreated,
+}: KeyFormProps) {
   const t = useTranslations('keys');
   const tCommon = useTranslations('common');
   const createMutation = useCreateKey();
@@ -78,6 +93,9 @@ function KeyForm({ mode, onOpenChange, apis = [], apisLoading = false, keyData, 
     defaultValues: mode === 'edit' && keyData ? valuesFromKey(keyData) : emptyKeyFormValues,
   });
   const quotaLimit = form.watch('quotaLimit');
+  const planId = form.watch('planId');
+  // A key with a plan carries no inline limits — the plan's policy governs both (see CreateKeyDto).
+  const hasPlan = mode === 'create' && planId !== '';
 
   const onSubmit = async (values: KeyFormValues) => {
     try {
@@ -157,6 +175,53 @@ function KeyForm({ mode, onOpenChange, apis = [], apisLoading = false, keyData, 
           </div>
         )}
 
+        {mode === 'create' ? (
+          <FormField
+            control={form.control}
+            name="planId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('form.planLabel')}</FormLabel>
+                <Select
+                  onValueChange={(v) => {
+                    field.onChange(v === NO_PLAN ? '' : v);
+                    // A plan carries the key's rate/quota — clear any inline values so a leftover
+                    // number in a now-disabled field can never be submitted alongside it.
+                    if (v !== NO_PLAN) {
+                      form.setValue('rateLimitPerSecond', '');
+                      form.setValue('quotaLimit', '');
+                    }
+                  }}
+                  value={field.value === '' ? NO_PLAN : field.value}
+                  disabled={plansLoading}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={plansLoading ? t('form.planLoading') : t('form.planPlaceholder')} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value={NO_PLAN}>{t('form.noPlan')}</SelectItem>
+                    {plans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>{t('form.planHint')}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : (
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">{t('form.planLabel')}</p>
+            <p className="text-muted-foreground">{keyData?.planName ?? t('form.noPlan')}</p>
+            <p className="text-xs text-muted-foreground">{t('form.planNotEditable')}</p>
+          </div>
+        )}
+
         <FormField
           control={form.control}
           name="expiresAt"
@@ -185,10 +250,11 @@ function KeyForm({ mode, onOpenChange, apis = [], apisLoading = false, keyData, 
                   inputMode="numeric"
                   min={0}
                   step={1}
+                  disabled={hasPlan}
                   placeholder={t('form.rateLimitPlaceholder')}
                 />
               </FormControl>
-              <FormDescription>{t('form.rateLimitHint')}</FormDescription>
+              <FormDescription>{hasPlan ? t('form.limitsFromPlan') : t('form.rateLimitHint')}</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -207,10 +273,11 @@ function KeyForm({ mode, onOpenChange, apis = [], apisLoading = false, keyData, 
                   inputMode="numeric"
                   min={1}
                   step={1}
+                  disabled={hasPlan}
                   placeholder={t('form.quotaPlaceholder')}
                 />
               </FormControl>
-              <FormDescription>{t('form.quotaHint')}</FormDescription>
+              <FormDescription>{hasPlan ? t('form.limitsFromPlan') : t('form.quotaHint')}</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -222,7 +289,7 @@ function KeyForm({ mode, onOpenChange, apis = [], apisLoading = false, keyData, 
           render={({ field }) => (
             <FormItem>
               <FormLabel>{t('form.quotaPeriodLabel')}</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} disabled={quotaLimit === ''}>
+              <Select onValueChange={field.onChange} value={field.value} disabled={hasPlan || quotaLimit === ''}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue />
