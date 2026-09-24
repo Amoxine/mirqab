@@ -274,23 +274,48 @@ grep "<install-id>" .install-logs/install-*.log
 
 **Re-running after a failure**
 
-The script is designed to be idempotent — safe to re-run:
+Safe to re-run: `install.sh` reads any existing `infra/.env` and keeps the credentials it finds,
+generating only the ones that are missing.
 
 ```bash
 bash install.sh                        # Re-run normally
 bash install.sh --debug                # Re-run with full trace output
 ```
 
+This was not always true. Until it was fixed, every re-run minted fresh values and truncated the
+file, so a second run rotated every credential against state that still held the old one — see the
+rotation table under **Security Notes** for what that costs per secret.
+
 ### Security Notes
 
-- **Secrets are auto-generated** on every install using `openssl rand` (32-byte entropy)
+- **Secrets are auto-generated** on the first install using `openssl rand` (32-byte entropy), and
+  **reused** on every run after that
 - **`.env.local` files** are created with `chmod 600` — readable only by the file owner
 - **Secrets are never logged** — they appear only in `.env.local` files
-- **To rotate secrets**: delete `.env.local` files and re-run `bash install.sh`
-  ```bash
-  rm apps/api/.env.local apps/web/.env.local
-  bash install.sh --non-interactive
-  ```
+
+**`infra/.env` is the source of truth.** `apps/api/.env.local` and `apps/web/.env.local` are
+*derived* from it (the database URL, the gateway secret), so deleting those two rotates nothing —
+they are rebuilt with the same values. Rotation means deleting the key from `infra/.env`:
+
+```bash
+# Rotate ONE secret — delete just that line, then re-run
+sed -i '/^KRATOS_SECRETS_COOKIE=/d' infra/.env
+bash install.sh --non-interactive
+```
+
+**Read the table before rotating anything.** Deleting a key regenerates it, and for most of these
+that invalidates state the stack has already written. `rm infra/.env` rotates *everything* and is
+almost never what you want:
+
+| Secret | Rotating it against an existing stack |
+|---|---|
+| `DB_PASS` | **Breaks the stack.** `POSTGRES_PASSWORD` applies only when the volume is first initialised, so Postgres keeps demanding the old password while the app is handed a new one. Requires `ALTER USER opengateway PASSWORD '<new>'` inside the running database, or a wiped volume. Verified on a scratch volume. |
+| `HYDRA_SECRETS_SYSTEM` | **Breaks existing data.** Hydra encrypts stored OAuth2 clients and tokens with it, and `hydra.yml` passes one value with no rotation list, so previously encrypted rows become undecryptable. |
+| `KRATOS_SECRETS_CIPHER` | **Breaks existing data.** Kratos encrypts identity credential fields with it; same single-value wiring, same consequence. |
+| `HYDRA_SECRETS_COOKIE`, `KRATOS_SECRETS_DEFAULT`, `KRATOS_SECRETS_COOKIE` | Logs everyone out and invalidates in-flight login/consent and recovery flows. Recoverable by signing in again. |
+| `TYK_WEBHOOK_RELAY_SECRET` | Breaks webhooks silently until every API is re-synced. The value is embedded *into each Tyk API definition* as an event-handler header (`webhook-relay.constants.ts`), so definitions already on the gateway keep presenting the old one and the relay rejects them — fail closed, no forged events, but no deliveries either. |
+| `TYK_GW_SECRET`, `REDIS_PASSWORD` | Safe. Nothing persists keyed on them; compose hands the same value to every container that needs it, so they agree again after `docker compose up -d`. |
+| `JWT_SECRET` | Safe — dead since the Ory cutover. The app signs nothing (`apps/api/src/modules/auth/jwt-secret.ts`); tokens are Hydra's and are verified against Hydra's JWKS. |
 
 ---
 

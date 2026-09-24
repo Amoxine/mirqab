@@ -136,50 +136,93 @@ cleanup() {
 
 trap cleanup EXIT
 
-generate_all_secrets() {
-  DB_PASS=$(rand_hex 16)
-  if [ -z "$DB_PASS" ]; then
-    fail "Cannot generate DB password: openssl and node both unavailable"
+# Every credential this script owns. `infra/.env` is the single source of truth for all of them:
+# apps/api/.env.local and apps/web/.env.local are DERIVED from these same variables, so reusing the
+# values here rebuilds those two files identically and they never need parsing of their own.
+MANAGED_SECRETS=(
+  TYK_GW_SECRET JWT_SECRET DB_PASS
+  HYDRA_SECRETS_SYSTEM HYDRA_SECRETS_COOKIE
+  KRATOS_SECRETS_DEFAULT KRATOS_SECRETS_COOKIE KRATOS_SECRETS_CIPHER
+  REDIS_PASSWORD TYK_WEBHOOK_RELAY_SECRET
+)
+
+# Load what an existing infra/.env already holds, so a re-run keeps it.
+#
+# PARSED, never sourced. A .env is data; `source` would execute whatever is in it, and a file this
+# script wrote with mode 600 is still not a reason to run it. The value is taken verbatim after the
+# first `=` so it survives byte for byte — no requoting, no trimming, no expansion.
+#
+# Why this exists: README promised the script was "safe to re-run" while generate_all_secrets minted
+# fresh values unconditionally and the write block truncated the file. A re-run therefore rotated
+# every credential against state that still held the old one — most sharply DB_PASS, because
+# POSTGRES_PASSWORD only applies when the volume is first initialised, so Postgres kept demanding
+# the previous password while the app had been handed a new one. See README's rotation table.
+load_existing_secrets() {
+  local env_file="${SCRIPT_DIR}/infra/.env" key value
+  [ -f "$env_file" ] || return 0
+  for key in "${MANAGED_SECRETS[@]}"; do
+    # First occurrence wins, matching how docker compose itself reads a duplicated key.
+    value=$(sed -n "s/^${key}=\(.*\)$/\1/p" "$env_file" | head -n 1)
+    [ -n "$value" ] || continue
+    printf -v "$key" '%s' "$value"
+    debug "$key reused from existing infra/.env"
+  done
+  return 0
+}
+
+# Generate $1 as $2 random bytes ONLY if it is still empty, so a value loaded above survives.
+#
+# `${!name:-}`, not `${!name}`: this script runs under `set -u` (line 26), so an indirect expansion
+# of a name that was never declared aborts the install with a bare "unbound variable". Every name in
+# MANAGED_SECRETS is declared empty above today, which is exactly what would make that failure a
+# surprise later — adding a secret to the list and forgetting the declaration would break the
+# installer rather than generate the secret.
+ensure_hex_secret() {
+  local name="$1" bytes="$2" value
+  if [ -n "${!name:-}" ]; then
+    return 0
   fi
-  JWT_SECRET=$(generate_secret)
-  TYK_GW_SECRET=$(openssl rand -hex 32 2>/dev/null || node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+  value=$(rand_hex "$bytes")
+  [ -n "$value" ] || fail "Cannot generate $name: openssl and node both unavailable"
+  printf -v "$name" '%s' "$value"
+  return 0
+}
+
+generate_all_secrets() {
+  load_existing_secrets
+
+  ensure_hex_secret DB_PASS 16
+  # Same `:-` reasoning as ensure_hex_secret: declared above today, but `set -u` turns a future
+  # missing declaration into an aborted install rather than a generated secret.
+  if [ -z "${JWT_SECRET:-}" ]; then
+    JWT_SECRET=$(generate_secret)
+  fi
+  ensure_hex_secret TYK_GW_SECRET 32
   if [ -z "$TYK_GW_SECRET" ]; then
     fail "Cannot generate Tyk gateway secret: openssl and node both unavailable"
   fi
 
   # Ory stack. Every one of these is required by infra/docker-compose.yml (`${VAR:?...}`), so the
   # Ory containers refuse to start rather than fall back to a committed key.
-  HYDRA_SECRETS_SYSTEM=$(rand_hex 32)
-  HYDRA_SECRETS_COOKIE=$(rand_hex 32)
-  KRATOS_SECRETS_DEFAULT=$(rand_hex 32)
-  KRATOS_SECRETS_COOKIE=$(rand_hex 32)
+  ensure_hex_secret HYDRA_SECRETS_SYSTEM 32
+  ensure_hex_secret HYDRA_SECRETS_COOKIE 32
+  ensure_hex_secret KRATOS_SECRETS_DEFAULT 32
+  ensure_hex_secret KRATOS_SECRETS_COOKIE 32
   # Exactly 32 characters: Kratos validates the cipher secret's length and exits if it differs.
-  KRATOS_SECRETS_CIPHER=$(rand_hex 16)
-  for _ory_secret in "$HYDRA_SECRETS_SYSTEM" "$HYDRA_SECRETS_COOKIE" \
-                     "$KRATOS_SECRETS_DEFAULT" "$KRATOS_SECRETS_COOKIE" "$KRATOS_SECRETS_CIPHER"; do
-    if [ -z "$_ory_secret" ]; then
-      fail "Cannot generate Ory secrets: openssl and node both unavailable"
-    fi
-  done
+  ensure_hex_secret KRATOS_SECRETS_CIPHER 16
 
   # WP29a: required only by infra/docker-compose.prod.yml, which makes Redis demand a password.
   # Generated here anyway so the prod overlay is one flag away rather than one more secret to think
   # of; the default (dev) profile leaves Redis unauthenticated behind its loopback-only port and
   # ignores this value entirely.
-  REDIS_PASSWORD=$(rand_hex 32)
-  if [ -z "$REDIS_PASSWORD" ]; then
-    fail "Cannot generate Redis password: openssl and node both unavailable"
-  fi
+  ensure_hex_secret REDIS_PASSWORD 32
 
   # WP27: required by the DEFAULT infra/docker-compose.yml (`${...:?}`), unlike REDIS_PASSWORD
   # above — without it the api container refuses to start, so a fresh install never came up at all.
   # The relay endpoint is `@Public()` and reachable through the edge like any other route, so this
   # header secret is the only thing separating a real Tyk event from a forged one. An empty value
   # makes the controller reject every call (fail closed), which is safe but silently dead.
-  TYK_WEBHOOK_RELAY_SECRET=$(rand_hex 32)
-  if [ -z "$TYK_WEBHOOK_RELAY_SECRET" ]; then
-    fail "Cannot generate webhook relay secret: openssl and node both unavailable"
-  fi
+  ensure_hex_secret TYK_WEBHOOK_RELAY_SECRET 32
 
   # Not a credential: the host's primary LAN address, so the WP26b edge's internal CA issues for
   # https://<lan-ip>:<port> as well as localhost. Empty is fine — the listeners still answer on
