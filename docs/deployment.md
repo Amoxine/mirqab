@@ -730,6 +730,18 @@ theoretical one:
   contain the URL.
 - **It cannot tell whether the container it probed is the one the deploy just started.** It probes a
   URL; nothing ties the response to the new image.
+- **It is tied to `PROBE_PATH`, currently `/portal/auth/login`.** Neither URL is inlined into the
+  chunks of `/auth/login`, of the admin login, or of the path `apps/web/Dockerfile`'s `HEALTHCHECK`
+  uses — measured. So "tidying" this to match the healthcheck path turns **every** deploy red on a
+  perfectly good image. If the probe starts failing after a routing change, suspect this before the
+  build args; the error message names it.
+- **The match needs the URL to be a standalone double-quoted string** in the served JavaScript, which
+  is what today's minifier emits (`let r="https://staging.example.com/api",`). A future minifier that
+  split or concatenated that literal would fail a correct image.
+- **A green result does not mean the variables are RIGHT.** It compares the image against the
+  variables, so if a variable itself is wrong, the image was built from that same wrong value and
+  the two agree. This catches a value that never reached the build; it cannot catch a value that
+  should never have been set.
 
 It also does not test for the *absence* of `localhost`: a correctly built bundle still carries a
 chunk with the literal `localhost:33001`, from the source fallback

@@ -288,11 +288,16 @@ jobs:
             exit 1
           fi
 
-          # A trailing slash turns every chunk fetch into `//_next/...`, which Next answers with a
+          # Trailing slashes turn every chunk fetch into `//_next/...`, which Next answers with a
           # 308. Without -L `--fail` counts that as success with an empty body, so a CORRECT image
           # reports red with a message blaming the build args — the worst kind of wrong, since the
           # message sends you to fix something that is not broken.
-          APP_URL="${APP_URL%/}"
+          #
+          # ALL of them, not one: `${APP_URL%/}` strips a single trailing slash, so a variable ending
+          # `//` still produced the 308 and still failed a correct image.
+          while [ "${APP_URL%/}" != "$APP_URL" ]; do
+            APP_URL="${APP_URL%/}"
+          done
 
           if [ -z "${APP_URL:-}" ] || [ -z "${API_URL:-}" ] || [ -z "${KRATOS_URL:-}" ]; then
             echo "::error::vars.STAGING_APP_URL, STAGING_API_URL and STAGING_KRATOS_URL must all be set, or the web image was built with the Dockerfile's localhost defaults" >&2
@@ -335,7 +340,7 @@ jobs:
             exit 1
           fi
           if [ "$kratos_hits" -eq 0 ]; then
-            echo "::error::the served chunks carry $API_URL but not \"$KRATOS_URL\" — only SOME build args reached this image; check every STAGING_*_URL repo variable" >&2
+            echo "::error::the served chunks carry $API_URL but not \"$KRATOS_URL\" — only SOME build args reached this image, or the probe's page no longer inlines it; check every STAGING_*_URL repo variable, then PROBE_PATH" >&2
             exit 1
           fi
           echo "web app healthy: api in $api_hits and kratos in $kratos_hits of $chunk_count served chunks"
