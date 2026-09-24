@@ -177,17 +177,49 @@ All require `analytics:read`; `range` ∈ `1h | 24h | 7d | 30d` (default `24h`).
 
 | Endpoint | Source | Notes |
 |---|---|---|
-| `GET /api/analytics/overview` | aggregate | Totals, `errorRate` as a **percentage 0-100**, avg + upstream latency, active API/key counts |
+| `GET /api/analytics/overview` | aggregate + raw | Totals, `errorRate` as a **percentage 0-100**, avg + upstream latency, `p50`/`p95`/`p99` latency, active API/key counts |
 | `GET /api/analytics/timeseries?metric=requests\|errors\|latency` | raw for `1h`, aggregate otherwise | Minute buckets for `1h`, hour for `24h`/`7d`, day for `30d`; all three series always returned; ≤ 750 buckets |
 | `GET /api/analytics/apis` | aggregate | Per-API rollup, zero-filled for APIs without traffic |
 | `GET /api/analytics/keys` | aggregate | Per-key rollup by `ApiKey.tykKeyId` |
 | `GET /api/analytics/top-apis?limit=` | aggregate | `limit` ≤ 50 |
 | `GET /api/analytics/status-codes` | aggregate | `dimension='apiid'` + `code_*`; 2xx from `counter_success` |
 | `GET /api/analytics/health` | both + pump probe | `pipelineReady` (both tables exist **and** `pumpReachable`) + `pumpReachable` + `rawTablePresent` / `aggregateTablePresent` + tenant-scoped `rowCount` / `lastRecordAt` |
+| `GET /api/analytics/export?format=csv` | raw | Requires `analytics:export` (403 without it), not `analytics:read`. Streams — writes each page to the response as it is fetched, never buffers the full CSV — capped at `ANALYTICS_EXPORT_MAX_ROWS` (50,000) rows |
+
+`overview`'s `p50`/`p95`/`p99` (WP21) always read `tyk_analytics` (raw), **never** `tyk_aggregated`,
+regardless of `range` — `percentile_cont` needs the underlying per-request distribution, and the
+aggregate table only holds pre-summed `counter_*` values, which cannot be turned back into a
+percentile. Bounded by the raw table's own retention (default 30d), which covers every `range` up
+to `30d`.
 
 `overview` and `top-apis` are cached in Redis for 60 s under `analytics:{tenantId}:{metric}:{range}`.
 A missing pump table is not an error: reads log a warning and degrade to zeros so the dashboard can
 show an "analytics pipeline not receiving data" hint.
+
+## Redaction (WP21)
+
+`omit_detailed_recording` (`infra/pump/pump.conf`) is `false` for the `postgres` pump: `rawrequest`/
+`rawresponse` are populated (base64) for any API with `enable_detailed_recording` on. Live-verified
+format: base64-encoded **plain HTTP text** — headers and body verbatim, e.g. decoding a captured row
+gives `Authorization: Bearer <token>\r\n...\r\n\r\n{"password":"..."}`.
+
+The pump (`tykio/tyk-pump-docker-pub`, a pulled binary) has no field-level redaction option, so this
+is enforced one layer down: a Postgres `BEFORE INSERT` trigger (`og_redact_tyk_analytics_trg`,
+created by `AnalyticsService.onModuleInit()` — see `pump-query.builder.ts`'s `analyticsRedactionDdl`)
+decodes each row's `rawrequest`/`rawresponse`, replaces the **value** of `Authorization`, `Cookie`,
+`Set-Cookie`, `X-Tyk-Authorization` and `X-Api-Key` headers with `[REDACTED]` (name kept, for
+diagnostics), replaces configured JSON body field values (`ANALYTICS_REDACT_FIELDS`, comma-separated;
+defaults to `password, pass, secret, token, authorization, api_key, apikey, credential, ssn,
+credit_card, creditcard, cvv`), then re-encodes — all before the row becomes readable by anyone. A
+trigger fires for the pump's actual multi-row inserts exactly as it would for a single plain one, and
+cannot be bypassed by a client that merely forgets to redact.
+
+Because a trigger cannot read `process.env` per row, the field list is baked into the trigger
+function body at API-boot time; a changed `ANALYTICS_REDACT_FIELDS` takes effect on the next boot,
+not live.
+
+`GET /analytics/export` deliberately does **not** include `rawrequest`/`rawresponse` in its CSV — see
+the Endpoints table above.
 
 ## Retention
 
@@ -204,6 +236,27 @@ column in `to_timestamp()` would make `tyk_aggregated_idx_dimension` unusable.
 
 `ScheduleModule.forRoot()` is registered once, in `QuotasModule`. `AnalyticsModule` only declares the
 cron provider — a second root is an error.
+
+### Storage cost (measured, WP21)
+
+Now that detailed recording is on (`omit_detailed_recording: false`), `tyk_analytics` rows are
+meaningfully bigger — the two base64 dump columns dominate. Measured against a real
+gateway+pump+Postgres, 101 rows of a representative traffic mix (a ~400-byte GET/POST request with
+one auth header, a small JSON body, a ~1000-byte response), **with the redaction trigger and all
+three of this table's own indexes (`og_tyk_analytics_*`) already applied**:
+
+| Metric | Measured |
+|---|---|
+| Row payload alone (`pg_column_size`) | ~1.85 KB/row → **~1.85 GB per million requests** |
+| Table + these 3 indexes (`pg_total_relation_size`) | ~2.8 KB/row → **~2.8 GB per million requests** |
+
+Actual cost scales with real request/response size (a large body costs more; an API with detailed
+recording left off for that API costs ~0, its `rawrequest`/`rawresponse` stay empty). At the default
+`ANALYTICS_RETENTION_DAYS=30`, a tenant sustaining 1M detailed-recording requests/day should budget
+**~85 GB** for `tyk_analytics` alone at steady state (30 × ~2.8 GB) before it starts aging out. Turn
+detailed recording off per-API (WP15b's `enable_detailed_recording` toggle) for APIs that don't need
+request/response bodies in analytics — the scalar columns alone (no detailed recording) cost a few
+hundred bytes/row, not ~2.8 KB.
 
 ## Debugging an empty pipeline
 

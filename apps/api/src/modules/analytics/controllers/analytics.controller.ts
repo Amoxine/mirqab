@@ -1,7 +1,9 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { AnalyticsService } from '../services/analytics.service';
 import {
+  AnalyticsExportQueryDto,
   AnalyticsListQueryDto,
   AnalyticsRangeQueryDto,
   AnalyticsTimeSeriesQueryDto,
@@ -87,5 +89,23 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Readiness of the Tyk Pump analytics pipeline' })
   async getHealth(@CurrentTenant() tenantId: string): Promise<AnalyticsHealthResponse> {
     return this.analyticsService.getHealth(tenantId);
+  }
+
+  // `@Permissions` here REPLACES the controller-level `analytics:read` (Reflector#getAllAndOverride,
+  // see permissions.guard.ts) — this route needs `analytics:export` specifically, not both.
+  @Get('export')
+  @Permissions('analytics:export')
+  @ApiOperation({
+    summary: 'Export analytics as CSV',
+    description: 'Streams text/csv (never buffers the full export in memory). Only `format=csv` is supported today.',
+  })
+  async exportCsv(
+    @Res() res: Response,
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsExportQueryDto,
+  ): Promise<void> {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="analytics-${String(Date.now())}.csv"`);
+    await this.analyticsService.streamExportCsv(tenantId, query.range, res);
   }
 }

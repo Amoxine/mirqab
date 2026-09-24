@@ -65,11 +65,13 @@ function makeService(
   prisma: PrismaMock,
   redis: RedisMock,
   pump: { isReachable: jest.Mock<Promise<boolean>, []> } = makePump(),
+  env: Record<string, string> = {},
 ): AnalyticsService {
   return new AnalyticsService(
     prisma as unknown as PrismaClient,
     redis as unknown as RedisService,
     pump as unknown as PumpHealthService,
+    new ConfigService(env),
   );
 }
 
@@ -128,7 +130,8 @@ describe('AnalyticsService', () => {
       await service.getStatusCodes(TENANT, AnalyticsRange.SEVEN_DAYS);
 
       const queries = issuedSql(prisma);
-      expect(queries).toHaveLength(3);
+      // overview (aggregate rollup + percentile, always-raw), time series, status codes
+      expect(queries).toHaveLength(4);
       for (const query of queries) {
         expect(query.values).toContainEqual(['api-a', 'api-b']);
         expect(query.text).not.toContain('api-a');
@@ -301,10 +304,13 @@ describe('AnalyticsService', () => {
       await service.getOverview(TENANT, AnalyticsRange.ONE_HOUR);
       await service.getTimeSeries(TENANT, AnalyticsMetric.REQUESTS, AnalyticsRange.ONE_HOUR);
 
-      const [overview, chart] = issuedSql(prisma);
+      // getOverview now issues 2 queries (rollup, percentile — always raw), then getTimeSeries 1 more.
+      const [overview, percentile, chart] = issuedSql(prisma);
       expect(overview.text).toContain('FROM public.tyk_analytics');
       expect(overview.values).toEqual([['api-a'], FROM]);
       expect(overview.values).not.toContain(FLOORED_EPOCH);
+      expect(percentile.text).toContain('percentile_cont');
+      expect(percentile.text).toContain('FROM public.tyk_analytics');
       // same source table and same lower bound as the chart, so the totals cannot disagree with it
       expect(chart.text).toContain('FROM public.tyk_analytics');
       expect(chart.values).toContainEqual(FROM);
@@ -324,16 +330,27 @@ describe('AnalyticsService', () => {
       expect(query.values).not.toContain(FLOORED_EPOCH);
     });
 
-    it('keeps the hour-floored aggregate path for 24h, 7d and 30d', async () => {
+    it('keeps the hour-floored aggregate path for 24h, 7d and 30d (percentiles stay on the raw table)', async () => {
       await service.getOverview(TENANT, AnalyticsRange.ONE_DAY);
       await service.getOverview(TENANT, AnalyticsRange.SEVEN_DAYS);
       await service.getOverview(TENANT, AnalyticsRange.THIRTY_DAYS);
 
-      for (const query of issuedSql(prisma)) {
+      // Each getOverview issues 2 queries: the rollup (aggregate, hour-floored) and the percentile
+      // (always raw, exact bound — percentile_cont has no meaning over tyk_aggregated's pre-summed
+      // counters, see percentileLatencyQuery's comment).
+      const queries = issuedSql(prisma);
+      expect(queries).toHaveLength(6);
+      const [rollups, percentiles] = [queries.filter((_, i) => i % 2 === 0), queries.filter((_, i) => i % 2 === 1)];
+
+      for (const query of rollups) {
         expect(query.text).toContain('FROM public.tyk_aggregated');
         // bound epoch is on an hour boundary (aggregate rows are bucketed hourly)
         expect(query.values[1]).toEqual(expect.any(Number));
         expect((query.values[1] as number) % 3600).toBe(0);
+      }
+      for (const query of percentiles) {
+        expect(query.text).toContain('FROM public.tyk_analytics');
+        expect(query.text).toContain('percentile_cont');
       }
     });
 
@@ -468,6 +485,52 @@ describe('AnalyticsService', () => {
     });
   });
 
+  describe('streamExportCsv', () => {
+    function makeRes(): { write: jest.Mock; end: jest.Mock; chunks: string[] } {
+      const chunks: string[] = [];
+      return {
+        chunks,
+        write: jest.fn((chunk: string) => {
+          chunks.push(chunk);
+          return true;
+        }),
+        end: jest.fn(),
+      };
+    }
+
+    it('writes the header even with nothing to export, and never buffers into one string', async () => {
+      prisma.apiDefinition.findMany.mockResolvedValue([]);
+      const res = makeRes();
+
+      await service.streamExportCsv(TENANT, AnalyticsRange.ONE_DAY, res as never);
+
+      expect(res.chunks).toEqual(['"Timestamp","API","Method","Path","Status","Latency (ms)"\r\n']);
+      expect(res.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('streams rows page by page, redacted-at-insert columns excluded, and stops on a short page', async () => {
+      prisma.apiDefinition.findMany.mockResolvedValue([{ tykApiId: 'api-a' }]);
+      const row = {
+        ts: new Date('2026-09-01T00:00:00.000Z'),
+        apiid: 'api-a',
+        api_name: 'Orders',
+        method: 'GET',
+        path: '/orders',
+        responsecode: 200n,
+        latency_total: 42n,
+      };
+      prisma.$queryRaw.mockResolvedValueOnce([row]); // shorter than the batch size: one page only
+      const res = makeRes();
+
+      await service.streamExportCsv(TENANT, AnalyticsRange.ONE_DAY, res as never);
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1); // no second page fetched
+      expect(res.chunks[1]).toContain('"2026-09-01T00:00:00.000Z","api-a","Orders","GET","/orders","200","42"');
+      expect(res.chunks[0]).not.toContain('rawrequest');
+      expect(res.end).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('getHealth', () => {
     it('reports both tables missing without querying them', async () => {
       prisma.$queryRaw.mockResolvedValue([{ raw_present: false, aggregate_present: false }]);
@@ -540,9 +603,26 @@ describe('AnalyticsService', () => {
 
       await service.onModuleInit();
 
-      // the one permitted $queryRawUnsafe: exactly the constant DDL, nothing interpolated into it
-      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
-      expect(prisma.$queryRawUnsafe).toHaveBeenCalledWith(ANALYTICS_INDEX_DDL);
+      // Two DDL statements now: the index constant, then the redaction trigger (WP21).
+      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      expect(prisma.$queryRawUnsafe).toHaveBeenNthCalledWith(1, ANALYTICS_INDEX_DDL);
+      const redactionDdl = prisma.$queryRawUnsafe.mock.calls[1][0];
+      expect(redactionDdl).toContain('og_redact_tyk_analytics_trg');
+      expect(redactionDdl).toContain('password'); // a default field, when ANALYTICS_REDACT_FIELDS is unset
+    });
+
+    it('reads ANALYTICS_REDACT_FIELDS for the trigger body, dropping anything not a bare identifier', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValue([]);
+      const withFields = makeService(prisma, makeRedis(), makePump(), {
+        ANALYTICS_REDACT_FIELDS: 'ssn, my_field, "; DROP TABLE users; --",also-bad',
+      });
+
+      await withFields.onModuleInit();
+
+      const redactionDdl = prisma.$queryRawUnsafe.mock.calls[1][0];
+      expect(redactionDdl).toContain('ssn|my_field');
+      expect(redactionDdl).not.toContain('DROP TABLE');
+      expect(redactionDdl).not.toContain('also-bad');
     });
 
     it('survives a failing DDL (missing privilege) and logs a warning instead of crashing boot', async () => {

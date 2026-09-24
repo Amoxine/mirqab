@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -50,6 +50,14 @@ export class AnalyticsTopApisQueryDto extends AnalyticsRangeQueryDto {
   @Min(1)
   @Max(MAX_TOP_APIS_LIMIT)
   limit = 10;
+}
+
+/** `GET /analytics/export?format=csv&range=...`. `format` is closed to `csv` — the only shape shipped. */
+export class AnalyticsExportQueryDto extends AnalyticsRangeQueryDto {
+  @ApiPropertyOptional({ enum: ['csv'], default: 'csv' })
+  @IsOptional()
+  @IsIn(['csv'])
+  format = 'csv' as const;
 }
 
 export class AnalyticsListQueryDto extends AnalyticsRangeQueryDto {

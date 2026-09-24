@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
+import { Audit } from '../../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { UserPayload } from '../../../common/types';
 import { TenantService } from '../services/tenant.service';
@@ -71,6 +72,7 @@ export class TenantController {
 
   @Post()
   @Permissions('tenant:create')
+  @Audit('tenant:created', 'Tenant')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new tenant' })
   @ApiResponse({
@@ -126,6 +128,7 @@ export class TenantController {
 
   @Patch(':id')
   @Permissions('tenant:update')
+  @Audit('tenant:updated', 'Tenant')
   @ApiOperation({ summary: 'Update a tenant' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Tenant updated successfully' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tenant not found' })
@@ -143,6 +146,7 @@ export class TenantController {
 
   @Delete(':id')
   @Permissions('tenant:delete')
+  @Audit('tenant:deleted', 'Tenant')
   @ApiOperation({ summary: 'Archive (soft delete) a tenant' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Tenant archived successfully' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tenant not found' })
@@ -177,6 +181,7 @@ export class TenantController {
 
   @Post(':id/users')
   @Permissions('user:create')
+  @Audit('tenant:assigned', 'UserTenant')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Assign a user to a tenant' })
   @ApiResponse({
@@ -222,6 +227,7 @@ export class TenantController {
 
   @Patch(':id/users/:userId')
   @Permissions('user:update')
+  @Audit('tenant:role_changed', 'UserTenant')
   @ApiOperation({ summary: "Change a member's role" })
   @ApiResponse({ status: HttpStatus.OK, description: 'Role updated successfully' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User is not a member of this tenant' })
@@ -243,6 +249,7 @@ export class TenantController {
 
   @Delete(':id/users/:userId')
   @Permissions('user:delete')
+  @Audit('tenant:unassigned', 'UserTenant')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a member from the tenant' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Member removed successfully' })

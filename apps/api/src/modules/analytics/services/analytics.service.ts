@@ -1,6 +1,9 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import type { Response } from 'express';
 import { RedisService } from '../../../common/redis/redis.service';
+import { csvCell } from '../../audit/services/audit.service';
 import { AnalyticsMetric, AnalyticsRange, DEFAULT_LIST_LIMIT } from '../dto/analytics-query.dto';
 import type {
   AnalyticsApiRowResponse,
@@ -13,18 +16,25 @@ import type {
 } from '../dto/analytics-response.dto';
 import {
   ANALYTICS_INDEX_DDL,
+  analyticsRedactionDdl,
   analyticsWindow,
   apiRollupQuery,
+  DEFAULT_REDACT_FIELDS,
   errorRatePercent,
+  exportRowsQuery,
   keyRollupQuery,
+  percentileLatencyQuery,
   rawStatsQuery,
   round2,
+  sanitizeRedactFields,
   statusCodeQuery,
   tablePresenceQuery,
   timeSeriesQuery,
   toNumber,
   UNAUTHENTICATED_KEY_HASH,
   type AnalyticsWindow,
+  type ExportRow,
+  type PercentileRow,
   type RawStatsRow,
   type RollupRow,
   type StatusCodeRow,
@@ -34,6 +44,12 @@ import {
 import { PumpHealthService } from './pump-health.service';
 
 const CACHE_TTL_SECONDS = 60;
+
+/** `streamExportCsv`: rows fetched (and written) per round trip, and the total cap across the export. */
+const EXPORT_BATCH_SIZE = 1000;
+export const ANALYTICS_EXPORT_MAX_ROWS = 50_000;
+
+const EXPORT_CSV_HEADER = ['Timestamp', 'API', 'Method', 'Path', 'Status', 'Latency (ms)'];
 
 /** Order of the status-code breakdown; `2xx` comes from `counter_success` (spec §0.7). */
 const STATUS_CODE_ORDER: { code: string; column: keyof StatusCodeRow }[] = [
@@ -75,11 +91,13 @@ export class AnalyticsService implements OnModuleInit {
     @Inject('PRISMA_CLIENT') private readonly prisma: PrismaClient,
     private readonly redisService: RedisService,
     private readonly pumpHealth: PumpHealthService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
    * `tyk_analytics` ships with no index at all (D9). Created here rather than in a Prisma migration
-   * because the pump may create the table after `migrate deploy` has run.
+   * because the pump may create the table after `migrate deploy` has run. The redaction trigger
+   * (WP21) runs here for the same reason, plus its field list has to be read from config at boot.
    */
   async onModuleInit(): Promise<void> {
     try {
@@ -87,6 +105,22 @@ export class AnalyticsService implements OnModuleInit {
       this.logger.log('Analytics indexes ensured on tyk_analytics (skipped if the table is absent)');
     } catch (err) {
       this.logger.warn(`Could not ensure analytics indexes: ${this.describe(err)}`);
+    }
+
+    try {
+      /* eslint-disable-next-line @typescript-eslint/no-unnecessary-type-arguments --
+         ConfigService.get types its default as NoInferType<T>, so T cannot be inferred from it and
+         falls back to `any` (main.ts's bootstrap has the same explicit-argument fix). */
+      const configured = this.configService.get<string>('ANALYTICS_REDACT_FIELDS', '');
+      const fields = configured
+        ? sanitizeRedactFields(configured.split(','))
+        : DEFAULT_REDACT_FIELDS;
+      await this.prisma.$queryRawUnsafe(analyticsRedactionDdl(fields));
+      this.logger.log(
+        `Analytics redaction trigger ensured on tyk_analytics (${String(fields.length)} body field(s), skipped if the table is absent)`,
+      );
+    } catch (err) {
+      this.logger.warn(`Could not ensure analytics redaction trigger: ${this.describe(err)}`);
     }
   }
 
@@ -106,7 +140,10 @@ export class AnalyticsService implements OnModuleInit {
       this.resolveTykApiIds(tenantId),
     ]);
 
-    const totals = this.sumRollup(await this.loadApiRollup(tykApiIds, window));
+    const [totals, percentiles] = await Promise.all([
+      this.loadApiRollup(tykApiIds, window).then((rows) => this.sumRollup(rows)),
+      this.loadPercentiles(tykApiIds, window),
+    ]);
 
     const result: AnalyticsOverviewResponse = {
       totalRequests: totals.requests,
@@ -115,6 +152,9 @@ export class AnalyticsService implements OnModuleInit {
       errorRate: errorRatePercent(totals.errors, totals.requests),
       avgLatencyMs: this.weightedAverage(totals.latencySum, totals.requests),
       avgUpstreamLatencyMs: this.weightedAverage(totals.upstreamSum, totals.requests),
+      p50LatencyMs: percentiles.p50,
+      p95LatencyMs: percentiles.p95,
+      p99LatencyMs: percentiles.p99,
       activeApis,
       activeKeys,
       range,
@@ -282,6 +322,55 @@ export class AnalyticsService implements OnModuleInit {
     })).filter((entry) => entry.count > 0);
   }
 
+  /**
+   * `GET /analytics/export?format=csv`. Streams, never buffers the full CSV in memory: each page is
+   * fetched and written to `res` before the next is read, so memory stays bounded by
+   * `EXPORT_BATCH_SIZE` regardless of `range`. Capped at `ANALYTICS_EXPORT_MAX_ROWS` total, same
+   * "a request, not a background job" reasoning as `AuditService.CSV_MAX_ROWS`.
+   *
+   * Only the columns the analytics UI already shows (timestamp, API, method, path, status, latency)
+   * — never `rawrequest`/`rawresponse`: those are redacted at insert (WP21), but a bulk CSV of
+   * request/response bodies is a bigger exposure than this export is for, regardless.
+   */
+  async streamExportCsv(tenantId: string, range: AnalyticsRange, res: Response): Promise<void> {
+    const tykApiIds = await this.resolveTykApiIds(tenantId);
+    const window = analyticsWindow(range);
+
+    res.write(EXPORT_CSV_HEADER.map(csvCell).join(',') + '\r\n');
+
+    let offset = 0;
+    while (tykApiIds.length > 0 && offset < ANALYTICS_EXPORT_MAX_ROWS) {
+      const limit = Math.min(EXPORT_BATCH_SIZE, ANALYTICS_EXPORT_MAX_ROWS - offset);
+      const rows = await this.safeQuery<ExportRow>(
+        exportRowsQuery(window.from, tykApiIds, limit, offset),
+        `export (${range}, offset ${String(offset)})`,
+      );
+      if (rows.length === 0) break;
+
+      const chunk = rows
+        .map((row) =>
+          [
+            row.ts.toISOString(),
+            row.apiid,
+            row.api_name,
+            row.method,
+            row.path,
+            String(toNumber(row.responsecode)),
+            String(toNumber(row.latency_total)),
+          ]
+            .map(csvCell)
+            .join(','),
+        )
+        .join('\r\n');
+      res.write(chunk + '\r\n');
+
+      offset += rows.length;
+      if (rows.length < limit) break; // short page: no more rows
+    }
+
+    res.end();
+  }
+
   async getHealth(tenantId: string): Promise<AnalyticsHealthResponse> {
     const [presence, pumpReachable] = await Promise.all([
       this.safeQuery<TablePresenceRow>(tablePresenceQuery(), 'table presence'),
@@ -338,6 +427,30 @@ export class AnalyticsService implements OnModuleInit {
       apiRollupQuery(window, tykApiIds, limit),
       `api rollup (${window.range})`,
     );
+  }
+
+  /**
+   * p50/p95/p99, always from the raw table (see `percentileLatencyQuery`'s comment). Empty scope
+   * short-circuits to zeros, same as every other tenant-scoped read here.
+   */
+  private async loadPercentiles(
+    tykApiIds: string[],
+    window: AnalyticsWindow,
+  ): Promise<{ p50: number; p95: number; p99: number }> {
+    if (tykApiIds.length === 0) return { p50: 0, p95: 0, p99: 0 };
+
+    const rows = await this.safeQuery<PercentileRow>(
+      percentileLatencyQuery(tykApiIds, window.from),
+      `percentiles (${window.range})`,
+    );
+    if (rows.length === 0) return { p50: 0, p95: 0, p99: 0 };
+    const [row] = rows;
+
+    return {
+      p50: round2(toNumber(row.p50)),
+      p95: round2(toNumber(row.p95)),
+      p99: round2(toNumber(row.p99)),
+    };
   }
 
   private indexRollup(rows: RollupRow[]): Map<string, RollupRow> {

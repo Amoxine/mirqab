@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { hydraAdmin } from '@/lib/hydra-admin';
 import { kratosServer } from '@/lib/kratos-server';
 import { ACCESS_TOKEN_COOKIE, clearSessionCookies } from '@/lib/oauth-cookies';
+import { recordAuditLog } from '@/lib/audit-log';
 
 /**
  * The dashboard's own "Log out" action (`components/layout/header.tsx`) — distinct from
@@ -23,6 +24,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const introspected = token ? await hydraAdmin.introspectOAuth2Token({ token }).catch(() => null) : null;
   if (introspected?.active === true && introspected.sub !== undefined) {
     await hydraAdmin.revokeOAuth2LoginSessions({ subject: introspected.sub }).catch(() => undefined);
+    // Verified logout only: introspected.sub is Hydra confirming the caller held a live token for
+    // that subject, same verification bar as the revoke call right above.
+    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+    await recordAuditLog({ userId: introspected.sub, action: 'LOGOUT', resource: 'auth', ipAddress });
   }
 
   const cookieHeader = request.headers.get('cookie') ?? undefined;

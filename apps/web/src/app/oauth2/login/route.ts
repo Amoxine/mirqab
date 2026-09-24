@@ -6,17 +6,34 @@ import type { AcceptOAuth2LoginRequest } from '@ory/client-fetch';
 import { APP_URL, hydraAdmin, oauthError } from '@/lib/hydra-admin';
 import { kratosServer } from '@/lib/kratos-server';
 import { KRATOS_PUBLIC_URL } from '@/lib/kratos-client';
+import { recordAuditLog } from '@/lib/audit-log';
 
 /** Hydra "remember this browser" duration for the login session — mirrors Kratos's own session lifespan (24h, infra/ory/kratos/kratos.yml). */
 const REMEMBER_FOR_SECONDS = 24 * 60 * 60;
 
 /** Hydra's accept/reject calls throw on a stale or replayed challenge — which a back button or a
  * double submit produces routinely — so every one of them lands on the error page, not a 500. */
-async function acceptLogin(loginChallenge: string, body: AcceptOAuth2LoginRequest): Promise<NextResponse> {
+async function acceptLogin(
+  loginChallenge: string,
+  body: AcceptOAuth2LoginRequest,
+  ipAddress: string | null,
+): Promise<NextResponse> {
   const accepted = await hydraAdmin
     .acceptOAuth2LoginRequest({ loginChallenge, acceptOAuth2LoginRequest: body })
     .catch(() => null);
-  return accepted ? NextResponse.redirect(accepted.redirect_to) : oauthError('login_accept_failed');
+  if (!accepted) return oauthError('login_accept_failed');
+
+  // The one place a login actually succeeds — both the "Hydra remembers this browser" fast path and
+  // the full Kratos-session path call this with a confirmed subject (Postgres User.id).
+  if (typeof body.subject === 'string') {
+    await recordAuditLog({ userId: body.subject, action: 'LOGIN', resource: 'auth', ipAddress });
+  }
+  return NextResponse.redirect(accepted.redirect_to);
+}
+
+/** Best-effort client IP: `X-Forwarded-For`'s first hop, same convention as apps/api (main.ts). */
+function clientIp(request: NextRequest): string | null {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
 }
 
 async function rejectLogin(loginChallenge: string, description: string): Promise<NextResponse> {
@@ -160,7 +177,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (remembered?.status !== 'ACTIVE') {
       return rejectInactiveAccount(loginChallenge);
     }
-    return acceptLogin(loginChallenge, { subject: loginRequest.subject });
+    return acceptLogin(loginChallenge, { subject: loginRequest.subject }, clientIp(request));
   }
 
   const cookieHeader = request.headers.get('cookie') ?? undefined;
@@ -208,10 +225,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return rejectInactiveAccount(loginChallenge);
   }
 
-  return acceptLogin(loginChallenge, {
-    subject: user.id,
-    remember: true,
-    remember_for: REMEMBER_FOR_SECONDS,
-    context: { email },
-  });
+  return acceptLogin(
+    loginChallenge,
+    { subject: user.id, remember: true, remember_for: REMEMBER_FOR_SECONDS, context: { email } },
+    clientIp(request),
+  );
 }

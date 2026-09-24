@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { prisma } from '@open-gateway/database';
+import { AuditService } from '../../audit/services/audit.service';
 
 /** One key's usage as the pump recorded it. */
 interface KeyUsageRow {
@@ -26,6 +27,8 @@ interface KeyUsageRow {
 @Injectable()
 export class MeteringService {
   private readonly logger = new Logger(MeteringService.name);
+
+  constructor(private readonly auditService: AuditService) {}
 
   /**
    * Hourly. The window matters less than it looks: because each run recomputes the period total
@@ -55,9 +58,10 @@ export class MeteringService {
       select: {
         id: true,
         used: true,
+        limit: true,
         resetAt: true,
         period: true,
-        apiKey: { select: { tykKeyId: true } },
+        apiKey: { select: { tykKeyId: true, tenantId: true, id: true, name: true } },
       },
     });
 
@@ -66,7 +70,18 @@ export class MeteringService {
     const metered = quotas.flatMap((q) =>
       q.apiKey.tykKeyId === null
         ? []
-        : [{ id: q.id, used: q.used, resetAt: q.resetAt, tykKeyId: q.apiKey.tykKeyId }],
+        : [
+            {
+              id: q.id,
+              used: q.used,
+              limit: q.limit,
+              resetAt: q.resetAt,
+              tykKeyId: q.apiKey.tykKeyId,
+              tenantId: q.apiKey.tenantId,
+              apiKeyId: q.apiKey.id,
+              apiKeyName: q.apiKey.name,
+            },
+          ],
     );
     if (metered.length === 0) return 0;
 
@@ -89,6 +104,19 @@ export class MeteringService {
     for (const quota of metered) {
       const used = hitsByKey.get(quota.tykKeyId) ?? 0;
       if (used === quota.used) continue; // nothing changed; skip the write
+
+      // Audited once per crossing, not once per hour while it stays over: only the under→over edge
+      // qualifies. A quota already over limit before this run (used unchanged, caught above) does
+      // not re-fire, and neither does a quota that drops back under after its period resets.
+      if (quota.used < quota.limit && used >= quota.limit) {
+        await this.auditService.record({
+          tenantId: quota.tenantId,
+          action: 'QUOTA_EXCEEDED',
+          resource: 'keys',
+          details: { apiKeyId: quota.apiKeyId, apiKeyName: quota.apiKeyName, used, limit: quota.limit },
+        });
+      }
+
       await prisma.quota.update({ where: { id: quota.id }, data: { used } });
       written += 1;
     }

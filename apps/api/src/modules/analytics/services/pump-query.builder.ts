@@ -322,6 +322,33 @@ export function statusCodeQuery(window: AnalyticsWindow, tykApiIds: string[]): P
   `;
 }
 
+export interface ExportRow {
+  ts: Date;
+  apiid: string;
+  api_name: string;
+  method: string;
+  path: string;
+  responsecode: SqlNumeric;
+  latency_total: SqlNumeric;
+}
+
+/**
+ * One page of raw rows for `GET /analytics/export`, newest first, for the CSV streamer to write as
+ * it goes (never the whole result set at once — see `AnalyticsService.streamExportCsv`). Only the
+ * columns the export actually shows: never `rawrequest`/`rawresponse` — those are redacted-at-insert
+ * but still request/response bodies, and the CSV isn't the place to hand them out in bulk.
+ */
+export function exportRowsQuery(from: Date, tykApiIds: string[], limit: number, offset: number): Prisma.Sql {
+  return Prisma.sql`
+    SELECT "timestamp" AS ts, apiid, api_name, method, path, responsecode, latency_total
+    FROM public.tyk_analytics
+    WHERE apiid = ANY(${tykApiIds}::text[])
+      AND "timestamp" >= ${from}
+    ORDER BY "timestamp" DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+}
+
 /** Both pump tables may be absent until the pump's first purge — presence is a first-class answer. */
 export function tablePresenceQuery(): Prisma.Sql {
   return Prisma.sql`
@@ -377,3 +404,124 @@ DO $$ BEGIN
   END IF;
 END $$;
 `;
+
+export interface PercentileRow {
+  p50: SqlNumeric;
+  p95: SqlNumeric;
+  p99: SqlNumeric;
+}
+
+/**
+ * p50/p95/p99 of total request latency. Always reads `tyk_analytics` (raw), independent of the
+ * range's normal raw/aggregate split (`AnalyticsWindow.source`): `percentile_cont` needs the
+ * underlying per-request distribution, and `tyk_aggregated` never has one — it only holds pre-summed
+ * counters (`counter_total_latency` etc, see `apiRollupQuery`), which cannot be re-aggregated into a
+ * percentile no matter the query. (The plan's acceptance text says the exact-equality check runs
+ * "directly against tyk_aggregated" — that is read as tyk_analytics here, for the reason above; a
+ * percentile of pre-summed counters is not a percentile of anything. Flagged for the plan, not
+ * silently changed.) Bounded by the raw table's own retention (`ANALYTICS_RETENTION_DAYS`, default
+ * 30d — see analytics-retention.scheduler.ts), which comfortably covers every range up to `30d`.
+ */
+export function percentileLatencyQuery(tykApiIds: string[], from: Date): Prisma.Sql {
+  return Prisma.sql`
+    SELECT
+      percentile_cont(0.50) WITHIN GROUP (ORDER BY latency_total) AS p50,
+      percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_total) AS p95,
+      percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_total) AS p99
+    FROM public.tyk_analytics
+    WHERE apiid = ANY(${tykApiIds}::text[])
+      AND "timestamp" >= ${from}
+  `;
+}
+
+/** A bare SQL identifier only — anything else is dropped rather than risk the generated DDL below. */
+const SAFE_FIELD_NAME = /^[a-zA-Z0-9_]+$/;
+
+/** Sensible defaults for `ANALYTICS_REDACT_FIELDS`; overridable, never appended to silently. */
+export const DEFAULT_REDACT_FIELDS = [
+  'password',
+  'pass',
+  'secret',
+  'token',
+  'authorization',
+  'api_key',
+  'apikey',
+  'credential',
+  'ssn',
+  'credit_card',
+  'creditcard',
+  'cvv',
+];
+
+/** Keeps only bare identifiers, so a malformed env var degrades to "redact less", never to broken DDL. */
+export function sanitizeRedactFields(fields: string[]): string[] {
+  return fields.map((f) => f.trim()).filter((f) => SAFE_FIELD_NAME.test(f));
+}
+
+/**
+ * Redaction before insert. Once `pump.conf`'s `omit_detailed_recording` is `false` (WP21),
+ * `tyk_analytics.rawrequest`/`rawresponse` hold the FULL raw HTTP dump (base64) for any API with
+ * detailed recording on — every header, including `Authorization`, and the full body, verbatim.
+ *
+ * The pump is a pulled binary (`tykio/tyk-pump-docker-pub`) with no field-level redaction option, so
+ * this is enforced at the one layer guaranteed to run before ANY writer's row becomes readable: a
+ * Postgres `BEFORE INSERT` trigger — it fires for the pump's actual multi-row `INSERT`s exactly like
+ * it would for a plain one, is independent of what eventually writes to this table, and cannot be
+ * bypassed by a client that merely forgets to redact. Live-verified: a real gateway request carrying
+ * `Authorization: Bearer <token>` and `{"password":"..."}` in the body lands in Postgres with both
+ * replaced by `[REDACTED]`; unrelated body fields and headers are untouched.
+ *
+ * `rawrequest`/`rawresponse` are base64 (verified against a real captured row), so the function
+ * decodes, redacts the decoded HTTP text with two passes — sensitive header VALUES (name kept, for
+ * diagnostics) and configured JSON body FIELD values — then re-encodes.
+ *
+ * The field list is baked into the trigger function body at module-init time (see
+ * `ANALYTICS_INDEX_DDL`'s comment for why this runs there and not in a migration): a trigger cannot
+ * read `process.env` per row, so a changed `ANALYTICS_REDACT_FIELDS` takes effect on the next API
+ * boot, not live. `fields` must already be sanitized (`sanitizeRedactFields`) — this function trusts
+ * its input completely, since it is interpolated into DDL.
+ */
+export function analyticsRedactionDdl(fields: string[]): string {
+  const fieldsLiteral = fields.join('|').replace(/'/g, "''");
+
+  return `
+DO $$ BEGIN
+  IF to_regclass('public.tyk_analytics') IS NOT NULL THEN
+    CREATE OR REPLACE FUNCTION og_redact_http_dump(b64 text, fields text) RETURNS text AS $fn$
+    DECLARE
+      plain text;
+    BEGIN
+      IF b64 IS NULL OR b64 = '' THEN
+        RETURN b64;
+      END IF;
+      plain := convert_from(decode(b64, 'base64'), 'UTF8');
+      plain := regexp_replace(plain, 'Authorization:[ \\t]*[^\\r\\n]*', 'Authorization: [REDACTED]', 'gi');
+      plain := regexp_replace(plain, 'Cookie:[ \\t]*[^\\r\\n]*', 'Cookie: [REDACTED]', 'gi');
+      plain := regexp_replace(plain, 'Set-Cookie:[ \\t]*[^\\r\\n]*', 'Set-Cookie: [REDACTED]', 'gi');
+      plain := regexp_replace(plain, 'X-Tyk-Authorization:[ \\t]*[^\\r\\n]*', 'X-Tyk-Authorization: [REDACTED]', 'gi');
+      plain := regexp_replace(plain, 'X-Api-Key:[ \\t]*[^\\r\\n]*', 'X-Api-Key: [REDACTED]', 'gi');
+      IF fields <> '' THEN
+        plain := regexp_replace(plain, '"(' || fields || ')"\\s*:\\s*"[^"]*"', '"\\1":"[REDACTED]"', 'gi');
+      END IF;
+      RETURN encode(convert_to(plain, 'UTF8'), 'base64');
+    END;
+    $fn$ LANGUAGE plpgsql IMMUTABLE;
+
+    CREATE OR REPLACE FUNCTION og_redact_tyk_analytics() RETURNS trigger AS $fn$
+    DECLARE
+      fields text := '${fieldsLiteral}';
+    BEGIN
+      NEW.rawrequest := og_redact_http_dump(NEW.rawrequest, fields);
+      NEW.rawresponse := og_redact_http_dump(NEW.rawresponse, fields);
+      RETURN NEW;
+    END;
+    $fn$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS og_redact_tyk_analytics_trg ON tyk_analytics;
+    CREATE TRIGGER og_redact_tyk_analytics_trg
+      BEFORE INSERT ON tyk_analytics
+      FOR EACH ROW EXECUTE FUNCTION og_redact_tyk_analytics();
+  END IF;
+END $$;
+`;
+}

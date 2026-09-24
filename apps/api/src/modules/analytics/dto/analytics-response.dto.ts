@@ -13,6 +13,11 @@ export interface AnalyticsOverviewResponse {
   errorRate: number;
   avgLatencyMs: number;
   avgUpstreamLatencyMs: number;
+  /** `percentile_cont` over raw per-request latency — see `percentileLatencyQuery`'s comment for why
+   *  this always reads `tyk_analytics`, never `tyk_aggregated`, regardless of `range`. */
+  p50LatencyMs: number;
+  p95LatencyMs: number;
+  p99LatencyMs: number;
   activeApis: number;
   activeKeys: number;
   range: AnalyticsRange;
