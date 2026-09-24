@@ -24,6 +24,12 @@
 #         -> "the backup is intact and complete" (every file matches the manifest's checksum)
 #   L2  server starts, recovery completes, all four databases open and answer a query
 #         -> "the restore works"
+#         Two halves, and only one has been demonstrated failing. The DATABASE-PRESENCE half has:
+#         an intact, checksum-clean backup of a cluster with `keto` dropped recovers fine and then
+#         fails here, naming the database. The RECOVERY half has not — every corruption anyone has
+#         constructed is caught earlier by L0 or L1, which checksum every file and parse the WAL.
+#         L2 is kept because L1 reads files and cannot prove a server starts, but nobody has yet
+#         built a backup that passes L1 and then fails to recover on this image.
 #   L3  table SET identical to the primary, and no DATABASE restored hollow (structure, no data)
 #         -> "the backup is not hollow, stale, or of the wrong cluster"
 #         Hollowness is judged per database, never per table: a single table that is empty in the
@@ -276,6 +282,27 @@ docker exec "$SCRATCH_CONTAINER" pg_isready -U opengateway >/dev/null 2>&1 \
   || die "L2 FAILED: the restored cluster never reached a consistent state.
   docker logs $SCRATCH_CONTAINER --tail 40"
 
+# Each database opened EXPLICITLY, before dump_counts and before L3.
+#
+# `pg_isready` proves the postmaster accepts connections; it says nothing about whether any
+# particular database exists. L2's contract has always been "all four open and answer", but the
+# only thing enforcing the second half was dump_counts dying later — so a backup of a cluster
+# missing a database exited 1 with a raw `psql: database "keto" does not exist`, with no L2 verdict
+# line at all and the failure attributed to nothing. Found by worker-4 attacking this cold. A layer
+# whose contract is wider than its check is the same defect as a message that claims more than it
+# measured; this closes the gap between the two.
+for db in opengateway hydra kratos keto; do
+  # stderr into a variable, not a temp file: the temp dir does not exist yet at this point, and a
+  # check that needs scaffolding to run is a check that gets moved later and quietly skipped.
+  if ! db_err="$(docker exec "$SCRATCH_CONTAINER" psql -U opengateway -d "$db" -tAc 'select 1' 2>&1 >/dev/null)"; then
+    die "L2 FAILED: database '$db' is missing or does not answer in the restored cluster.
+  $(printf '%s' "$db_err" | tr '\n' ' ')
+  The cluster recovered, so this is not a corrupt backup — it is a backup of a cluster that did not
+  have this database. Check whether it predates the database being created, or is of another stack."
+  fi
+done
+say "L2 PASS: recovery completed and all four databases answered"
+
 # ── Verify by exact row counts, every database ──────────────────────────────────────────────────
 # Exact counts via query_to_xml, not pg_stat estimates: an estimate that happens to match is not
 # evidence. The primary is only ever READ here.
@@ -309,8 +336,6 @@ dump_counts() {
 
 dump_counts "$SCRATCH_CONTAINER" "$tmp/scratch.txt"
 dump_counts "$PRIMARY_CONTAINER" "$tmp/primary.txt"
-
-say "L2 PASS: recovery completed and all four databases answered"
 
 # ── L3: the backup is not hollow, stale, or of the wrong cluster ────────────────────────────────
 # What L3 can and cannot do, stated because the previous version got this wrong: it CANNOT prove
@@ -352,18 +377,28 @@ awk -F'|' '
       hollow=0
       if (psum[db] > 0 && ssum[db]+0 == 0) hollow=1
       if (pne[db] > 0 && lost[db]*2 > pne[db]) hollow=1
+      printf "STAT %s %d %d\n", db, lost[db]+0, pne[db]+0
       if (hollow) printf "HOLLOW %s %d %d %d %d\n", db, psum[db], ssum[db]+0, lost[db]+0, pne[db]
     }
   }' "$tmp/primary.txt" "$tmp/scratch.txt" >"$tmp/hollow.txt" 2>"$tmp/lost.txt"
 
-if [ -s "$tmp/hollow.txt" ]; then
+if grep -q '^HOLLOW ' "$tmp/hollow.txt"; then
   say "L3 FAILED: a restored database is hollow — structure without data"
-  while read -r _ db psum ssum lost pne; do
+  grep '^HOLLOW ' "$tmp/hollow.txt" | while read -r _ db psum ssum lost pne; do
     say "  $db: primary has $psum rows, restored has $ssum; $lost of $pne non-empty tables came back empty"
-  done <"$tmp/hollow.txt"
+  done
   die "this backup did not capture the data"
 fi
 say "L3 PASS: $s_tables tables, table set identical, no database hollow"
+# The number L3 actually measured, printed on PASS and not only on failure. Without it the run said
+# "complete" while 4 of 10 tables in a database were empty where the primary's are populated — true,
+# unalarming, and invisible. Output that reports only the verdict and never the measurement is how a
+# heuristic gets read as a proof.
+grep '^STAT ' "$tmp/hollow.txt" | while read -r _ db lost pne; do
+  if [ "$lost" -gt 0 ]; then
+    say "  $db: $lost of $pne tables are empty where the primary's are not (first rows since the backup, or a stale backup)"
+  fi
+done
 
 # ── L4: no page or index corruption (optional) ──────────────────────────────────────────────────
 if docker exec "$SCRATCH_CONTAINER" sh -c 'command -v pg_amcheck' >/dev/null 2>&1; then
@@ -406,6 +441,9 @@ else
   fi
 fi
 
-say "PASS: backup '$BACKUP' is intact (L1), restorable (L2) and complete (L3)."
+# "table set matches the primary", not "complete". L3 establishes that the backup is not obviously
+# hollow and carries the same tables; it cannot establish completeness, and saying so claimed more
+# than any layer measured.
+say "PASS: backup '$BACKUP' is intact (L1), restorable (L2), table set matches the primary (L3)."
 say "      NOT proven: row VALUES equal the primary's — the primary moves, so nothing can prove that."
 exit 0
