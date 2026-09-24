@@ -44,6 +44,29 @@ $CURL -sG --data-urlencode 'query=ALERTS{alertstate="firing"}' http://prometheus
 $CURL -s  http://prometheus:9090/api/v1/rules
 ```
 
+### Applying a rule change
+
+**Editing `rules/` does nothing on its own.** Prometheus reads the rule files once at start, so a
+committed rule can exist in git and nowhere else — which is exactly what happened to the four rules
+below on the commit that added them. The directory is bind-mounted, so no rebuild is needed, only a
+reload:
+
+```bash
+docker kill --signal=HUP open-gateway-prometheus
+$CURL -s http://prometheus:9090/api/v1/rules    # confirm the new count, and health=ok
+```
+
+A reload that fails to parse keeps the previous rules rather than leaving Prometheus with none.
+Immediately after a reload the API may report health `unknown` for a rule that has not been
+evaluated yet — that is pre-first-evaluation, not an error; it settles to `ok` within one
+`evaluation_interval`.
+
+`POST /-/reload` answers **403** here and always will: `--web.enable-lifecycle` is deliberately not
+set (`infra/docker-compose.yml`). Prometheus is unauthenticated on this network — which is why it is
+on the SSRF denylist — and that flag would expose `POST /-/quit` alongside the reload endpoint,
+making a remote shutdown reachable by anything that can route to it. SIGHUP needs Docker access
+instead of network access, which is the distinction worth keeping.
+
 `rules/open-gateway.yml` carries the reasoning for each rule. Two are worth repeating here because
 they are not what the roadmap assumed:
 
