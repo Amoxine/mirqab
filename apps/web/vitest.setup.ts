@@ -10,6 +10,31 @@ afterEach(() => {
   cleanup();
 });
 
+// Libraries inject runtime <style> tags into <head>: `sonner` a ~15 KB / 97-rule sheet the moment it
+// is IMPORTED (every Sheet/Dialog test imports it — each form toasts on save), and
+// react-remove-scroll-bar (Radix Dialog/Select scroll lock) whenever one opens. jsdom's
+// getComputedStyle then matches EVERY rule of EVERY sheet against the element on EVERY call, and
+// Radix Presence, floating-ui, and Testing Library's getByRole (isInaccessible + accessible name)
+// call it constantly. Profiled at WP17 (in-process CPU profile of one cold Sheet test): 6.5 s ->
+// 2.0 s once these sheets stopped attaching; before, jsdom computed-style `handleRule` ->
+// @asamuzakjp/dom-selector rule matching was ~3 s of it. That is what pushed the first test of each
+// Sheet file past the 5 s default whenever workers were contended. These tests load no app CSS and
+// jsdom lays nothing out, so every <style> reaching
+// <head> is one of those injected sheets and nothing reads what it says; not attaching them
+// changes no behaviour, only the cost of every style lookup. Both libraries insert with
+// `document.head.appendChild`, so intercepting that covers import-time and open-time injection alike.
+// `document` is undefined in the node-environment (route/lib) tests, which have no head to guard.
+// This file sits outside tsconfig's `include` (src only), so typed linting cannot resolve DOM types
+// in it — the same reason the two shims below carry disables; scoped to just this block.
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+if (typeof document !== 'undefined') {
+  const head = document.head;
+  const appendToHead = head.appendChild.bind(head);
+  head.appendChild = ((node: Node) =>
+    node instanceof HTMLStyleElement ? node : appendToHead(node)) as typeof head.appendChild;
+}
+/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+
 // jsdom has no ResizeObserver, but @radix-ui/react-switch (and -select) call it on mount to size
 // their thumb/viewport — without a stub, mounting either in a jsdom test throws
 // "ResizeObserver is not defined" (found at WP17 part 2). A no-op is enough: these tests assert
