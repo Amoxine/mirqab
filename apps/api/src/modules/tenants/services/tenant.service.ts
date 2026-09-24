@@ -59,6 +59,13 @@ const DEFAULT_TENANT_ROLE_PERMISSIONS: Record<string, (permission: { name: strin
       'analytics:read',
       'audit:read',
       'settings:read',
+      // WP19 (found missing here, fixed WP26a): kept in sync by hand with seed.ts's operator list,
+      // which already had these — a tenant created through POST /tenants (not the seeded `default`
+      // tenant) got an operator role without them until now.
+      'plan:read',
+      'product:read',
+      // WP26a: read-only, same reasoning as seed.ts's ROLE_DEFINITIONS.operator.
+      'cert:read',
     ].includes(p.name),
   viewer: (p) => p.action === 'read' || p.action === 'export',
 };

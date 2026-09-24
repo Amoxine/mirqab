@@ -5,6 +5,10 @@
     "title": "Roles & permissions",
     "description": "Custom roles per tenant and the permission matrix."
   },
+  "certificatesCard": {
+    "title": "Certificates",
+    "description": "Upload, list and delete certificates for upstream mTLS."
+  },
   "tabs": {
     "general": "General",
     "nodes": "Gateway nodes"

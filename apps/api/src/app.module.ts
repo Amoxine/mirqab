@@ -17,6 +17,7 @@ import { QuotasModule } from './modules/quotas/quotas.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RolesModule } from './modules/roles/roles.module';
+import { CertificatesModule } from './modules/certificates/certificates.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { GovernanceModule } from './modules/governance/governance.module';
@@ -69,6 +70,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     PlansModule,
     ProductsModule,
     RolesModule,
+    CertificatesModule,
     AnalyticsModule,
     AuditModule,
     GovernanceModule,

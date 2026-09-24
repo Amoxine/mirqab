@@ -51,7 +51,9 @@ interface QueryArgs {
   where: Record<string, unknown>;
 }
 
-/** All 26 seeded permissions, narrowed to what the role-seeding predicates read. */
+/** All 38 seeded permissions (packages/database/prisma/permissions.ts), narrowed to what the
+ * role-seeding predicates read. It went stale at WP18 (26 -> 35 without this list following), which
+ * is how `operator` came to be created without `plan:read`/`product:read` unnoticed until WP26a. */
 const permissionRow = (name: string) => ({ id: `perm-${name}`, name, resource: name.split(':')[0], action: name.split(':')[1] });
 const ALL_PERMISSIONS = [
   'api:read', 'api:create', 'api:update', 'api:delete', 'api:sync',
@@ -62,6 +64,9 @@ const ALL_PERMISSIONS = [
   'analytics:read', 'analytics:export',
   'audit:read', 'audit:export',
   'settings:read', 'settings:update',
+  'plan:read', 'plan:create', 'plan:update', 'plan:delete',
+  'product:read', 'product:create', 'product:update', 'product:delete',
+  'cert:read', 'cert:create', 'cert:delete',
 ].map(permissionRow);
 
 /** Captures what TenantService asks Prisma for, so the scoping itself can be asserted. */
@@ -358,6 +363,31 @@ describe('TenantService.create default roles', () => {
     expect(grantedPermissionIds).toContain('perm-api:read');
     expect(grantedPermissionIds).toContain('perm-analytics:export');
     expect(grantedPermissionIds).not.toContain('perm-api:create');
+    // The predicate auto-grants every new *:read — including WP26a's, and it must not leak a write.
+    expect(grantedPermissionIds).toContain('perm-cert:read');
+    expect(grantedPermissionIds).not.toContain('perm-cert:create');
+    expect(grantedPermissionIds).not.toContain('perm-cert:delete');
+  });
+
+  // `operator` is the one EXPLICIT list (DoD-OWNER 1), so a new permission reaches it only by being
+  // named — and this list is "kept in sync by hand" with seed.ts's. That contract silently broke at
+  // WP19 (plan:read/product:read named in seed.ts but not here), so pin what operator gets from each
+  // resource family added since the list was written.
+  it('grants operator read-only on plans, products and certificates — and nothing that writes them', async () => {
+    const { service, rolePermissionCreateMany } = makeService();
+
+    await service.create({ name: 'Acme', slug: 'acme' }, caller(['super_admin']));
+
+    const operatorGrant = rolePermissionCreateMany.mock.calls.find(([{ data }]) =>
+      data.some((row) => row.roleId === 'role-operator'),
+    );
+    const granted = operatorGrant?.[0].data.map((row) => row.permissionId) ?? [];
+    for (const name of ['plan:read', 'product:read', 'cert:read']) {
+      expect(granted).toContain(`perm-${name}`);
+    }
+    for (const family of ['plan', 'product', 'cert']) {
+      expect(granted.filter((id) => id.startsWith(`perm-${family}:`) && !id.endsWith(':read'))).toEqual([]);
+    }
   });
 });
 

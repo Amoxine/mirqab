@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useTranslations } from 'next-intl';
-import { ChevronRight, RefreshCw, Shield } from 'lucide-react';
+import { ChevronRight, FileKey, RefreshCw, Shield } from 'lucide-react';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -149,20 +149,31 @@ function NodesTab() {
   );
 }
 
-/** Roles is its own page (DataTable + Sheet, not a same-page tab) — linked from here rather than
- * added as a third TabsTrigger. */
-function RolesLinkCard() {
-  const t = useTranslations('settings');
+/** Roles and Certificates are each their own page (DataTable + Sheet, not a same-page tab) —
+ * linked from here rather than added as more TabsTriggers. */
+function SettingsLinkCard({
+  href,
+  permission,
+  icon: Icon,
+  title,
+  description,
+}: {
+  href: string;
+  permission: string;
+  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+  title: string;
+  description: string;
+}) {
   return (
-    <PermissionGate permission="role:read">
-      <Link href="/settings/roles">
+    <PermissionGate permission={permission}>
+      <Link href={href}>
         <Card className="transition-colors hover:bg-accent/50">
           <CardContent className="flex items-center justify-between gap-4 py-4">
             <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+              <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
               <div>
-                <CardTitle className="text-base">{t('rolesCard.title')}</CardTitle>
-                <CardDescription>{t('rolesCard.description')}</CardDescription>
+                <CardTitle className="text-base">{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
               </div>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -182,7 +193,20 @@ function SettingsView() {
         <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
         <p className="text-sm text-muted-foreground">{t('description')}</p>
       </div>
-      <RolesLinkCard />
+      <SettingsLinkCard
+        href="/settings/roles"
+        permission="role:read"
+        icon={Shield}
+        title={t('rolesCard.title')}
+        description={t('rolesCard.description')}
+      />
+      <SettingsLinkCard
+        href="/settings/certificates"
+        permission="cert:read"
+        icon={FileKey}
+        title={t('certificatesCard.title')}
+        description={t('certificatesCard.description')}
+      />
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>

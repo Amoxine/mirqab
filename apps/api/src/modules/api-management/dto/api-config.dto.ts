@@ -338,6 +338,16 @@ export class ApiCacheDto {
  * Without both, a caller could name an allowed IP in the header and walk straight through — which
  * is what `wp15c-acceptance.ts` asserts cannot happen.
  */
+/** WP26a — presents this certificate to the upstream when it demands a client certificate
+ * (upstream mTLS, not client-cert auth at the gateway — that is cut, O13). `certificateId` is a
+ * Tyk cert id from `POST /certificates`. */
+export class ApiUpstreamMutualTlsDto {
+  @ApiProperty({ description: 'Certificate id from POST /certificates, presented to this API\'s upstream' })
+  @IsString()
+  @MaxLength(255)
+  certificateId!: string;
+}
+
 export class ApiIpAccessControlDto {
   @ApiPropertyOptional({ type: [String], example: ['10.0.0.0/8'] })
   @IsOptional()
@@ -494,6 +504,18 @@ export class ApiConfigDto {
   @ValidateNested()
   @Type(() => ApiIpAccessControlDto)
   ipAccessControl?: ApiIpAccessControlDto | null;
+
+  @ApiPropertyOptional({
+    type: ApiUpstreamMutualTlsDto,
+    nullable: true,
+    description:
+      'Upstream mTLS (WP26a): null/omitted means no client certificate is presented — a demanding ' +
+      'upstream then fails closed. This is NOT client-certificate auth at the gateway (cut, O13).',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ApiUpstreamMutualTlsDto)
+  upstreamMutualTls?: ApiUpstreamMutualTlsDto | null;
 
   @ApiPropertyOptional({
     description:

@@ -43,6 +43,9 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.roles.all, 'detail', id] as const,
     permissions: ['roles', 'permissions'] as const,
   },
+  certificates: {
+    all: ['certificates'] as const,
+  },
   analytics: {
     all: ['analytics'] as const,
     overview: (range: string) => [...queryKeys.analytics.all, 'overview', range] as const,

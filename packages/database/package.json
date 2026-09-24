@@ -28,6 +28,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
+    "test": "tsx prisma/permissions.check.ts",
     "clean": "rm -rf node_modules .prisma dist"
   },
   "files": [

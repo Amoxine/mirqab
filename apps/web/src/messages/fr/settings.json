@@ -5,6 +5,10 @@
     "title": "Rôles et permissions",
     "description": "Rôles personnalisés par organisation et matrice des permissions."
   },
+  "certificatesCard": {
+    "title": "Certificats",
+    "description": "Téléverser, lister et supprimer des certificats pour le mTLS en amont."
+  },
   "tabs": {
     "general": "Général",
     "nodes": "Nœuds de la passerelle"

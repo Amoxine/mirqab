@@ -20,6 +20,7 @@ import { RequestValidationSheet } from './request-validation-sheet';
 import { ResponseCacheSheet } from './response-cache-sheet';
 import { TestRequestSheet } from './test-request-sheet';
 import { TrafficLimitsSheet } from './traffic-limits-sheet';
+import { UpstreamMtlsSheet } from './upstream-mtls-sheet';
 import { UptimeTestsSheet } from './uptime-tests-sheet';
 import { UrlRewriteSheet } from './url-rewrite-sheet';
 
@@ -38,6 +39,7 @@ type SheetName =
   | 'ipAccess'
   | 'requestValidation'
   | 'authentication'
+  | 'upstreamMtls'
   | 'testRequest';
 
 interface DesignerTabProps {
@@ -209,6 +211,15 @@ export function DesignerTab({ api }: DesignerTabProps) {
             editLabel={tCommon('edit')}
             onEdit={edit('authentication')}
           />
+          <MiddlewareCard
+            title={t('designer.upstreamMtls.title')}
+            summary={config.upstreamMutualTls ? t('config.enabled') : notConfigured}
+            active={!!config.upstreamMutualTls}
+            activeLabel={t('config.enabled')}
+            inactiveLabel={t('config.disabled')}
+            editLabel={tCommon('edit')}
+            onEdit={edit('upstreamMtls')}
+          />
         </div>
       </div>
 
@@ -224,6 +235,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
       <IpAccessSheet api={api} open={openSheet === 'ipAccess'} onOpenChange={close} />
       <RequestValidationSheet api={api} open={openSheet === 'requestValidation'} onOpenChange={close} />
       <AuthenticationSheet api={api} open={openSheet === 'authentication'} onOpenChange={close} />
+      <UpstreamMtlsSheet api={api} open={openSheet === 'upstreamMtls'} onOpenChange={close} />
       <TestRequestSheet api={api} open={openSheet === 'testRequest'} onOpenChange={close} />
     </div>
   );

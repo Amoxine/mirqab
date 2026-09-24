@@ -336,6 +336,15 @@
       "oneLinePerEntry": "Une IP ou un CIDR par ligne.",
       "summary": "{count} entrées"
     },
+    "upstreamMtls": {
+      "title": "mTLS en amont",
+      "description": "Présente un certificat client au serveur en amont de cette API lorsqu'il en exige un. N'est pas l'authentification par certificat client au niveau de la passerelle.",
+      "certificateLabel": "Certificat",
+      "loading": "Chargement des certificats...",
+      "placeholder": "Sélectionner un certificat",
+      "none": "Aucun",
+      "hint": "Laissez sur Aucun si le serveur en amont n'exige pas de certificat client."
+    },
     "requestValidation": {
       "title": "Validation de requête",
       "description": "Un schéma JSON que le corps de la requête doit respecter. Une violation est rejetée par la passerelle avec le code 422.",

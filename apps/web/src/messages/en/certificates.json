@@ -1,0 +1,42 @@
+{
+  "backToSettings": "Back to Settings",
+  "list": {
+    "title": "Certificates",
+    "description": "Certificates for upstream mTLS — presented to an upstream that demands one. Not client-certificate auth at the gateway.",
+    "uploadButton": "Upload Certificate",
+    "empty": "No certificates found.",
+    "unnamed": "Unnamed certificate",
+    "clientCert": "Client certificate",
+    "caOnly": "CA / public only",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "validity": "Validity"
+    }
+  },
+  "form": {
+    "uploadTitle": "Upload certificate",
+    "uploadDescription": "For a client certificate, include its private key PEM right after the certificate PEM.",
+    "fileLabel": "Certificate file",
+    "fileHint": "Reads the file's text into the field below — nothing is uploaded until you save.",
+    "pemLabel": "PEM content",
+    "pemPlaceholder": "-----BEGIN CERTIFICATE-----",
+    "pemHint": "Paste directly, or use the file picker above.",
+    "submitUpload": "Upload",
+    "submitUploading": "Uploading...",
+    "uploadSuccess": "Certificate uploaded",
+    "uploadFailed": "Failed to upload certificate",
+    "errors": {
+      "pemRequired": "Certificate content is required",
+      "pemInvalid": "Does not look like a PEM certificate"
+    }
+  },
+  "deleteDialog": {
+    "title": "Delete this certificate?",
+    "description": "{label} will be permanently removed. A certificate attached to an API cannot be deleted — detach it from the API first.",
+    "confirm": "Delete certificate",
+    "pending": "Deleting...",
+    "success": "Certificate \"{label}\" deleted",
+    "failed": "Failed to delete certificate"
+  }
+}

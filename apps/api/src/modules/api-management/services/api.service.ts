@@ -29,6 +29,7 @@ import { OAuthClientService } from '../../oauth-clients/services/oauth-client.se
 import { fetchAccessTokenSigningKey } from './hydra-signing-key';
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
 import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
+import { isCertOwnedByOrg } from '../../certificates/services/certificate.service';
 import {
   buildJwtPolicy,
   jwtPolicyId,
@@ -263,6 +264,18 @@ export class ApiService {
       throw new BadRequestException('authType "JWT" requires config.jwt: { jwksUrl, issuer }');
     }
 
+    // WP26a: a cert id is a bare string Tyk does not scope by org at USE time (only listing does,
+    // live-verified) — without this, tenant A could reference tenant B's uploaded certificate, and
+    // therefore push traffic under B's private key, just by knowing or guessing its id.
+    if (dto.config?.upstreamMutualTls) {
+      const { tykOrgId } = await loadTenantScope(tenantId);
+      if (!isCertOwnedByOrg(dto.config.upstreamMutualTls.certificateId, tykOrgId)) {
+        throw new BadRequestException(
+          `Certificate ${dto.config.upstreamMutualTls.certificateId} not found in this tenant`,
+        );
+      }
+    }
+
     await this.assertListenPathFree(dto.listenPath, tenantId);
 
     // Create in our database
@@ -456,6 +469,19 @@ export class ApiService {
     const effectiveConfig = config ? (data.config as Prisma.JsonValue) : existing.config;
     if (effectiveAuthType === 'JWT' && !readConfig(effectiveConfig).jwt) {
       throw new BadRequestException('authType "JWT" requires config.jwt: { jwksUrl, issuer }');
+    }
+
+    // WP26a, same rule as `create`: check the EFFECTIVE (merged) config so a PATCH that leaves
+    // `upstreamMutualTls` untouched from an earlier, still-valid write is not re-validated away,
+    // while a PATCH that sets or changes it is.
+    const effectiveUpstreamMutualTls = readConfig(effectiveConfig).upstreamMutualTls;
+    if (effectiveUpstreamMutualTls) {
+      const { tykOrgId } = await loadTenantScope(tenantId);
+      if (!isCertOwnedByOrg(effectiveUpstreamMutualTls.certificateId, tykOrgId)) {
+        throw new BadRequestException(
+          `Certificate ${effectiveUpstreamMutualTls.certificateId} not found in this tenant`,
+        );
+      }
     }
 
     // WP16: RETIRED is a version-lifecycle state, not a generic one — retiring the default would

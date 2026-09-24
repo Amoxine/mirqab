@@ -336,6 +336,15 @@
       "oneLinePerEntry": "One IP or CIDR per line.",
       "summary": "{count} entries"
     },
+    "upstreamMtls": {
+      "title": "Upstream mTLS",
+      "description": "Present a client certificate to this API's own upstream when it demands one. Not client-certificate auth at the gateway.",
+      "certificateLabel": "Certificate",
+      "loading": "Loading certificates...",
+      "placeholder": "Select a certificate",
+      "none": "None",
+      "hint": "Leave as None if the upstream does not require a client certificate."
+    },
     "requestValidation": {
       "title": "Request validation",
       "description": "A JSON Schema the request body must satisfy. A violation is rejected by the gateway with 422.",

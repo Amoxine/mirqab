@@ -454,6 +454,73 @@ describe('ApiService', () => {
     });
   });
 
+  // WP26a: `loadTenantScope`'s test mock resolves `tykOrgId: 'og-tenant-1'` — a cert id is only
+  // "owned" by this tenant when it starts with that exact string (see isCertOwnedByOrg). Without
+  // this guard, tenant A could reference tenant B's uploaded certificate — and therefore push
+  // traffic under B's private key — just by knowing or guessing its id; Tyk itself does not scope
+  // a cert BY id, only its list endpoint (live-verified).
+  describe('upstream mTLS certificate ownership (WP26a)', () => {
+    const createDto = {
+      name: 'Orders',
+      slug: 'orders',
+      proxyUrl: 'http://orders:4000',
+      listenPath: '/orders/',
+      authType: 'NONE' as const,
+    };
+
+    it("refuses to create an API referencing another tenant's certificate", async () => {
+      const { service, tyk } = setup();
+
+      await expect(
+        service.create(
+          { ...createDto, config: { upstreamMutualTls: { certificateId: 'og-someone-elsefingerprint' } } },
+          TENANT,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.create).not.toHaveBeenCalled();
+      expect(tyk.createApi).not.toHaveBeenCalled();
+    });
+
+    it("creates an API referencing its own tenant's certificate", async () => {
+      const { service } = setup();
+      db.findUnique.mockResolvedValue(null);
+      db.findFirst.mockResolvedValue(null);
+      const config = { upstreamMutualTls: { certificateId: 'og-tenant-1fingerprint' } };
+      db.create.mockResolvedValue(row({ config, tykApiId: null }));
+      db.update.mockResolvedValue(row({ config }));
+
+      await expect(service.create({ ...createDto, config }, TENANT)).resolves.toBeDefined();
+      expect(db.create).toHaveBeenCalled();
+    });
+
+    it("refuses a PATCH that sets upstreamMutualTls to another tenant's certificate", async () => {
+      const { service } = setup();
+      db.findFirst.mockResolvedValue(row({ config: {} }));
+
+      await expect(
+        service.update(
+          ID,
+          plainToInstance(UpdateApiDto, { config: { upstreamMutualTls: { certificateId: 'og-someone-elsex' } } }),
+          TENANT,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('re-validates ownership on every PATCH even when upstreamMutualTls itself is untouched', async () => {
+      const { service } = setup();
+      // A row that already carries another tenant's cert id (e.g. from before this guard existed) —
+      // the merged EFFECTIVE config still carries it forward, so an unrelated-field PATCH must still
+      // catch it rather than silently keep syncing the bad reference.
+      db.findFirst.mockResolvedValue(row({ config: { upstreamMutualTls: { certificateId: 'og-someone-elsex' } } }));
+
+      await expect(
+        service.update(ID, plainToInstance(UpdateApiDto, { name: 'Renamed' }), TENANT),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listen path uniqueness (per tenant, O10 — was global under B1)', () => {
     const dto = { name: 'Orders', slug: 'orders', proxyUrl: 'http://orders:4000', listenPath: '/orders/' };
     const p2002 = (target: string[]) =>

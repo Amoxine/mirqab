@@ -1,0 +1,42 @@
+{
+  "backToSettings": "Retour aux paramètres",
+  "list": {
+    "title": "Certificats",
+    "description": "Certificats pour le mTLS en amont — présentés à un serveur en amont qui en exige un. N'est pas l'authentification par certificat client au niveau de la passerelle.",
+    "uploadButton": "Téléverser un certificat",
+    "empty": "Aucun certificat trouvé.",
+    "unnamed": "Certificat sans nom",
+    "clientCert": "Certificat client",
+    "caOnly": "AC / public uniquement",
+    "columns": {
+      "name": "Nom",
+      "type": "Type",
+      "validity": "Validité"
+    }
+  },
+  "form": {
+    "uploadTitle": "Téléverser un certificat",
+    "uploadDescription": "Pour un certificat client, incluez le PEM de sa clé privée juste après le PEM du certificat.",
+    "fileLabel": "Fichier de certificat",
+    "fileHint": "Lit le contenu texte du fichier dans le champ ci-dessous — rien n'est envoyé avant l'enregistrement.",
+    "pemLabel": "Contenu PEM",
+    "pemPlaceholder": "-----BEGIN CERTIFICATE-----",
+    "pemHint": "Collez directement, ou utilisez le sélecteur de fichier ci-dessus.",
+    "submitUpload": "Téléverser",
+    "submitUploading": "Téléversement...",
+    "uploadSuccess": "Certificat téléversé",
+    "uploadFailed": "Impossible de téléverser le certificat",
+    "errors": {
+      "pemRequired": "Le contenu du certificat est requis",
+      "pemInvalid": "Ne ressemble pas à un certificat PEM"
+    }
+  },
+  "deleteDialog": {
+    "title": "Supprimer ce certificat ?",
+    "description": "{label} sera définitivement supprimé. Un certificat rattaché à une API ne peut pas être supprimé — détachez-le d'abord de l'API.",
+    "confirm": "Supprimer le certificat",
+    "pending": "Suppression en cours...",
+    "success": "Certificat « {label} » supprimé",
+    "failed": "Impossible de supprimer le certificat"
+  }
+}

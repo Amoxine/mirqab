@@ -60,7 +60,12 @@ interface OasDoc {
   security?: Record<string, string[]>[];
   'x-tyk-api-gateway': {
     info: { id: string; name: string; orgId: string; state: { active: boolean }; versioning?: unknown };
-    upstream: { url: string; rateLimit?: { enabled: boolean; rate: number; per: string } };
+    upstream: {
+      url: string;
+      rateLimit?: { enabled: boolean; rate: number; per: string };
+      // WP26a
+      mutualTLS?: { enabled: boolean; domainToCertificateMapping: { domain: string; certificate: string }[] };
+    };
     server: {
       listenPath: { value: string; strip: boolean };
       authentication: { enabled: boolean; securitySchemes?: Record<string, JwtScheme & TokenScheme> };
@@ -87,6 +92,8 @@ interface ClassicDef {
   jwt_identity_base_field?: string;
   jwt_policy_field_name?: string;
   jwt_default_policies?: string[];
+  // WP26a
+  upstream_certificates?: Record<string, string>;
 }
 
 const oas = (over: Partial<ApiDefinition> = {}, jwtSource = '', versions: { versionName: string; tykApiId: string }[] = []) =>
@@ -391,5 +398,39 @@ describe('mapToTykOas — golden file against every classic key', () => {
         ],
       });
     });
+  });
+});
+
+/**
+ * WP26a — upstream (not client) mTLS. Live-verified against v5.15.0 (throwaway nginx demanding a
+ * client cert, on the same docker network as the gateway): both formats' cert-domain match key MUST
+ * be the bare hostname with no port, or the cert is silently never presented and the request fails
+ * closed anyway — a config that "looks right" but never actually works. Asserted here so a future
+ * refactor can't quietly reintroduce the port.
+ */
+describe('upstream mTLS (WP26a)', () => {
+  const upstreamMutualTls = { certificateId: 'og-t1abc123fingerprint' };
+
+  it('OAS: emits mutualTLS keyed on the bare upstream hostname, no port', () => {
+    const d = oas({ proxyUrl: 'https://payments.upstream.internal:8443/v2', config: { upstreamMutualTls } });
+    expect(d['x-tyk-api-gateway'].upstream.mutualTLS).toEqual({
+      enabled: true,
+      domainToCertificateMapping: [{ domain: 'payments.upstream.internal', certificate: upstreamMutualTls.certificateId }],
+    });
+  });
+
+  it('OAS: omits mutualTLS entirely when no certificate is configured', () => {
+    const d = oas({ config: {} });
+    expect(d['x-tyk-api-gateway'].upstream).not.toHaveProperty('mutualTLS');
+  });
+
+  it('classic: emits the flat upstream_certificates map keyed on the bare upstream hostname', () => {
+    const d = classic({ proxyUrl: 'https://payments.upstream.internal:8443/v2', config: { upstreamMutualTls } });
+    expect(d.upstream_certificates).toEqual({ 'payments.upstream.internal': upstreamMutualTls.certificateId });
+  });
+
+  it('classic: omits upstream_certificates entirely when no certificate is configured', () => {
+    const d = classic({ config: {} });
+    expect(d).not.toHaveProperty('upstream_certificates');
   });
 });

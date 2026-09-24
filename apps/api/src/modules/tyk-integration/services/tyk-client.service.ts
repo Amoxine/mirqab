@@ -63,6 +63,19 @@ export interface TykKeyState {
   [key: string]: unknown;
 }
 
+/** `GET /tyk/certs/{id}` (WP26a). Live-verified against v5.15.0: never carries private key material,
+ * only `has_private` — a boolean flag, not the key itself. */
+export interface TykCertMeta {
+  id: string;
+  fingerprint: string;
+  has_private: boolean;
+  issuer: { CommonName?: string | null; [key: string]: unknown };
+  subject: { CommonName?: string | null; [key: string]: unknown };
+  not_before: string;
+  not_after: string;
+  is_ca: boolean;
+}
+
 /** Result of the unauthenticated `GET {gateway}/hello` probe. Never thrown — see `gatewayHealth()`. */
 export interface TykGatewayHealth {
   reachable: boolean;
@@ -562,6 +575,58 @@ export class TykClientService {
   }
 
   /**
+   * Upload a certificate (WP26a). Live-verified against v5.15.0: `/tyk/certs` takes the raw PEM —
+   * the certificate and, for a client certificate, its private key concatenated in one body — as
+   * `text/plain`, NOT a JSON envelope. The response IS JSON: `{id, status, message}`, where `id` is
+   * `org_id` + the certificate's SHA-256 fingerprint concatenated (no separator).
+   *
+   * S7 (spike): certs are Redis-shared, not per-node disk — a POST to any one node is immediately
+   * visible on every other node with no reload and no fan-out, so this targets the default node
+   * like every other single-node-sufficient call here.
+   */
+  async uploadCert(pem: string, orgId: string): Promise<{ id: string }> {
+    this.logger.debug(`Uploading certificate for org ${orgId}`);
+
+    return this.request<{ id: string }>('/certs?org_id=' + encodeURIComponent(orgId), {
+      method: 'POST',
+      body: pem,
+      contentType: 'text/plain',
+    });
+  }
+
+  /**
+   * List certificate ids for an org. Live-verified: `{certs: [<id>, ...]}` — bare ids, not full
+   * metadata (there is no bulk-detail endpoint), and `{certs: null}` for an org with none — never
+   * an error, so this normalises to `[]`.
+   *
+   * S7's own finding: this answers `{certs:null}` even for a cert that genuinely exists when
+   * `org_id` is empty (no `cert--index` key is ever written for it). WP12c's `og-<tenantId>` ids
+   * make that unreachable here — every caller already has a non-empty org id — but it is why this
+   * method takes `orgId` as required, not optional.
+   */
+  async listCertIds(orgId: string): Promise<string[]> {
+    const body = await this.request<{ certs: string[] | null }>(`/certs?org_id=${encodeURIComponent(orgId)}`);
+    return body.certs ?? [];
+  }
+
+  /**
+   * Certificate metadata by id. Tyk's response NEVER includes the private key material even for a
+   * cert uploaded WITH one (`has_private` is a boolean flag, not the key) — live-verified — so
+   * nothing here needs its own redaction pass the way `stripSecrets` exists for `/tyk/debug`.
+   */
+  async getCert(id: string): Promise<TykCertMeta> {
+    return this.request<TykCertMeta>(`/certs/${encodeURIComponent(id)}`);
+  }
+
+  async deleteCert(id: string, orgId: string): Promise<void> {
+    this.logger.debug(`Deleting certificate ${id}`);
+
+    await this.request(`/certs/${encodeURIComponent(id)}?org_id=${encodeURIComponent(orgId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Create or replace a Tyk policy (the rate / quota / access-rights record a JWT is mapped to).
    *
    * `POST /tyk/policies` is an upsert on the file-backed store: it writes `<policy id>.json` into
@@ -893,17 +958,20 @@ export class TykClientService {
    */
   private async request<T extends object = TykStatusBody>(
     path: string,
-    options: { method?: string; body?: string } = {},
+    // `contentType` defaults to JSON — every existing caller sends a JSON body. WP26a's cert
+    // upload is the one exception: `/tyk/certs` takes the raw PEM as the body, not a JSON envelope.
+    options: { method?: string; body?: string; contentType?: string } = {},
     nodeUrl: string = this.adminApiUrl,
   ): Promise<T> {
     const url = `${nodeUrl}${path}`;
+    const { contentType = 'application/json', ...fetchOptions } = options;
 
     // Per-node circuit: a dead node opens only its own breaker (WP13a).
     const result = await this.circuitBreaker.execute(`${CIRCUIT_NAME}:${nodeUrl}`, () =>
       fetch(url, {
-        ...options,
+        ...fetchOptions,
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': contentType,
           'x-tyk-authorization': this.adminKey,
         },
         signal: AbortSignal.timeout(ADMIN_TIMEOUT_MS),

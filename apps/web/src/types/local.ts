@@ -160,6 +160,9 @@ export interface ApiConfig {
   hmac?: { allowedAlgorithms?: string[]; allowedClockSkewMs?: number } | null;
   /** WP15b. Off by default and per-API on purpose — detailed records carry headers and bodies. */
   detailedRecording?: boolean;
+  /** WP26a. Presents this certificate to the upstream when it demands a client certificate
+   * (upstream mTLS, NOT client-certificate auth at the gateway — that is cut, O13). */
+  upstreamMutualTls?: { certificateId: string } | null;
 }
 
 /**

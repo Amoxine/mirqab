@@ -148,7 +148,7 @@ export function mapToTykFormat(
     rateLimit, cors, doNotTrack, jwt, throttle, timeoutSeconds, circuitBreaker, requestSizeLimitBytes,
     loadBalancing, uptimeTests, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
     transformRequestBody, transformResponseBody, cache, detailedRecording,
-    ipAccessControl, validateRequestSchema, authHeaderName, hmac,
+    ipAccessControl, validateRequestSchema, authHeaderName, hmac, upstreamMutualTls,
   } = readConfig(apiDef.config);
   const authHeader = authHeaderName ?? 'Authorization';
 
@@ -303,6 +303,12 @@ export function mapToTykFormat(
     ...(ipAccessControl?.block
       ? { enable_ip_blacklisting: true, blacklisted_ips: ipAccessControl.block }
       : {}),
+    // WP26a — upstream (not client) mTLS, classic's flat hostname->cert-id map (OAS uses an array
+    // of {domain, certificate} instead — see mapToTykOas). Live-verified against v5.15.0: the key
+    // MUST be the bare hostname with no port, same as OAS's `domain`.
+    ...(upstreamMutualTls
+      ? { upstream_certificates: { [new URL(apiDef.proxyUrl).hostname]: upstreamMutualTls.certificateId } }
+      : {}),
     active: apiDef.status === ApiStatus.ACTIVE,
     // WP27: TCP passthrough. `listen_port` is never null when `protocol` is TCP — `ApiService.create`
     // forces it (CreateApiDto's `@ValidateIf`). `proxy.target_url` below stays the http(s)-shaped
@@ -432,7 +438,7 @@ export function mapToTykOas(
     rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests,
     circuitBreaker, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
     transformRequestBody, transformResponseBody, cache, detailedRecording,
-    ipAccessControl, validateRequestSchema, authHeaderName, hmac,
+    ipAccessControl, validateRequestSchema, authHeaderName, hmac, upstreamMutualTls,
   } = readConfig(apiDef.config);
   // One place decides which header carries the key, so every scheme below agrees (WP15c).
   const authHeader = authHeaderName ?? 'Authorization';
@@ -700,6 +706,21 @@ export function mapToTykOas(
                   method: t.method ?? 'GET',
                   ...(t.timeoutSeconds === undefined ? {} : { timeout: `${String(t.timeoutSeconds)}s` }),
                 })),
+              },
+            }
+          : {}),
+        // WP26a — upstream (not client) mTLS: this API presents `certificateId` to its own
+        // upstream when that upstream demands a client certificate. `domain` is Tyk's match key
+        // for `domainToCertificateMapping` and, live-verified against v5.15.0, MUST be the bare
+        // hostname with no port — `host:port` never matches and the cert is silently never
+        // presented, which is exactly the silent-plaintext-fallback this WP's acceptance forbids.
+        ...(upstreamMutualTls
+          ? {
+              mutualTLS: {
+                enabled: true,
+                domainToCertificateMapping: [
+                  { domain: new URL(apiDef.proxyUrl).hostname, certificate: upstreamMutualTls.certificateId },
+                ],
               },
             }
           : {}),
