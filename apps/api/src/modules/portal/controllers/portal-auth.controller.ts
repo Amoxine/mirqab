@@ -1,8 +1,11 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../../common/decorators/public.decorator';
-import { DeveloperService, type RegisteredDeveloper } from '../services/developer.service';
+import { DeveloperAuthGuard } from '../guards/developer-auth.guard';
+import { CurrentDeveloper } from '../decorators/current-developer.decorator';
+import type { DeveloperPayload } from '../../../common/types';
+import { DeveloperService, type CurrentDeveloperInfo, type RegisteredDeveloper } from '../services/developer.service';
 import { RegisterDeveloperDto } from '../dto/register-developer.dto';
 
 /**
@@ -25,5 +28,13 @@ export class PortalAuthController {
   @ApiResponse({ status: 409, description: 'Email already registered' })
   async register(@Body() dto: RegisterDeveloperDto): Promise<RegisteredDeveloper> {
     return this.developers.register(dto);
+  }
+
+  @Get('me')
+  @ApiBearerAuth()
+  @UseGuards(DeveloperAuthGuard)
+  @ApiOperation({ summary: 'The signed-in developer — also the frontend\'s "is there a live session" check' })
+  async me(@CurrentDeveloper() developer: DeveloperPayload): Promise<CurrentDeveloperInfo> {
+    return this.developers.me(developer);
   }
 }

@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-/** Reachable with no dashboard session by design — Kratos/Hydra's own self-service and OAuth2 flows,
+/**
+ * Reachable with no dashboard session by design — Kratos/Hydra's own self-service and OAuth2 flows,
  * plus `/locale` (the language switcher's cookie write): a pre-login visitor on `/auth/login` must be
- * able to switch language too, and the cookie it sets carries no auth/tenant meaning either way. */
-const PUBLIC_PREFIXES = ['/auth', '/oauth2', '/locale'];
+ * able to switch language too, and the cookie it sets carries no auth/tenant meaning either way.
+ *
+ * `/portal` (WP23) is a SEPARATE auth domain end to end, not merely a page this middleware happens
+ * to allow through: it has no `access_token` cookie to ever carry (a Kratos session, read via
+ * `DeveloperAuthGuard` on the api, not a Hydra JWT) — gating it here would 307 every portal visitor,
+ * including a pre-login one hitting `/portal/auth/login` itself, into the DASHBOARD's OAuth2 flow.
+ * The portal's own unauthenticated-visitor redirect happens client-side instead
+ * (`portal-api-client.ts`'s 401 handling), the same layer that already knows what "signed in" means
+ * for a developer.
+ */
+const PUBLIC_PREFIXES = ['/auth', '/oauth2', '/locale', '/portal'];
 
 /**
  * Server-side gate for `(dashboard)/**` — today (before this file) there is none: `dashboard/

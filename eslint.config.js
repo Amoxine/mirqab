@@ -102,4 +102,36 @@ export default [
       ...nextPlugin.configs['core-web-vitals'].rules,
     },
   },
+
+  // WP23: the portal is a separate identity domain (Kratos session, no dashboard RBAC — see
+  // DeveloperAuthGuard on the api side). This is the client-side/build-time half of that property:
+  // the api already refuses a Kratos session on a dashboard route and a Hydra JWT on a portal one,
+  // and this refuses the import that would make a portal PAGE assume RBAC it was never given. A
+  // core ESLint rule, not a new dependency — no-restricted-imports already does exactly this.
+  {
+    files: ['apps/web/src/app/portal/**/*.{ts,tsx}', 'apps/web/src/components/portal/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/(dashboard)/**'],
+              message: 'Portal code may not import from the dashboard route group — separate auth domain (WP23).',
+            },
+          ],
+          paths: [
+            {
+              name: '@/components/auth/permission-gate',
+              message: 'Portal code may not use dashboard RBAC guards (PermissionGate/PagePermissionGate) — a developer session has no permissions to gate on (WP23).',
+            },
+            {
+              name: '@/hooks/use-permissions',
+              message: 'Portal code may not use the dashboard RBAC hook (usePermissions) — a developer session has no permissions to check (WP23).',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

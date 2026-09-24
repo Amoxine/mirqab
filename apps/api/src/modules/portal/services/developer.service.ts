@@ -3,11 +3,23 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@open-gateway/database';
 import { kratosCreateIdentity, kratosSendVerificationEmail } from '../../../common/ory/kratos';
 import type { RegisterDeveloperDto } from '../dto/register-developer.dto';
+import type { DeveloperPayload } from '../../../common/types';
 
 export interface RegisteredDeveloper {
   id: string;
   email: string;
   name: string;
+}
+
+/** `GET /portal/auth/me` (WP23): the session-echo the frontend needs — whether it should treat the
+ * visitor as signed in, and `tenantSlug` for the gateway URL (`gatewayListenPath`), which nothing
+ * else portal-facing returns. `DeveloperAuthGuard` already resolved and validated the session; this
+ * only adds the one field it doesn't carry. */
+export interface CurrentDeveloperInfo {
+  id: string;
+  email: string;
+  name: string;
+  tenantSlug: string;
 }
 
 /**
@@ -71,5 +83,11 @@ export class DeveloperService {
     }
 
     return { id: developer.id, email: developer.email, name: developer.name };
+  }
+
+  /** `payload` already comes from a validated `DeveloperAuthGuard` session — this only adds `tenantSlug`. */
+  async me(payload: DeveloperPayload): Promise<CurrentDeveloperInfo> {
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: payload.tenantId }, select: { slug: true } });
+    return { id: payload.sub, email: payload.email, name: payload.name, tenantSlug: tenant.slug };
   }
 }

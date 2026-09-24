@@ -1,0 +1,150 @@
+{
+  "brand": "Developer Portal",
+  "nav": {
+    "catalog": "Catalog",
+    "applications": "My Applications",
+    "signOut": "Sign out"
+  },
+  "catalog": {
+    "title": "API Catalog",
+    "subtitle": "Browse the products available to your account and subscribe to start building.",
+    "empty": "No products are available yet.",
+    "noDescription": "No description provided.",
+    "apiCount": "{count} APIs"
+  },
+  "docs": {
+    "backToCatalog": "Back to catalog",
+    "notFound": "This product does not exist or is not available to your account.",
+    "loadError": "Could not load this API's documentation.",
+    "noApis": "This product has no APIs yet.",
+    "noEndpoints": "No endpoints yet. They appear once the API has middleware configured that needs one."
+  },
+  "tryIt": {
+    "title": "Test request",
+    "method": "Method",
+    "path": "Path",
+    "keyLabel": "Your key ({header})",
+    "keyRequired": "Enter your subscription key",
+    "pathMustStartWithSlash": "Path must start with /",
+    "body": "Body",
+    "send": "Send",
+    "sending": "Sending...",
+    "responseStatus": "Response status",
+    "networkError": "Could not reach the gateway — check the URL and your connection."
+  },
+  "applications": {
+    "title": "My Applications",
+    "subtitle": "Register an application to subscribe to products and receive a key.",
+    "createButton": "New application",
+    "createTitle": "Register an application",
+    "createDescription": "Applications hold your subscriptions and keys.",
+    "namePlaceholder": "My Mobile App",
+    "descriptionLabel": "Description",
+    "creating": "Creating...",
+    "createdToast": "Application created",
+    "createError": "Failed to create the application",
+    "empty": "You have not registered any applications yet.",
+    "subscriptionCount": "{count} subscriptions",
+    "errors": {
+      "nameTooShort": "Name must be at least 2 characters",
+      "nameTooLong": "Name is too long",
+      "descriptionTooLong": "Description is too long"
+    }
+  },
+  "subscribe": {
+    "title": "Subscribe",
+    "description": "Grant this application access to a product at a plan tier.",
+    "product": "Product",
+    "productPlaceholder": "Select a product",
+    "plan": "Plan",
+    "planPlaceholder": "Select a plan",
+    "noChoices": "No products or plans are available to subscribe to yet.",
+    "subscribing": "Subscribing...",
+    "submit": "Subscribe",
+    "pendingToast": "Subscription requested — it needs approval before a key is issued",
+    "approvedToast": "Subscribed — your key is ready",
+    "error": "Failed to create the subscription"
+  },
+  "subscription": {
+    "title": "Subscriptions",
+    "plan": "Plan: {plan}",
+    "empty": "This application has no subscriptions yet.",
+    "pendingApproval": "Waiting for approval — no key has been issued yet.",
+    "revoke": "Revoke",
+    "revoking": "Revoking...",
+    "revokeTitle": "Revoke this subscription?",
+    "revokeDescription": "The key for \"{product}\" stops working immediately. This cannot be undone.",
+    "status": {
+      "PENDING": "Pending",
+      "APPROVED": "Active",
+      "REVOKED": "Revoked"
+    }
+  },
+  "key": {
+    "dialogTitle": "Copy your key",
+    "dialogDescription": "This key is shown only once and cannot be retrieved later. Store it somewhere safe.",
+    "copyKey": "Copy key",
+    "copied": "Copied",
+    "copyError": "Could not copy. Select the text and copy it manually."
+  },
+  "usage": {
+    "requests": "Requests (24h)",
+    "errorRate": "Error rate",
+    "avgLatency": "Avg latency",
+    "msValue": "{ms} ms",
+    "quota": "Quota",
+    "quotaValue": "{remaining} / {max} left",
+    "noQuota": "No quota",
+    "loadError": "Could not load usage."
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "description": "Sign in to your developer account.",
+      "forgotPassword": "Forgot password?",
+      "createAccount": "Create an account"
+    },
+    "register": {
+      "title": "Create your developer account",
+      "description": "Register to browse the catalog and subscribe to products.",
+      "tenantSlugLabel": "Organization slug",
+      "tenantSlugDescription": "The URL-safe id of the organization whose portal you're joining.",
+      "nameLabel": "Full name",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "confirmPasswordLabel": "Confirm password",
+      "submit": "Create account",
+      "creating": "Creating...",
+      "checkEmail": "Account created — check your email to verify it, then sign in.",
+      "signIn": "Sign in",
+      "alreadyHaveAccount": "Already have an account?",
+      "error": "Failed to create the account",
+      "errors": {
+        "tenantSlugInvalid": "Use lowercase letters, numbers and single hyphens",
+        "nameTooShort": "Name must be at least 2 characters",
+        "nameTooLong": "Name is too long",
+        "emailInvalid": "Enter a valid email address",
+        "passwordTooShort": "Password must be at least 8 characters",
+        "passwordTooLong": "Password is too long",
+        "passwordComplexity": "Password must contain at least one uppercase letter, one lowercase letter, and one number",
+        "passwordMismatch": "Passwords do not match"
+      }
+    },
+    "recovery": {
+      "title": "Reset your password",
+      "description": "We'll send a recovery code to your email.",
+      "backToSignIn": "Back to sign in"
+    },
+    "verification": {
+      "title": "Verify your email",
+      "description": "Enter the code we sent you.",
+      "verified": "Your email is verified.",
+      "continueToSignIn": "Continue to sign in"
+    },
+    "settings": {
+      "title": "Account settings",
+      "description": "Update your profile and password.",
+      "backToPortal": "Back to the portal"
+    }
+  }
+}

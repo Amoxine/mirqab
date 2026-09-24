@@ -57,10 +57,14 @@ ARG NEXT_PUBLIC_API_URL=https://localhost:33001/api
 ARG NEXT_PUBLIC_KRATOS_URL=https://localhost:33012
 ARG NEXT_PUBLIC_HYDRA_URL=https://localhost:33010
 ARG NEXT_PUBLIC_APP_URL=https://localhost:33000
+# WP23: the gateway's own data-plane port (infra/edge/Caddyfile) — the portal's try-it console
+# calls this directly from the browser, with the developer's own key, never through the api.
+ARG NEXT_PUBLIC_GATEWAY_URL=https://localhost:33005
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_KRATOS_URL=$NEXT_PUBLIC_KRATOS_URL \
     NEXT_PUBLIC_HYDRA_URL=$NEXT_PUBLIC_HYDRA_URL \
-    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL
 
 # Build the application
 RUN pnpm --filter @open-gateway/web build

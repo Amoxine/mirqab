@@ -1,0 +1,150 @@
+{
+  "brand": "Portail développeur",
+  "nav": {
+    "catalog": "Catalogue",
+    "applications": "Mes applications",
+    "signOut": "Se déconnecter"
+  },
+  "catalog": {
+    "title": "Catalogue d'API",
+    "subtitle": "Parcourez les produits disponibles pour votre compte et abonnez-vous pour commencer à développer.",
+    "empty": "Aucun produit n'est disponible pour le moment.",
+    "noDescription": "Aucune description fournie.",
+    "apiCount": "{count} API"
+  },
+  "docs": {
+    "backToCatalog": "Retour au catalogue",
+    "notFound": "Ce produit n'existe pas ou n'est pas disponible pour votre compte.",
+    "loadError": "Impossible de charger la documentation de cette API.",
+    "noApis": "Ce produit ne contient encore aucune API.",
+    "noEndpoints": "Aucun point de terminaison pour l'instant. Ils apparaissent dès qu'un middleware nécessitant une opération est configuré sur l'API."
+  },
+  "tryIt": {
+    "title": "Requête de test",
+    "method": "Méthode",
+    "path": "Chemin",
+    "keyLabel": "Votre clé ({header})",
+    "keyRequired": "Saisissez votre clé d'abonnement",
+    "pathMustStartWithSlash": "Le chemin doit commencer par /",
+    "body": "Corps",
+    "send": "Envoyer",
+    "sending": "Envoi...",
+    "responseStatus": "Statut de la réponse",
+    "networkError": "Impossible de joindre la passerelle — vérifiez l'URL et votre connexion."
+  },
+  "applications": {
+    "title": "Mes applications",
+    "subtitle": "Enregistrez une application pour vous abonner à des produits et recevoir une clé.",
+    "createButton": "Nouvelle application",
+    "createTitle": "Enregistrer une application",
+    "createDescription": "Les applications regroupent vos abonnements et vos clés.",
+    "namePlaceholder": "Mon application mobile",
+    "descriptionLabel": "Description",
+    "creating": "Création...",
+    "createdToast": "Application créée",
+    "createError": "Échec de la création de l'application",
+    "empty": "Vous n'avez encore enregistré aucune application.",
+    "subscriptionCount": "{count} abonnements",
+    "errors": {
+      "nameTooShort": "Le nom doit comporter au moins 2 caractères",
+      "nameTooLong": "Le nom est trop long",
+      "descriptionTooLong": "La description est trop longue"
+    }
+  },
+  "subscribe": {
+    "title": "S'abonner",
+    "description": "Accorder à cette application l'accès à un produit selon un plan tarifaire.",
+    "product": "Produit",
+    "productPlaceholder": "Sélectionnez un produit",
+    "plan": "Plan",
+    "planPlaceholder": "Sélectionnez un plan",
+    "noChoices": "Aucun produit ou plan n'est encore disponible pour s'abonner.",
+    "subscribing": "Abonnement...",
+    "submit": "S'abonner",
+    "pendingToast": "Abonnement demandé — une approbation est requise avant l'émission d'une clé",
+    "approvedToast": "Abonné — votre clé est prête",
+    "error": "Échec de la création de l'abonnement"
+  },
+  "subscription": {
+    "title": "Abonnements",
+    "plan": "Plan : {plan}",
+    "empty": "Cette application n'a encore aucun abonnement.",
+    "pendingApproval": "En attente d'approbation — aucune clé n'a encore été émise.",
+    "revoke": "Révoquer",
+    "revoking": "Révocation...",
+    "revokeTitle": "Révoquer cet abonnement ?",
+    "revokeDescription": "La clé de « {product} » cesse de fonctionner immédiatement. Cette action est irréversible.",
+    "status": {
+      "PENDING": "En attente",
+      "APPROVED": "Actif",
+      "REVOKED": "Révoqué"
+    }
+  },
+  "key": {
+    "dialogTitle": "Copiez votre clé",
+    "dialogDescription": "Cette clé n'est affichée qu'une seule fois et ne peut plus être récupérée ensuite. Conservez-la en lieu sûr.",
+    "copyKey": "Copier la clé",
+    "copied": "Copié",
+    "copyError": "Impossible de copier. Sélectionnez le texte et copiez-le manuellement."
+  },
+  "usage": {
+    "requests": "Requêtes (24h)",
+    "errorRate": "Taux d'erreur",
+    "avgLatency": "Latence moyenne",
+    "msValue": "{ms} ms",
+    "quota": "Quota",
+    "quotaValue": "{remaining} / {max} restants",
+    "noQuota": "Aucun quota",
+    "loadError": "Impossible de charger l'utilisation."
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "description": "Connectez-vous à votre compte développeur.",
+      "forgotPassword": "Mot de passe oublié ?",
+      "createAccount": "Créer un compte"
+    },
+    "register": {
+      "title": "Créez votre compte développeur",
+      "description": "Inscrivez-vous pour parcourir le catalogue et vous abonner à des produits.",
+      "tenantSlugLabel": "Identifiant de l'organisation",
+      "tenantSlugDescription": "L'identifiant compatible URL de l'organisation dont vous rejoignez le portail.",
+      "nameLabel": "Nom complet",
+      "emailLabel": "E-mail",
+      "passwordLabel": "Mot de passe",
+      "confirmPasswordLabel": "Confirmer le mot de passe",
+      "submit": "Créer le compte",
+      "creating": "Création...",
+      "checkEmail": "Compte créé — vérifiez votre e-mail pour le confirmer, puis connectez-vous.",
+      "signIn": "Se connecter",
+      "alreadyHaveAccount": "Vous avez déjà un compte ?",
+      "error": "Échec de la création du compte",
+      "errors": {
+        "tenantSlugInvalid": "Utilisez des lettres minuscules, des chiffres et des tirets simples",
+        "nameTooShort": "Le nom doit comporter au moins 2 caractères",
+        "nameTooLong": "Le nom est trop long",
+        "emailInvalid": "Saisissez une adresse e-mail valide",
+        "passwordTooShort": "Le mot de passe doit comporter au moins 8 caractères",
+        "passwordTooLong": "Le mot de passe est trop long",
+        "passwordComplexity": "Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre",
+        "passwordMismatch": "Les mots de passe ne correspondent pas"
+      }
+    },
+    "recovery": {
+      "title": "Réinitialiser votre mot de passe",
+      "description": "Nous vous enverrons un code de récupération par e-mail.",
+      "backToSignIn": "Retour à la connexion"
+    },
+    "verification": {
+      "title": "Vérifiez votre e-mail",
+      "description": "Saisissez le code que nous vous avons envoyé.",
+      "verified": "Votre e-mail est vérifié.",
+      "continueToSignIn": "Continuer vers la connexion"
+    },
+    "settings": {
+      "title": "Paramètres du compte",
+      "description": "Mettez à jour votre profil et votre mot de passe.",
+      "backToPortal": "Retour au portail"
+    }
+  }
+}

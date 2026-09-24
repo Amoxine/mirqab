@@ -68,6 +68,18 @@ x-tyk-gateway-env: &tyk-gateway-env
     TYK_GW_STORAGE_HOST: redis
     TYK_GW_STORAGE_PORT: "6379"
     TYK_GW_ALLOWINSECURECONFIGS: "true"
+    # WP27, S2's blocking finding: absent, the identical OAS graphql-subscription api rejects the
+    # WebSocket upgrade with 422. Required for WebSocket/SSE passthrough generally, not just GraphQL
+    # subscriptions — live-verified on v5.15.0.
+    TYK_GW_HTTPSERVEROPTIONS_ENABLEWEBSOCKETS: "true"
+    # WP27: TCP passthrough. Confirmed against the v5.15.0 source (gateway/proxy_muxer.go) — a
+    # protocol:"tcp" api's `listen_port` is refused ("trying to open disabled port") unless the
+    # port+protocol is in TYK_GW_PORTWHITELIST or this is set. Same tradeoff shape as
+    # ALLOWINSECURECONFIGS above: broadens what the gateway will bind rather than naming one port,
+    # which is why the dedicated TCP port is the ONLY thing allowed to reach the gateway on a port
+    # other than the published data plane (infra/docker-compose.yml's tyk-gateway `ports:`) and the
+    # unpublished control API.
+    TYK_GW_DISABLEPORTWHITELIST: "true"
     # Analytics: buffer records in Redis (empty TYPE) for tyk-pump to purge into Postgres.
     TYK_GW_ENABLEANALYTICS: "true"
     TYK_GW_ANALYTICSCONFIG_TYPE: ""
@@ -260,6 +272,16 @@ services:
       # Data plane only, and reachable only through the edge (WP26b) — 33005 is now the edge's
       # HTTPS listener, not this container's. 8081 (control API) stays inside the network either way.
       - "8080"
+    ports:
+      # WP27: the ONE deliberate exception to "only the edge publishes" (WP26b's own rule, restated
+      # above). A TCP-protocol API def (`ApiProtocol.TCP`) is raw L4 passthrough — an HTTP-only
+      # Coraza build cannot inspect it at all, so it CANNOT go through the edge the way every HTTP
+      # api does; it has to bind its own published port straight from this container. `6000` is the
+      # one demo/test port this WP wires (`ApiDefinition.listenPort`); Tyk opens the actual listener
+      # itself the moment a `protocol:"tcp"` def with this port loads (confirmed against the v5.15.0
+      # source, gated by TYK_GW_DISABLEPORTWHITELIST above) — this mapping does not create the
+      # listener, it only has to agree with whatever port that definition uses.
+      - "33020:6000"
     volumes:
       - tyk_apps:/opt/tyk-gateway/apps
       - tyk_policies:/opt/tyk-gateway/policies
@@ -469,6 +491,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (install.sh generates infra/.env; or openssl rand -hex 32)}
       JWT_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
+      # WP27: checked by webhook-relay.controller.ts against the header Tyk's own event handler
+      # config carries (webhook-relay.constants.ts embeds it there, read from this same var). No
+      # default, same reasoning as JWT_SECRET above: that relay endpoint is `@Public()` and, being
+      # served by this same process, is reachable through the edge's published API port too, not
+      # only from Tyk inside the network — a checked-in default would let anyone who read this file
+      # forge a webhook event for any tenant's API.
+      TYK_WEBHOOK_RELAY_SECRET: ${TYK_WEBHOOK_RELAY_SECRET:?set TYK_WEBHOOK_RELAY_SECRET (install.sh generates infra/.env; or openssl rand -hex 32)}
       # Ory. In-network URLs for every call the API makes; the ISSUER is the browser-facing one
       # because that is the `iss` Hydra stamps into a token (urls.self.issuer in hydra.yml), and
       # JwtStrategy verifies the claim against it while fetching JWKS from the in-network host.
@@ -565,6 +594,7 @@ services:
         NEXT_PUBLIC_KRATOS_URL: https://localhost:33012
         NEXT_PUBLIC_HYDRA_URL: https://localhost:33010
         NEXT_PUBLIC_APP_URL: https://localhost:33000
+        NEXT_PUBLIC_GATEWAY_URL: https://localhost:33005
     container_name: open-gateway-web
     restart: unless-stopped
     environment:
@@ -578,6 +608,9 @@ services:
       # Browser-facing — the browser talks to Kratos/Hydra directly, same as it does the API above.
       NEXT_PUBLIC_KRATOS_URL: https://localhost:33012
       NEXT_PUBLIC_HYDRA_URL: https://localhost:33010
+      # WP23: the gateway's own data-plane port — the portal's try-it console calls it directly
+      # from the browser with the developer's own key.
+      NEXT_PUBLIC_GATEWAY_URL: https://localhost:33005
       # This container's OWN outbound calls (login-challenge handling, token exchange) — in-network,
       # unlike the NEXT_PUBLIC_* pair above. Hydra admin is loopback-only on the host but reachable
       # here at hydra:4445 because this container shares hydra/kratos's compose network.
