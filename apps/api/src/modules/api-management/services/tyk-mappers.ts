@@ -1,6 +1,7 @@
 import { ApiStatus, type ApiDefinition, type Prisma } from '@prisma/client';
 import type { ApiConfig } from '../dto/api-config.dto';
 import type { TenantGatewayScope } from '../../tyk-integration/services/tenant-scope';
+import { buildTykEventHandlers } from '../../webhooks/webhook-relay.constants';
 
 /**
  * Both Tyk definition formats — classic and Tyk-OAS — in one place.
@@ -20,6 +21,12 @@ import type { TenantGatewayScope } from '../../tyk-integration/services/tenant-s
 /** `ApiDefinition.config` is free-form JSON in the schema; anything that is not an object reads as empty. */
 export function readConfig(value: Prisma.JsonValue | null): ApiConfig {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as ApiConfig) : {};
+}
+
+/** WP27: `http://host:port` (the DTO-validated, SSRF-checked shape) -> `tcp://host:port` (what Tyk's TCP proxy reads). */
+function tcpTargetUrl(proxyUrl: string): string {
+  const url = new URL(proxyUrl);
+  return `tcp://${url.hostname}:${url.port}`;
 }
 
 /**
@@ -244,7 +251,10 @@ export function mapToTykFormat(
     org_id: tenant.tykOrgId,
     proxy: {
       listen_path: gatewayListenPath(tenant.slug, apiDef.listenPath),
-      target_url: apiDef.proxyUrl,
+      // WP27: TCP passthrough needs a `tcp://host:port` target (Tyk's `tcp/tcp.go` switches on
+      // scheme). `proxyUrl` stays http(s)-shaped in the DTO purely so it keeps running the existing
+      // SSRF check — only its host:port carry real meaning for a TCP api.
+      target_url: apiDef.protocol === 'TCP' ? tcpTargetUrl(apiDef.proxyUrl) : apiDef.proxyUrl,
       strip_listen_path: true,
       ...(loadBalancing && loadBalancing.targets.length > 0
         ? {
@@ -294,6 +304,11 @@ export function mapToTykFormat(
       ? { enable_ip_blacklisting: true, blacklisted_ips: ipAccessControl.block }
       : {}),
     active: apiDef.status === ApiStatus.ACTIVE,
+    // WP27: TCP passthrough. `listen_port` is never null when `protocol` is TCP — `ApiService.create`
+    // forces it (CreateApiDto's `@ValidateIf`). `proxy.target_url` below stays the http(s)-shaped
+    // `proxyUrl` value (SSRF-checked at write time); this is the one field where Tyk actually needs
+    // a `tcp://` scheme, built from that same URL's host:port rather than adding a second target field.
+    ...(apiDef.protocol === 'TCP' ? { protocol: 'tcp', listen_port: apiDef.listenPort } : {}),
     ...(rateLimit
       ? { global_rate_limit: { rate: rateLimit.rate, per: rateLimit.per, disabled: rateLimit.rate === 0 } }
       : {}),
@@ -706,6 +721,10 @@ export function mapToTykOas(
               },
             }
           : {}),
+        // WP27: set by WebhookSubscriptionService (ApiDefinition.webhooksEnabled), never by the
+        // config JSON — read off `apiDef` directly, like the other WP27 fields above, so this
+        // round-trips through every future sync the same way `circuitBreaker` already does.
+        ...(apiDef.webhooksEnabled ? { eventHandlers: buildTykEventHandlers(apiDef.id) } : {}),
       },
       ...(Object.keys(globalMiddleware).length > 0 || Object.keys(operations).length > 0
         ? {

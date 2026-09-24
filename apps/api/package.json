@@ -24,6 +24,7 @@
     "test:e2e:portal": "docker cp test/e2e/portal.e2e.mjs open-gateway-api:/tmp/portal.e2e.mjs && docker exec open-gateway-api node /tmp/portal.e2e.mjs",
     "test:e2e:plans": "docker cp test/e2e/plans-quotas.e2e.mjs open-gateway-api:/tmp/plans-quotas.e2e.mjs && docker exec open-gateway-api node /tmp/plans-quotas.e2e.mjs",
     "test:e2e:mcp": "docker cp test/e2e/mcp-gateway.e2e.mjs open-gateway-api:/tmp/mcp-gateway.e2e.mjs && docker exec open-gateway-api node /tmp/mcp-gateway.e2e.mjs",
+    "test:e2e:webhooks": "docker cp test/e2e/webhooks-protocols.e2e.mjs open-gateway-api:/tmp/webhooks-protocols.e2e.mjs && docker exec open-gateway-api node /tmp/webhooks-protocols.e2e.mjs",
     "test:e2e:login": "DATABASE_URL=postgresql://opengateway:opengateway@127.0.0.1:33002/opengateway?schema=public node test/e2e/kratos-hydra-login.e2e.mjs",
     "clean": "rm -rf dist node_modules"
   },

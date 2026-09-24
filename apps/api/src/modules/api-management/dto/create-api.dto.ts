@@ -1,7 +1,20 @@
 import { Type } from 'class-transformer';
-import { IsString, IsOptional, IsEnum, IsUrl, MinLength, MaxLength, Matches, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsUrl,
+  IsInt,
+  Min,
+  Max,
+  MinLength,
+  MaxLength,
+  Matches,
+  ValidateNested,
+  ValidateIf,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ApiAuthType } from '@prisma/client';
+import { ApiAuthType, ApiProtocol } from '@prisma/client';
 import { ApiConfigDto } from './api-config.dto';
 import { IsAllowedProxyUrl } from './proxy-url.validator';
 
@@ -58,4 +71,27 @@ export class CreateApiDto {
   @ValidateNested()
   @Type(() => ApiConfigDto)
   config?: ApiConfigDto;
+
+  // WP27. Default HTTP — this field changes nothing for the overwhelming majority of APIs. TCP is
+  // raw L4 passthrough on its own dedicated port, forced to CLASSIC format server-side (OAS has no
+  // TCP fields) and published straight through by infra/docker-compose.yml, bypassing the edge and
+  // every one of Tyk's HTTP-layer middlewares (no auth, no rate limit, no WAF — confirmed against
+  // the v5.15.0 source). `proxyUrl` above is still the upstream target and still runs the same
+  // SSRF-denylist check either way; for TCP its scheme is nominal (still http(s):// to satisfy
+  // @IsUrl) and only its host:port are read — the mapper builds the real `tcp://host:port` Tyk needs.
+  @ApiPropertyOptional({ enum: ApiProtocol, default: ApiProtocol.HTTP })
+  @IsOptional()
+  @IsEnum(ApiProtocol)
+  protocol?: ApiProtocol;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 65535,
+    description: 'Required, and only meaningful, when protocol is TCP — the dedicated port Tyk binds for this API.',
+  })
+  @ValidateIf((dto: CreateApiDto) => dto.protocol === ApiProtocol.TCP)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  listenPort?: number;
 }

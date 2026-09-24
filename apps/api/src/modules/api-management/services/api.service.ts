@@ -11,6 +11,7 @@ import {
 import {
   ApiDefFormat,
   ApiKeyStatus,
+  ApiProtocol,
   ApiStatus,
   ApiSyncStatus,
   Prisma,
@@ -84,6 +85,14 @@ export interface ApiDetail {
   retiredAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** WP27. HTTP for the overwhelming majority of APIs; TCP is forced CLASSIC at creation. */
+  protocol: ApiProtocol;
+  /** WP27: only meaningful when `protocol` is TCP. */
+  listenPort: number | null;
+  /** WP27: true once this API has at least one active WebhookSubscription. */
+  webhooksEnabled: boolean;
+  /** Which mapper produced this API's gateway definition — exposed so a client can tell why, e.g., `protocol: TCP` is refused. */
+  defFormat: ApiDefFormat;
 }
 
 /**
@@ -221,6 +230,10 @@ function toApiDetail(row: ApiRow): ApiDetail {
     retiredAt: row.retiredAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    protocol: row.protocol,
+    listenPort: row.listenPort,
+    webhooksEnabled: row.webhooksEnabled,
+    defFormat: row.defFormat,
   };
 }
 
@@ -266,6 +279,11 @@ export class ApiService {
           config: dto.config ? toJsonObject(dto.config) : {},
           status: ApiStatus.DRAFT,
           syncStatus: ApiSyncStatus.PENDING,
+          protocol: dto.protocol ?? ApiProtocol.HTTP,
+          listenPort: dto.protocol === ApiProtocol.TCP ? dto.listenPort : null,
+          // WP27: OAS has no TCP fields at all, so a TCP api is forced CLASSIC here rather than left
+          // to default OAS and fail confusingly on its first sync.
+          ...(dto.protocol === ApiProtocol.TCP ? { defFormat: ApiDefFormat.CLASSIC } : {}),
         },
         include: withActiveKeyCount,
       });

@@ -189,8 +189,68 @@ localhost:33001, {$EDGE_LAN_IP:127.0.0.1}:33001 {
 }
 
 # Tyk DATA plane only. The control API is a separate port (8081) inside the network.
+#
+# WP27: NOT `import edge_site` like the other four sites. gRPC (h2c, HTTP/2 cleartext) is proxied
+# through this port and needs `transport http { versions h2c 2 }` on the reverse_proxy toward Tyk —
+# live-verified (grpcurl through a throwaway grpcbin fixture): without it, Caddy accepts the
+# client's HTTP/2 request and Tyk logs "Enabling h2c mode" correctly, but the call hangs and the
+# edge eventually logs "failed to append request body: client disconnected", 500 — Caddy's default
+# reverse_proxy transport to a plain-HTTP backend is HTTP/1.1, which cannot carry gRPC's framing or
+# trailers. Setting `versions h2c 2` on the SHARED `edge_site` snippet would apply it to all five
+# sites, and web/api/hydra/kratos do not speak h2c — that would break them, not fix this one. The
+# body below is otherwise an exact copy of `edge_site` (same WAF, tracing, logging, XFF handling);
+# keep the two in sync by hand if either changes.
 localhost:33005, {$EDGE_LAN_IP:127.0.0.1}:33005 {
-	import edge_site tyk-gateway:8080
+	tls internal
+
+	log
+
+	coraza_waf {
+		load_owasp_crs
+		directives `
+		Include @coraza.conf-recommended
+		Include @crs-setup.conf.example
+
+		SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=1"
+
+		SecRequestBodyLimit 10485760
+		SecRequestBodyNoFilesLimit 10485760
+
+		Include @owasp_crs/*.conf
+
+		SecRuleEngine DetectionOnly
+
+		SecAuditEngine RelevantOnly
+		SecAuditLogType Serial
+		SecAuditLog /dev/stdout
+		SecAuditLogFormat json
+		SecAuditLogParts ABIJDEFHZ
+		`
+	}
+
+	route {
+		tracing {
+			span edge
+		}
+
+		request_header X-Request-Id {http.request.uuid}
+
+		log_append request_id {http.request.uuid}
+		log_append traceparent {http.request.header.traceparent}
+
+		respond /api/metrics* 404
+
+		reverse_proxy tyk-gateway:8080 {
+			header_up X-Forwarded-For {remote_host}
+
+			# WP27: h2c to the backend — see the block comment above. `2` (plain HTTP/2, no TLS) is
+			# kept alongside `h2c` so a non-gRPC request negotiated as HTTP/2 by the client still
+			# proxies normally; Caddy tries h2c first and this is not exclusive to gRPC traffic.
+			transport http {
+				versions h2c 2
+			}
+		}
+	}
 }
 
 localhost:33010, {$EDGE_LAN_IP:127.0.0.1}:33010 {

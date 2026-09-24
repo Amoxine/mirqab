@@ -89,6 +89,16 @@ enum ApiDefFormat {
   OAS
 }
 
+/// WP27: TCP is raw L4 passthrough on its own port (`ApiDefinition.listenPort`), bypassing the edge
+/// entirely — an HTTP-only Coraza build cannot inspect it, and none of Tyk's HTTP-layer middleware
+/// (auth, rate limit, quota) applies to it either (confirmed against the v5.15.0 source: the TCP
+/// loader wires no HTTP middleware chain in at all). CLASSIC-format only; the OAS extension schema
+/// has no TCP equivalent.
+enum ApiProtocol {
+  HTTP
+  TCP
+}
+
 /// WP22: a developer identity's own local status — independent of ApiKeyStatus/ApiStatus, which
 /// answer a different question (a key's or an API's own lifecycle, not the person's).
 enum DeveloperStatus {
@@ -172,6 +182,8 @@ model Tenant {
   /// WP22: the portal's developer directory. A tenant runs one portal; a person's single Kratos
   /// identity can be at most one Developer, so it belongs to exactly one tenant's portal too.
   developers     Developer[]
+  /// WP27.
+  webhookSubscriptions WebhookSubscription[]
   /// WP28.
   mcpServers     McpServer[]
 
@@ -286,16 +298,34 @@ model ApiDefinition {
   /// answers 403 "API has expired" with no `Sunset` header (live-verified on v5.15.0), not the 410
   /// this product's contract requires.
   retiredAt    DateTime?       @map("retired_at")
+  /// WP27. HTTP for everything today; TCP is the one exception (`ApiProtocol` doc comment) and is
+  /// forced CLASSIC at creation — OAS has no field for it.
+  protocol     ApiProtocol     @default(HTTP)
+  /// WP27: only meaningful when `protocol` is TCP. Tyk opens a dedicated listener on this port as
+  /// soon as the definition loads (confirmed against the v5.15.0 source — no separate enable step),
+  /// gated by its port whitelist (`TYK_GW_DISABLEPORTWHITELIST`, infra/docker-compose.yml).
+  /// `infra/docker-compose.yml` publishes exactly one such port straight through, bypassing the
+  /// edge — this column does not manage that mapping, it only has to agree with it.
+  listenPort   Int?            @map("listen_port")
+  /// WP27: set by WebhookSubscriptionService, never by the tenant directly — true while this API has
+  /// at least one active WebhookSubscription. Read by `mapToTykOas` to add the eventHandlers block
+  /// (QuotaExceeded/AuthFailure/BreakerTripped -> this API's own internal relay). A scalar on the row
+  /// being mapped, not a query the mapper runs itself, so the flag round-trips through every future
+  /// sync the same way `circuitBreaker`/`rateLimit` already do. OAS-format APIs only (S1 verified
+  /// `x-tyk-api-gateway.server.eventHandlers`, not the classic `event_handlers` shape) —
+  /// WebhookSubscriptionService refuses to enable this on a CLASSIC row.
+  webhooksEnabled Boolean      @default(false) @map("webhooks_enabled")
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
 
-  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  apiKeys   ApiKey[]
-  products  ProductApi[]
-  parentApi ApiDefinition?  @relation("ApiVersions", fields: [parentApiId], references: [id], onDelete: Restrict)
-  versions  ApiDefinition[] @relation("ApiVersions")
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys              ApiKey[]
+  products             ProductApi[]
+  parentApi            ApiDefinition?        @relation("ApiVersions", fields: [parentApiId], references: [id], onDelete: Restrict)
+  versions             ApiDefinition[]       @relation("ApiVersions")
+  webhookSubscriptions WebhookSubscription[]
   /// WP28: the MCP proxies paired to this API. `Restrict` on the far side — see McpServer.
-  mcpServers McpServer[]
+  mcpServers           McpServer[]
 
   @@unique([tenantId, slug])
   // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
@@ -640,6 +670,54 @@ model AuditLog {
   @@index([action])
   @@index([resource])
   @@map("audit_logs")
+}
+
+/// WP27. A tenant's receiver for one API's native Tyk webhook events (QuotaExceeded, AuthFailure,
+/// BreakerTripped — see `ApiDefinition.webhooksEnabled`). Deliveries do not reach `receiverUrl`
+/// directly: Tyk fires at this platform's own internal relay (`webhook-relay.constants.ts`), which
+/// redacts the raw key Tyk's default payload carries (S1 caveat 3), HMAC-signs the redacted body
+/// with `secret`, and retries — the parts native Tyk webhooks cannot do at all.
+model WebhookSubscription {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  apiId       String   @map("api_id")
+  receiverUrl String   @map("receiver_url")
+  /// Signing secret, `randomBytes(32).toString('base64url')` — same one-time-return contract as a
+  /// Tyk key (`tyk-client.service.ts:186-196`): given back in the create response and never again.
+  secret String
+  active Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  api    ApiDefinition @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId])
+  @@index([apiId])
+  @@map("webhook_subscriptions")
+}
+
+enum WebhookDeliveryStatus {
+  SUCCESS
+  FAILED
+}
+
+/// WP27. One row per relay attempt-set (not per HTTP try — `attempts` counts those), written after
+/// the retry loop settles so the log always reflects a final outcome.
+model WebhookDelivery {
+  id             String                @id @default(uuid())
+  subscriptionId String                @map("subscription_id")
+  eventType      String                @map("event_type")
+  attempts       Int                   @default(1)
+  status         WebhookDeliveryStatus
+  responseStatus Int?                  @map("response_status")
+  error          String?
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@map("webhook_deliveries")
 }
 
 // tyk_analytics / tyk_aggregated (Tyk Pump-owned tables) are deliberately NOT modeled here.
