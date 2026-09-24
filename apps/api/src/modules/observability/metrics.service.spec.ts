@@ -42,7 +42,29 @@ NBNq3De4/8Jolg7qIL5r1ILFbTWFQ1N1bKkZ
     expect(certificateExpiry(ROOT_PEM)).toEqual({
       cn: 'Open Gateway Test Root',
       expiry: Date.UTC(2036, 0, 1) / 1000,
+      lifetime: (Date.UTC(2036, 0, 1) - Date.UTC(2026, 0, 1)) / 1000,
+      selfSigned: true,
     });
+  });
+
+  // WP29a: the leaf/intermediate rule divides remaining by THIS, so a wrong lifetime is a rule that
+  // fires on a healthy certificate or never fires on a dead one. 10 years, from the dates above.
+  it('reports the issued-for lifetime, which is what the fraction-of-lifetime rule divides by', () => {
+    const { lifetime, expiry } = certificateExpiry(ROOT_PEM);
+    expect(lifetime).toBe(3652 * 24 * 3600);
+    // A certificate exactly at Caddy's renewal point has a third of its life left; the rule's 0.25
+    // threshold must sit below that or it fires on every healthy renewal cycle.
+    const atRenewal = expiry - lifetime / 3;
+    expect((expiry - atRenewal) / lifetime).toBeGreaterThan(0.25);
+  });
+
+  it('marks a self-signed certificate, so a served root cannot overwrite the file-derived series', () => {
+    expect(certificateExpiry(ROOT_PEM).selfSigned).toBe(true);
+  });
+
+  it('accepts DER as well as PEM — the TLS probe hands over raw bytes, not a file', () => {
+    const der = Buffer.from(ROOT_PEM.replace(/-----[^-]+-----|\s/g, ''), 'base64');
+    expect(certificateExpiry(der).cn).toBe('Open Gateway Test Root');
   });
 
   it('throws on something that is not a certificate rather than reporting a bogus expiry', () => {

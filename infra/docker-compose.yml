@@ -141,6 +141,10 @@ services:
       OTEL_SERVICE_NAME: open-gateway-edge
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      # WP29a: the gateway node(s) this edge proxies the data plane to, space separated. Default is
+      # the single node, because tyk-gateway-2/3 exist only under --profile multinode; the prod
+      # overlay sets all three. See the reverse_proxy block in infra/edge/Caddyfile.
+      EDGE_GATEWAY_UPSTREAMS: ${EDGE_GATEWAY_UPSTREAMS:-tyk-gateway:8080}
     ports:
       - "33000:33000"
       - "33001:33001"
@@ -175,10 +179,32 @@ services:
       - ory-internal
 
   # ─── PostgreSQL ────────────────────────────────────────
+  # WP29a: WAL archiving is ON. `archive_mode` is a postmaster-start parameter (not reloadable), so
+  # it has to be on the command line rather than in a SET — flipping it later costs a restart.
+  #
+  # The archive_command is the canonical `test ! -f dest && cp` form: it refuses to overwrite an
+  # existing segment. That matters because a crashed postgres can re-archive a segment it already
+  # archived, and a blind `cp` would replace a good segment with a partial one. A non-zero exit
+  # makes postgres retry the SAME segment forever rather than skip it, which is the intended
+  # failure mode — the archive is either complete or it is visibly stuck, never quietly gapped.
+  #
+  # `archive_timeout=300` forces a segment switch every 5 minutes on an idle stack, so the recovery
+  # window is bounded by time instead of by how long it takes to fill 16 MB of WAL.
   postgres:
     image: postgres:16-alpine
     container_name: open-gateway-postgres
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /wal_archive/%f && cp %p /wal_archive/%f
+      - -c
+      - archive_timeout=300
+      # Only to add one replication rule the image never generates — see infra/postgres/pg_hba.conf.
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
     environment:
       POSTGRES_USER: opengateway
       POSTGRES_PASSWORD: ${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}
@@ -188,15 +214,74 @@ services:
       - "127.0.0.1:33002:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Separate volume from the data directory on purpose: an archive that shares a volume with the
+      # data it protects is not a backup, it is a second copy of the same failure.
+      - pg_wal_archive:/wal_archive
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U opengateway -d opengateway"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    depends_on:
+      pg-archive-init:
+        condition: service_completed_successfully
     networks:
       - open-gateway-network
       - ory-internal
+
+  # ─── Backup volume owner (one-shot) ────────────────────
+  # Same shape as tyk-gateway-init above and for the same reason: Docker creates a named volume's
+  # mount point root-owned when the path does not exist in the image, and postgres runs as uid 70 in
+  # the alpine image. Without this the archive_command fails with EACCES on every segment — and
+  # postgres retries a failing archive forever, so the symptom is pg_wal filling the data volume,
+  # not an obvious error. pg_basebackup writes /backups as root, so only the archive needs chowning.
+  pg-archive-init:
+    image: postgres:16-alpine
+    container_name: open-gateway-pg-archive-init
+    command: ["sh", "-c", "chown 70:70 /wal_archive && chmod 0750 /wal_archive"]
+    user: root
+    volumes:
+      - pg_wal_archive:/wal_archive
+    networks:
+      - open-gateway-network
+
+  # ─── Scheduled Postgres base backups (WP29a) ───────────
+  # A loop, not cron: the image has no crond and a one-line `sleep` loop is the whole scheduler.
+  # Backups land in their own volume; `infra/scripts/pg-backup.sh` documents the restore procedure
+  # it is the other half of, and docs/deployment.md carries the runbook.
+  postgres-backup:
+    image: postgres:16-alpine
+    container_name: open-gateway-postgres-backup
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: opengateway
+      PGPASSWORD: ${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}
+      # Seconds between base backups, and how many to keep. WAL older than the oldest kept backup is
+      # pruned with it — an archive that outlives every base backup it could be replayed onto is
+      # just disk.
+      PG_BACKUP_INTERVAL: ${PG_BACKUP_INTERVAL:-86400}
+      PG_BACKUP_KEEP: ${PG_BACKUP_KEEP:-7}
+    entrypoint: ["/bin/sh", "/usr/local/bin/pg-backup.sh"]
+    volumes:
+      - ./scripts/pg-backup.sh:/usr/local/bin/pg-backup.sh:ro
+      - pg_backups:/backups
+      - pg_wal_archive:/wal_archive
+    healthcheck:
+      # The marker the script writes after each successful run. Stale marker = backups have stopped,
+      # which is otherwise invisible until the day someone needs one.
+      test: ["CMD-SHELL", "test -f /backups/.last-success && test $(( $(date +%s) - $(cat /backups/.last-success) )) -lt $(( ${PG_BACKUP_INTERVAL:-86400} * 2 ))"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - open-gateway-network
 
   # ─── Redis ─────────────────────────────────────────────
   # WP12b (R3): was `allkeys-lru`, which can evict live API keys and quota counters under an
@@ -416,6 +501,51 @@ services:
     networks:
       - open-gateway-network
 
+  # ─── Edge healthcheck sidecar (WP29a) ──────────────────
+  # The edge already HAS a healthcheck (`wget http://127.0.0.1:2019/...`, in-container, against
+  # Caddy's admin API). This sidecar is not a duplicate of it, and the difference is the whole
+  # reason it exists: the admin-API probe proves the PROCESS is alive and holds a config, and it
+  # structurally cannot prove that a TLS handshake succeeds — because Caddy's `tls internal` issues
+  # its 12-hour leaves lazily, AT handshake time. If issuance or renewal breaks, the admin API keeps
+  # answering 200 on 2019 while every real request fails. That is R14's silent-failure mode exactly,
+  # and the in-container check reports healthy right through it.
+  #
+  # So: a real HTTPS request, from OUTSIDE the container, over the network path a client uses. Same
+  # curl-sidecar pattern as tyk-healthcheck above (for a different reason — there the images are
+  # distroless; here the check has to originate off-box).
+  #
+  #   --connect-to  keeps SNI and Host as `localhost` (what the certificate is issued for) while
+  #                 dialling the container name. Without it the probe fails on a hostname mismatch,
+  #                 which would look exactly like the outage it is supposed to detect.
+  #   /api/metrics  is answered 404 by the EDGE itself (`respond /api/metrics* 404` in the
+  #                 Caddyfile), so this measures the edge and never the API behind it. curl exits 0
+  #                 on a 404 — TLS, routing and the response are all proven without `-f` turning an
+  #                 upstream's health into the edge's.
+  #   --cacert      when the root has been exported (infra/edge/README.md), so an EXPIRED leaf fails
+  #                 the probe too; `-k` otherwise, which still catches a handshake that dies
+  #                 outright. A fresh install has no root.crt and must not be born unhealthy.
+  edge-healthcheck:
+    image: curlimages/curl:8.15.0
+    container_name: open-gateway-edge-healthcheck
+    entrypoint: ["sh", "-c", "sleep infinity"]
+    volumes:
+      - ./edge:/edge:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          if [ -r /edge/root.crt ]; then CA="--cacert /edge/root.crt"; else CA="-k"; fi;
+          curl -sS -o /dev/null $$CA --connect-to localhost:33001:edge:33001
+          https://localhost:33001/api/metrics
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      - edge
+    networks:
+      - open-gateway-network
+
   # ─── OpenTelemetry Collector (WP20) ────────────────────
   # Traces in from the edge, the gateway and the API; WAF detections in from the edge's log file and
   # out as a Prometheus counter. Config and reasoning: observability/otel-collector.yaml.
@@ -544,6 +674,11 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # The edge's exported root CA, read on every /api/metrics scrape for the R14 expiry gauge.
       EDGE_ROOT_CERT_PATH: /etc/open-gateway/edge/root.crt
+      # WP29a — the other half of R14. The root above is a FILE; the leaf (12 h) and intermediate
+      # (7 d) are read off a TLS handshake with the edge on every scrape, because `tls internal`
+      # issues and renews them lazily and only what is being SERVED proves renewal still works.
+      # Unset, the leaf/intermediate series are simply absent (the root gauge is unaffected).
+      EDGE_TLS_PROBE: ${EDGE_TLS_PROBE:-edge:33001}
     expose:
       - "4000"
     volumes:
@@ -828,6 +963,12 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  # WP29a: WAL segments (postgres writes, postgres-backup prunes) and base backups. Separate
+  # volumes from postgres_data — see the postgres service.
+  pg_wal_archive:
+    driver: local
+  pg_backups:
     driver: local
   redis_data:
     driver: local

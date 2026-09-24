@@ -389,76 +389,112 @@ Follow these rules to deploy without database downtime:
 
 ## Backup Strategy
 
-### PostgreSQL Backup
+Scheduled base backups and WAL archiving ship in `infra/docker-compose.yml` (WP29a) — this section
+describes what is running, not what someone should build. Everything below has been executed against
+this stack; the restore in particular is not a procedure written from the manual.
+
+### What runs
+
+| Piece | Where | What it does |
+|---|---|---|
+| WAL archiving | `postgres` service, `archive_mode=on` | Every filled (or 5-minute-old) segment is copied to the `pg_wal_archive` volume. `archive_command` refuses to overwrite, so a re-archived segment cannot replace a good one with a partial. |
+| Base backups | `postgres-backup` service | `pg_basebackup -Ft -z -Xs` once per `PG_BACKUP_INTERVAL` (default 24 h) into the `pg_backups` volume. `-Xs` makes each backup **self-contained** — restoring it needs no archive. |
+| Retention | `infra/scripts/pg-backup.sh` | Keeps `PG_BACKUP_KEEP` (default 7) base backups, then `pg_archivecleanup` drops WAL older than the oldest kept backup's start segment. |
+| Liveness | `postgres-backup` healthcheck | Goes unhealthy if `/backups/.last-success` is older than two intervals. Backups stopping is otherwise invisible until the day one is needed. |
+
+`pg_basebackup` opens a **replication** connection, which the postgres image's generated
+`pg_hba.conf` never permits from another container. `infra/postgres/pg_hba.conf` exists to add that
+one rule (`host replication opengateway all scram-sha-256`) and is otherwise a verbatim copy.
+
+Redis durability is separate and already on: `--appendonly yes` with `appendfsync everysec`
+(`infra/docker-compose.yml`). A `compose restart redis` reloads the whole keyspace from the AOF —
+verified at WP29a with 93 keys including live `apikey-*` sessions and a `quota-*` counter, all of
+which came back byte-identical.
+
+### Restore — to a scratch instance
+
+**Never restore over the running data directory.** Extract into a new volume, start a second
+postgres against it, compare, then throw both away. The primary is not touched at any point.
 
 ```bash
-#!/bin/bash
-# backup-postgres.sh — run daily via cron
+BK=20260924T172613Z    # docker run --rm -v opengatewayinfrastructure_pg_backups:/b:ro alpine ls /b
 
-BACKUP_DIR="/backups/postgresql"
-DATE=$(date +%Y%m%d-%H%M%S)
-FILENAME="open-gateway-${DATE}.dump"
+docker volume create pg-restore-scratch
 
-pg_dump \
-  -h "${DB_HOST}" \
-  -U "${DB_USER}" \
-  -d "${DB_NAME}" \
-  -F c \
-  -f "${BACKUP_DIR}/${FILENAME}"
+docker run --rm \
+  -v opengatewayinfrastructure_pg_backups:/backups:ro \
+  -v pg-restore-scratch:/restore \
+  postgres:16-alpine sh -euc "
+    tar -xzf /backups/$BK/base.tar.gz   -C /restore
+    tar -xzf /backups/$BK/pg_wal.tar.gz -C /restore/pg_wal
+    chown -R 70:70 /restore && chmod 0700 /restore"
 
-# Compress
-gzip "${BACKUP_DIR}/${FILENAME}"
-
-# Upload to S3/GCS
-aws s3 cp "${BACKUP_DIR}/${FILENAME}.gz" "s3://${BACKUP_BUCKET}/${FILENAME}.gz"
-
-# Clean local backups older than 7 days
-find "${BACKUP_DIR}" -name "*.gz" -mtime +7 -delete
-
-echo "Backup completed: ${FILENAME}"
+docker run -d --name pg-scratch \
+  -v pg-restore-scratch:/var/lib/postgresql/data \
+  postgres:16-alpine postgres -c archive_mode=off -c listen_addresses=localhost
 ```
 
-### Restore from Backup
+`archive_mode=off` is not optional. Left on, the restored cluster inherits an `archive_command`
+pointing at a `/wal_archive` it does not have and jams its own `pg_wal`; given the volume, it would
+write its segments **over the primary's archive**.
+
+Recovery is automatic and takes about a second — `docker logs pg-scratch` ends with
+`consistent recovery state reached` then `database system is ready to accept connections`.
+
+Verify by row count across all four databases, then destroy the scratch:
 
 ```bash
-# Download from S3
-aws s3 cp "s3://${BACKUP_BUCKET}/open-gateway-20240407-030000.dump.gz" ./
+docker exec pg-scratch psql -U opengateway -d opengateway -c "
+  select relname, (xpath('/row/c/text()', x))[1]::text::bigint as n
+  from (select relname, query_to_xml(
+          format('select count(*) as c from %I.%I', schemaname, relname),
+          false, true, '') as x
+        from pg_stat_user_tables) t order by relname;"
 
-# Decompress
-gunzip open-gateway-20240407-030000.dump.gz
-
-# Restore
-pg_restore \
-  -h "${DB_HOST}" \
-  -U "${DB_USER}" \
-  -d "${DB_NAME}" \
-  --clean \
-  --if-exists \
-  open-gateway-20240407-030000.dump
+docker rm -f pg-scratch && docker volume rm pg-restore-scratch
 ```
 
-### Backup Schedule
+### Point-in-time recovery
 
-| Data | Frequency | Retention | Storage |
-|------|-----------|-----------|---------|
-| PostgreSQL (full dump) | Daily at 03:00 UTC | 30 days | S3 / GCS |
-| PostgreSQL (WAL archive) | Continuous | 7 days | S3 / GCS |
-| Redis (RDB snapshot) | Every 6 hours | 7 days | Persistent volume |
-| Audit logs (export) | Weekly | 2 years | S3 Glacier |
-| Configuration | On change | Indefinite | Git repository |
+Only needed to reach a moment **after** a base backup — undoing a bad migration or a mistaken
+delete. Restore as above but from `base.tar.gz` alone (skip `pg_wal.tar.gz`), mount the archive
+read-only, and add a `recovery.signal` plus:
 
-### Disaster Recovery Procedure
+```
+restore_command = 'cp /wal_archive/%f %p'
+recovery_target_time = '2026-09-24 17:30:00+00'
+```
 
-1. **Identify the issue** — data corruption, accidental deletion, outage
-2. **Stop writes** — scale API and Web deployments to 0 replicas
-3. **Restore database** from most recent backup
-4. **Verify data integrity** — run smoke test queries against restored DB
-5. **Deploy latest known-good images** — ensure code matches data state
-6. **Scale up** — restore API and Web replicas
-7. **Verify health checks** — confirm all services healthy
-8. **Monitor for 30 minutes** — watch error rates, latency, logs
-9. **Communicate** — update status page, notify stakeholders
-10. **Post-mortem** — document root cause and prevention measures
+Retention bounds how far back this reaches: WAL older than the oldest kept base backup is pruned
+with it, so the window is `PG_BACKUP_KEEP × PG_BACKUP_INTERVAL` — seven days at the defaults.
+
+### Schedule and retention
+
+| Data | Frequency | Retention | Where |
+|---|---|---|---|
+| Postgres base backup | `PG_BACKUP_INTERVAL` (24 h) | `PG_BACKUP_KEEP` (7) | `pg_backups` volume |
+| Postgres WAL | Continuous, forced every 5 min | Until the oldest kept base backup no longer needs it | `pg_wal_archive` volume |
+| Redis AOF | Continuous, `appendfsync everysec` | Rewritten by Redis | `redis_data` volume |
+
+Both volumes are **local to the host**. Copying them somewhere else is a deployment decision this
+repo does not make for you — but a backup that shares a failure domain with its source only covers
+the "someone deleted rows" case, not the "the disk died" one.
+
+### Disaster recovery procedure
+
+1. **Stop the writers** — `docker compose -f infra/docker-compose.yml stop api web`. Not `down`,
+   and never `down -v`: the volumes are the thing being recovered.
+2. **Restore to a scratch instance** and verify it, exactly as above. Confirm the data is what you
+   expect *before* anything points at it.
+3. **Promote by swapping the volume**, not by restoring in place — stop `postgres`, repoint it at
+   the verified scratch volume, start it. An in-place restore destroys the evidence if the backup
+   turns out to be the wrong one.
+4. **Re-run migrations** — `pnpm db:migrate:deploy`. Idempotent by house rule, so a backup taken
+   mid-deploy converges.
+5. **Start api and web**, confirm `/api/health` reports postgres, redis and gateway `up`.
+6. **Check the gateway's own state** — API definitions live in the `tyk_apps` volumes, not in
+   Postgres, so a database restore alone can leave the control plane and the gateway disagreeing.
+   `POST /apis/:id/sync` re-pushes; the `GatewayNodesOutOfSync` alert is the signal.
 
 ---
 

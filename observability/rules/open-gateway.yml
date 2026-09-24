@@ -87,6 +87,35 @@ groups:
           summary: 'Edge root CA {{ $labels.cn }} expires within 14 days'
           description: 'Every client that installed infra/edge/root.crt stops trusting the edge when this expires.'
 
+      # ── 5b. Edge leaf / intermediate renewal (R14, WP29a) ───────────────────
+      # The other half of R14, and it is a DIFFERENT rule rather than a second threshold on rule 5
+      # because the served certificates cannot be expressed in absolute days at all: `tls internal`
+      # issues a 12-HOUR leaf off a 7-DAY intermediate (both measured on this edge), so any
+      # days-remaining threshold is either permanently true or shorter than the renewal interval.
+      #
+      # FRACTION of lifetime remaining is scale-free and asks the question that matters: Caddy
+      # renews at roughly one third of the lifetime left, so a healthy leaf sawtooths between 1.0
+      # and ~0.33 and never reaches 0.25. Crossing it means renewal did not happen — which is the
+      # actual R14 failure, not the expiry itself. The same 0.25 reads correctly on the 7-day
+      # intermediate without a second number.
+      #
+      # `role!="root"` rather than a leaf/intermediate enumeration: the root has its own rule above,
+      # and anything else the edge grows a certificate for should be watched by default rather than
+      # silently uncovered until someone remembers to add it here.
+      #
+      # `for: 15m` covers a scrape or two failing over a renewal — the gauges are ABSENT, not stale,
+      # when the TLS probe fails, so this cannot fire on a missing series.
+      - alert: EdgeCertificateRenewalStalled
+        expr: |
+          (edge_certificate_expiry_timestamp_seconds{role!="root"} - time())
+            / edge_certificate_lifetime_seconds{role!="root"} < 0.25
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Edge {{ $labels.role }} certificate for {{ $labels.cn }} is not being renewed'
+          description: '{{ $value | humanizePercentage }} of its validity period is left. Caddy renews at about a third remaining, so this means renewal is failing, not that expiry is merely approaching. Check `docker compose logs edge` for tls.obtain / tls.renew errors.'
+
       # ── 6. Node drift (R2) ──────────────────────────────────────────────────
       # ReconcileService recomputes syncState every 60s, so `for: 2m` is two ticks — long enough
       # that a write in flight to three nodes does not page anyone.

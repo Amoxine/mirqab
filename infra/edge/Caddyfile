@@ -238,9 +238,42 @@ localhost:33005, {$EDGE_LAN_IP:127.0.0.1}:33005 {
 		log_append request_id {http.request.uuid}
 		log_append traceparent {http.request.header.traceparent}
 
+		# WP29a: WHICH gateway node served this request. Only on this site — the other four have a
+		# single upstream — and once there are three nodes it is the only way to answer "node 2 is
+		# returning 502s" from the edge's own log. The placeholder resolves after `reverse_proxy`
+		# has chosen, so it names the upstream actually dialled, not the first candidate.
+		log_append upstream {http.reverse_proxy.upstream.hostport}
+
 		respond /api/metrics* 404
 
-		reverse_proxy tyk-gateway:8080 {
+		# WP29a: every gateway NODE, by name. `EDGE_GATEWAY_UPSTREAMS` is a space-separated list and
+		# Caddy expands env placeholders in the raw file before it tokenises, so the value becomes
+		# several upstream arguments rather than one — `tyk-gateway:8080 tyk-gateway-2:8080
+		# tyk-gateway-3:8080` is three upstreams, not one host named with spaces.
+		#
+		# The DEFAULT is the single node on purpose. tyk-gateway-2/3 exist only under
+		# `--profile multinode`; listing them unconditionally would send a third of the data plane
+		# to a name that does not resolve on a default `up`. docker-compose.prod.yml sets the full
+		# list, and passes --profile multinode with it.
+		#
+		# Three settings, and all three are needed — measured, not copied from a guide.
+		#
+		#   fail_duration     takes a node that failed out of rotation for 10s.
+		#   lb_try_duration   lets the request be RETRIED against a surviving node. Without it the
+		#                     node is still marked down, but the request that discovered it 502s.
+		#   dial_timeout      is the one that is easy to leave out and breaks the other two.
+		#
+		# Why dial_timeout is load-bearing here: when a gateway container is STOPPED, Docker's
+		# embedded DNS does not answer NXDOMAIN for its name — the lookup HANGS. Measured on this
+		# stack: `dial tcp: lookup tyk-gateway-3: i/o timeout` after 6.25 s. With the default
+		# (no dial timeout) that single attempt outlives any sane lb_try_duration, so the retry
+		# budget is spent before the first failure is even known and roughly one request per
+		# fail_duration cycle 502s — which is exactly what the first run of this config did, 1 in
+		# 40, steady state, with two of three nodes down. Capping the dial at 2 s leaves the
+		# 10 s budget enough room to try the other two nodes and still answer.
+		reverse_proxy {$EDGE_GATEWAY_UPSTREAMS:tyk-gateway:8080} {
+			fail_duration 10s
+			lb_try_duration 10s
 			header_up X-Forwarded-For {remote_host}
 
 			# WP27: h2c to the backend — see the block comment above. `2` (plain HTTP/2, no TLS) is
@@ -248,6 +281,10 @@ localhost:33005, {$EDGE_LAN_IP:127.0.0.1}:33005 {
 			# proxies normally; Caddy tries h2c first and this is not exclusive to gRPC traffic.
 			transport http {
 				versions h2c 2
+
+				# WP29a — see the dial_timeout paragraph above the reverse_proxy line. This is the
+				# cap that keeps a stopped node's hanging DNS lookup from eating the retry budget.
+				dial_timeout 2s
 			}
 		}
 	}

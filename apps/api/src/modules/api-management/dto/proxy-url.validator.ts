@@ -47,6 +47,14 @@ const DENIED_HOSTS = new Set([
   'tyk-gateway-multinode-init',
   'tyk-pump',
   'tyk-healthcheck',
+  // WP29a. None of these three listens on anything today — two are one-shot or sleep loops and the
+  // third only makes outbound calls — so none is an SSRF target yet. They are listed anyway because
+  // this list's rule is categorical (every name that resolves on the shared network is denied), and
+  // the alternative is a judgement call that has to be re-made correctly every time one of them
+  // grows a port. `postgres-backup` in particular holds DB_PASS and mounts both backup volumes.
+  'pg-archive-init',
+  'postgres-backup',
+  'edge-healthcheck',
   // WP20. Neither has any authentication — "only reachable inside the compose network" is the whole
   // of their protection, same as the Ory admin APIs above. Prometheus' query API hands out every
   // metric the stack produces (node lists, Redis sizing, WAF detection rates) and its /-/reload and

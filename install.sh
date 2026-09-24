@@ -88,6 +88,9 @@ KRATOS_SECRETS_DEFAULT=""
 KRATOS_SECRETS_COOKIE=""
 KRATOS_SECRETS_CIPHER=""
 
+# WP29a: only infra/docker-compose.prod.yml reads this.
+REDIS_PASSWORD=""
+
 NON_INTERACTIVE=false
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/infra/docker-compose.yml"
@@ -155,6 +158,15 @@ generate_all_secrets() {
       fail "Cannot generate Ory secrets: openssl and node both unavailable"
     fi
   done
+
+  # WP29a: required only by infra/docker-compose.prod.yml, which makes Redis demand a password.
+  # Generated here anyway so the prod overlay is one flag away rather than one more secret to think
+  # of; the default (dev) profile leaves Redis unauthenticated behind its loopback-only port and
+  # ignores this value entirely.
+  REDIS_PASSWORD=$(rand_hex 32)
+  if [ -z "$REDIS_PASSWORD" ]; then
+    fail "Cannot generate Redis password: openssl and node both unavailable"
+  fi
 
   # Not a credential: the host's primary LAN address, so the WP26b edge's internal CA issues for
   # https://<lan-ip>:<port> as well as localhost. Empty is fine — the listeners still answer on
@@ -439,6 +451,9 @@ umask 077
   printf 'KRATOS_SECRETS_DEFAULT=%s\n' "$KRATOS_SECRETS_DEFAULT"
   printf 'KRATOS_SECRETS_COOKIE=%s\n' "$KRATOS_SECRETS_COOKIE"
   printf 'KRATOS_SECRETS_CIPHER=%s\n' "$KRATOS_SECRETS_CIPHER"
+  # WP29a: read only by infra/docker-compose.prod.yml (Redis `--requirepass`, and the matching
+  # password on the API, the gateway nodes and the pump). Unused by the default dev profile.
+  printf 'REDIS_PASSWORD=%s\n' "$REDIS_PASSWORD"
   # WP26b edge: the host's LAN address, so `tls internal` also issues a certificate for
   # https://<lan-ip>:<port>. Not a secret; empty falls back to loopback-only listeners.
   printf 'EDGE_LAN_IP=%s\n' "$EDGE_LAN_IP"

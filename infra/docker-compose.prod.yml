@@ -1,0 +1,131 @@
+# Production overlay (WP29a). Layered ON TOP of docker-compose.yml, never used alone:
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml \
+#     --profile multinode up -d
+#
+# An overlay file rather than a compose `profile`, and that is forced rather than preferred: a
+# profile can only add or withhold whole SERVICES, it cannot change a value on an existing one — and
+# the first thing this file has to change is `NODE_ENV` on the `api` service that the base file
+# already defines. `--profile multinode` is still passed alongside, because the three gateway nodes
+# TYK_ADMIN_URLS names below only exist under that profile.
+#
+# Required in infra/.env before this file will start anything (see prod-preflight below):
+#   REDIS_PASSWORD   openssl rand -hex 32
+#   TYK_GW_SECRET    openssl rand -hex 32 — the committed default is rejected
+#   DB_PASS          already required by the base file
+# and the seeded admin@opengateway.io / Admin123! login must no longer work.
+
+services:
+  # ─── Preflight gate ────────────────────────────────────
+  # Runs to completion before api, web and the gateway nodes are allowed to start; a non-zero exit
+  # aborts the whole `up`. The checks are in infra/scripts/prod-preflight.sh.
+  #
+  # It depends on postgres and kratos being HEALTHY rather than on nothing, because one of its
+  # checks is behavioural — it asks Kratos to log in as the seeded default admin. Neither of those
+  # two services depends on this one, so there is no cycle.
+  prod-preflight:
+    image: redis:7-alpine
+    container_name: open-gateway-prod-preflight
+    entrypoint: ["sh", "/preflight.sh"]
+    environment:
+      NODE_ENV: production
+      TYK_GW_SECRET: ${TYK_GW_SECRET:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      DB_PASS: ${DB_PASS:-}
+      # The exact string the pump is handed in the base file, so the check tests what the pump gets
+      # rather than what this file hopes it gets.
+      TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING: "host=postgres port=5432 user=opengateway password=${DB_PASS:-} dbname=opengateway sslmode=disable"
+      KRATOS_PUBLIC_URL: http://kratos:4433
+    volumes:
+      - ./scripts/prod-preflight.sh:/preflight.sh:ro
+      - ./pump/pump.conf:/pump.conf:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kratos:
+        condition: service_started
+    networks:
+      - open-gateway-network
+      - ory-internal
+
+  # ─── Redis: password required ──────────────────────────
+  # The base file runs Redis unauthenticated behind a loopback-only port. That is defensible for a
+  # laptop and indefensible in production: every gateway key, session and quota counter in the stack
+  # lives here, and the SSRF split documented in the base file rests on "nothing on
+  # open-gateway-network is unauthenticated".
+  #
+  # `--appendonly yes` is repeated because `command:` REPLACES rather than merges — dropping it here
+  # would silently turn durability off, which is the one property WP29a verifies on this service.
+  redis:
+    command: >-
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+      --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+    environment:
+      # redis-cli reads this, so the healthcheck below needs no -a and the password never appears in
+      # `docker inspect`'s Healthcheck.Test or in the process list.
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+
+  # ─── Gateway nodes: authenticate to Redis ──────────────
+  # One per node. The anchor in the base file cannot carry this: it is a per-deployment secret, and
+  # the anchor is the "every node runs byte-identical config" contract, which env overrides here
+  # preserve — all three get the same value.
+  tyk-gateway:
+    environment:
+      TYK_GW_STORAGE_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+    depends_on:
+      prod-preflight:
+        condition: service_completed_successfully
+
+  tyk-gateway-2:
+    environment:
+      TYK_GW_STORAGE_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+    depends_on:
+      prod-preflight:
+        condition: service_completed_successfully
+
+  tyk-gateway-3:
+    environment:
+      TYK_GW_STORAGE_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+    depends_on:
+      prod-preflight:
+        condition: service_completed_successfully
+
+  # ─── Pump: authenticate to Redis ───────────────────────
+  # `analytics_storage_config.password` in pump.conf, as an env override. The path-to-env rule is the
+  # one docs/ANALYTICS-PIPELINE.md documents for the connection strings: TYK_PMP_ + the config path,
+  # underscores inside a segment removed. Live-verified against pump 1.17.0 on a throwaway
+  # password-protected Redis — without it the pump loops on "NOAUTH Authentication required".
+  tyk-pump:
+    environment:
+      TYK_PMP_ANALYTICSSTORAGECONFIG_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+
+  # ─── Edge: front all three gateway nodes ───────────────
+  # The base file's default is the single `tyk-gateway`, because the other two do not exist without
+  # --profile multinode and Caddy would round-robin a third of the data plane into a dead name.
+  edge:
+    environment:
+      EDGE_GATEWAY_UPSTREAMS: ${EDGE_GATEWAY_UPSTREAMS:-tyk-gateway:8080 tyk-gateway-2:8080 tyk-gateway-3:8080}
+
+  # ─── API ───────────────────────────────────────────────
+  api:
+    environment:
+      # app.module.ts reads this directly for the throttler: 100 req/min at production, 1000
+      # otherwise. The preflight refuses to let the stack start if it is anything else.
+      NODE_ENV: production
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}@redis:6379
+      # The three nodes by NAME, never a scaled-up single service. A scaled service is one DNS name
+      # behind which the individual containers are not addressable, and the control plane has to
+      # reach each node's OWN control API (:8081) to fan a write out and to tell which node drifted.
+      # (`grep -r replicas infra/` is an acceptance check and must stay at zero, so the compose key
+      # that would do it is deliberately not written out here.)
+      TYK_ADMIN_URLS: ${TYK_ADMIN_URLS:-http://tyk-gateway:8081/tyk,http://tyk-gateway-2:8081/tyk,http://tyk-gateway-3:8081/tyk}
+    depends_on:
+      prod-preflight:
+        condition: service_completed_successfully
+
+  web:
+    environment:
+      NODE_ENV: production
+    depends_on:
+      prod-preflight:
+        condition: service_completed_successfully
