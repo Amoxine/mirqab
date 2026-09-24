@@ -45,9 +45,20 @@ export function quotaPeriodToSeconds(period: QuotaPeriod): number {
 
 const toEpochSeconds = (iso: string): number => Math.floor(new Date(iso).getTime() / 1000);
 
-function accessRightsFor(apiDef: KeyApiScope | null): Record<string, unknown> | undefined {
-  if (!apiDef?.tykApiId) return undefined;
-  return { [apiDef.tykApiId]: { api_id: apiDef.tykApiId, api_name: apiDef.name, versions: ['Default'] } };
+/**
+ * One API, or several (WP22: a portal subscription grants every API a `Product` bundles, not just
+ * one) — every existing call site passes a single scope or `null`, so this is purely additive.
+ */
+type KeyApiScopes = KeyApiScope | KeyApiScope[] | null;
+
+function accessRightsFor(apis: KeyApiScopes): Record<string, unknown> | undefined {
+  const list = apis === null ? [] : Array.isArray(apis) ? apis : [apis];
+  const withTykId = list.filter((api): api is KeyApiScope & { tykApiId: string } => api.tykApiId !== null);
+  if (withTykId.length === 0) return undefined;
+
+  return Object.fromEntries(
+    withTykId.map((api) => [api.tykApiId, { api_id: api.tykApiId, api_name: api.name, versions: ['Default'] }]),
+  );
 }
 
 /**
@@ -65,10 +76,10 @@ function accessRightsFor(apiDef: KeyApiScope | null): Record<string, unknown> | 
  */
 export function buildKeyAclPolicy(
   id: string,
-  apiDef: KeyApiScope | null,
+  apis: KeyApiScopes,
   orgId: string,
 ): Record<string, unknown> | null {
-  const accessRights = accessRightsFor(apiDef);
+  const accessRights = accessRightsFor(apis);
   if (!accessRights) return null;
 
   return {
@@ -100,14 +111,14 @@ export function buildKeyAclPolicy(
  */
 export function buildTykKeyDef(
   input: KeyDefInput,
-  apiDef: KeyApiScope | null,
+  apis: KeyApiScopes,
   orgId: string,
   nowSeconds = Math.floor(Date.now() / 1000),
   aclPolicyId?: string,
 ): Record<string, unknown> {
   const def: Record<string, unknown> = { alias: input.name, active: true, org_id: orgId };
 
-  const accessRights = accessRightsFor(apiDef);
+  const accessRights = accessRightsFor(apis);
   if (accessRights) def.access_rights = accessRights;
 
   // WP18: a planned key delegates its limits to the plan's policy and carries none of its own.

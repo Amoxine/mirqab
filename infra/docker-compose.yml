@@ -581,20 +581,50 @@ services:
     networks:
       - ory-internal
 
+  # ─── Mail catcher (WP22) ────────────────────────────────
+  # Kratos's courier needs a real SMTP endpoint or every recovery/verification send silently fails
+  # against the placeholder URI (kratos.yml's own courier.smtp comment). Mailpit is that endpoint for
+  # this stack: a genuine SMTP server (1025) that holds what it receives and exposes it over HTTP
+  # (8025) instead of forwarding anywhere — which is what lets an integration run assert a
+  # verification email actually arrived, with no internet-connected mail provider needed. Point
+  # KRATOS_SMTP_URI (infra/.env) at a real external SMTP server instead for an install that needs
+  # mail to actually leave the stack; this container is not built for that.
+  mailpit:
+    image: axllent/mailpit:v1.21.3
+    container_name: open-gateway-mailpit
+    restart: unless-stopped
+    expose:
+      - "1025"
+    ports:
+      # HTTP API/UI: loopback only, like every other admin surface in this stack.
+      - "127.0.0.1:33016:8025"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8025/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - ory-internal
+
   kratos:
     image: oryd/kratos:v26.2.0
     container_name: open-gateway-kratos
     restart: unless-stopped
-    command: serve all --dev -c /etc/config/kratos/kratos.yml
+    # WP22: --watch-courier runs the courier's SMTP dispatch loop in-process. Without it, a
+    # recovery/verification code is queued (courier_messages) and never actually sent — live-verified:
+    # the self-service flow answered `sent_email` and nothing reached Mailpit until this flag was added.
+    command: serve all --dev --watch-courier -c /etc/config/kratos/kratos.yml
     environment:
       DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/kratos?sslmode=disable
       SECRETS_DEFAULT: ${KRATOS_SECRETS_DEFAULT:?set KRATOS_SECRETS_DEFAULT (install.sh generates infra/.env; or openssl rand -hex 32)}
       SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?set KRATOS_SECRETS_COOKIE (install.sh generates infra/.env; or openssl rand -hex 32)}
       # Must be exactly 32 characters — Kratos refuses to start otherwise (openssl rand -hex 16).
       SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?set KRATOS_SECRETS_CIPHER (install.sh generates infra/.env; or openssl rand -hex 16)}
-      # No mail server in this stack; see the courier note in kratos.yml. Point this at a real SMTP
-      # server to make recovery/verification codes actually deliverable.
-      COURIER_SMTP_CONNECTION_URI: ${KRATOS_SMTP_URI:-smtps://placeholder:placeholder@localhost:1025/?skip_ssl_verify=true}
+      # WP22: real SMTP by default now — Mailpit, started above, actually receives what Kratos sends
+      # rather than failing against the old placeholder. Override KRATOS_SMTP_URI in infra/.env to
+      # point at a real external SMTP server for an install that needs mail to leave the stack.
+      COURIER_SMTP_CONNECTION_URI: ${KRATOS_SMTP_URI:-smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true}
       SESSION_COOKIE_SECURE: ${KRATOS_COOKIE_SECURE:-false}
     volumes:
       - ./ory/kratos:/etc/config/kratos:ro
@@ -615,6 +645,8 @@ services:
     depends_on:
       kratos-migrate:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     networks:
       - ory-internal
 

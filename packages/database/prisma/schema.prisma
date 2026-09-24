@@ -89,6 +89,22 @@ enum ApiDefFormat {
   OAS
 }
 
+/// WP22: a developer identity's own local status — independent of ApiKeyStatus/ApiStatus, which
+/// answer a different question (a key's or an API's own lifecycle, not the person's).
+enum DeveloperStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// WP22: a subscription's lifecycle. PENDING never has a key (Plan.requiresApproval gates the
+/// APPROVED transition — see Subscription). REVOKED tears the key down; it is not reusable, a new
+/// subscription is required to resume.
+enum SubscriptionStatus {
+  PENDING
+  APPROVED
+  REVOKED
+}
+
 enum AuditAction {
   CREATED
   UPDATED
@@ -153,6 +169,9 @@ model Tenant {
   auditLogs      AuditLog[]
   plans          Plan[]
   products       Product[]
+  /// WP22: the portal's developer directory. A tenant runs one portal; a person's single Kratos
+  /// identity can be at most one Developer, so it belongs to exactly one tenant's portal too.
+  developers     Developer[]
 
   @@map("tenants")
 }
@@ -361,11 +380,22 @@ model Plan {
   quotaPeriod QuotaPeriod @default(MONTHLY) @map("quota_period")
 
   active    Boolean  @default(true)
+  /// WP22: a self-service subscription to this plan is created PENDING and issues no key
+  /// (`Subscription`); one still requires nothing further to APPROVE otherwise. Default false
+  /// (self-service, matching the WP22 happy path) — flip per plan for the ones a tenant wants to
+  /// gate on manual review. There is no admin-approve endpoint yet (not required by any acceptance
+  /// criterion this WP was given); a PENDING subscription just stays PENDING until one exists.
+  requiresApproval Boolean @default(false) @map("requires_approval")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  apiKeys ApiKey[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys       ApiKey[]
+  /// Restrict, not the ApiKey relation's SetNull: a subscription's key is built from BOTH this
+  /// plan's policy and the product's ACL policy (see Subscription) — there is no "fall back to
+  /// unlimited" state for a portal-issued key the way a dashboard key has. Revoke the subscriptions
+  /// first.
+  subscriptions Subscription[]
 
   /// Unique per tenant, not globally: two tenants may both call a plan "Gold".
   @@unique([tenantId, name])
@@ -385,8 +415,11 @@ model Product {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  apis   ProductApi[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apis          ProductApi[]
+  /// WP22: Restrict — the product IS the access grant a subscription's key was built from
+  /// (`accessRightsFor`, extended to the product's whole API set). Revoke the subscriptions first.
+  subscriptions Subscription[]
 
   /// Both unique per tenant, for the same reason as `Plan.name` (O10's per-tenant keying).
   @@unique([tenantId, slug])
@@ -408,6 +441,104 @@ model ProductApi {
   @@id([productId, apiDefId])
   @@index([apiDefId])
   @@map("product_apis")
+}
+
+/// A self-service developer (WP22) — the portal's identity, distinct from the dashboard's `User`.
+/// Both shadow a Kratos identity (`kratosIdentityId`), but there is no discriminator trait on the
+/// Kratos side (`identity.schema.json` is unchanged): "which one" is answered by which table has a
+/// row for that identity, checked by `DeveloperAuthGuard`/`AuthService` in their own domains and
+/// never both — a Kratos session that resolves to a Developer is refused by every dashboard route
+/// (JwtAuthGuard only accepts a Hydra-issued JWT, a different token format entirely) and vice versa.
+///
+/// **Carries `tenantId`.** The portal is one catalog per tenant; every `Application`/`Subscription`
+/// this developer owns is reached only through this row, never by a bare id a caller supplied —
+/// that is what makes a cross-tenant catalog impossible rather than merely unlikely (see the plan's
+/// own ladder justification for this WP).
+model Developer {
+  id               String          @id @default(uuid())
+  tenantId         String          @map("tenant_id")
+  email            String
+  name             String
+  kratosIdentityId String          @unique @map("kratos_identity_id")
+  status           DeveloperStatus @default(ACTIVE)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  /// Kratos itself already enforces one identity per email globally (the schema's `identifier: true`
+  /// email trait) — `kratosIdentityId`'s own uniqueness is what that constraint shows up as here.
+  /// This index is for the tenant-scoped lookup and dev-facing conflict messages, not a second
+  /// source of the guarantee.
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("developers")
+}
+
+/// A developer's registered application (WP22) — the unit a `Subscription` belongs to. Plain
+/// registration record; it mints no gateway credential of its own. What a subscription grants
+/// access to (which APIs) and at what tier (rate/quota) is `Product`/`Plan`'s job, reused as-is —
+/// see `Subscription`'s doc comment for why this WP does not also wire Hydra client credentials
+/// onto it.
+model Application {
+  id          String   @id @default(uuid())
+  developerId String   @map("developer_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  developer     Developer      @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@unique([developerId, name])
+  @@index([developerId])
+  @@map("applications")
+}
+
+/// An application's grant to one product at one plan tier (WP22) — the thing that actually issues
+/// a Tyk key. Reuses WP18's two-policy pattern exactly: the PLAN's own policy carries rate/quota
+/// (`buildPlanPolicy`, ACL-less by design) and a per-subscription ACL policy
+/// (`accessRightsFor`/`buildKeyAclPolicy`, extended to accept every API the PRODUCT bundles rather
+/// than a single one) carries the actual access grant, `apply_policies: [planId, aclPolicyId]`.
+///
+/// PENDING mints no key at all — not a key nobody can use, an absent one, which is what "an
+/// unapproved subscription issues no key" means literally. `Plan.requiresApproval` decides whether
+/// creating a subscription lands PENDING or is approved (and its key issued) in the same call.
+model Subscription {
+  id             String             @id @default(uuid())
+  applicationId  String             @map("application_id")
+  productId      String             @map("product_id")
+  planId         String             @map("plan_id")
+  status         SubscriptionStatus @default(PENDING)
+  tykKeyId       String?            @map("tyk_key_id")
+  keyHash        String?            @map("key_hash")
+  /// Same purpose as `ApiKey.tykAclPolicyId` (WP18 fix): a plan's own policy is deliberately
+  /// ACL-less and shared, so a second, per-subscription policy carries this subscription's real
+  /// access rights. Lifecycle tied to this row: created alongside its key, deleted alongside it.
+  tykAclPolicyId String?            @map("tyk_acl_policy_id")
+  approvedAt     DateTime?          @map("approved_at")
+  revokedAt      DateTime?          @map("revoked_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  /// Restrict: the product is the access grant this subscription's key was built from — deleting it
+  /// out from under a live key would leave the key's own access_rights the only record of what it
+  /// was ever allowed to reach. Revoke the subscription first.
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  /// Restrict, matching product: the plan is half of this subscription's key (rate/quota via
+  /// `apply_policies`). SetNull (ApiKey's pattern) would silently drop the limit from a live key
+  /// instead of making the tenant decide what replaces it.
+  plan        Plan        @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  /// One subscription per (application, product) — re-subscribing means changing the plan on the
+  /// existing row, not creating a second grant to the same product.
+  @@unique([applicationId, productId])
+  @@index([applicationId])
+  @@index([productId])
+  @@index([planId])
+  @@map("subscriptions")
 }
 
 model Quota {

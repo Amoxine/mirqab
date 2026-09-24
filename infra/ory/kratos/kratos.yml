@@ -91,15 +91,18 @@ session:
     persistent: true
 
 courier:
-  # There is no mail server in this stack, so delivery fails and recovery/verification CODES never
-  # reach a mailbox. Two ways out, neither needing a container here:
-  #   - set KRATOS_SMTP_URI in infra/.env to a real (or local) SMTP server — compose passes it as
-  #     COURIER_SMTP_CONNECTION_URI, which overrides the placeholder below;
-  #   - mint links server-side via the admin API (POST /admin/recovery/link) — what WP5 would use.
-  # Ory config files do NOT expand ${VARS}; env vars override config by key name, so the URI is set
-  # in docker-compose.yml, not here.
+  # WP22: real by default — docker-compose.yml sets COURIER_SMTP_CONNECTION_URI to Mailpit
+  # (mailpit:1025, started alongside Kratos), a genuine SMTP server that actually receives what this
+  # sends, so recovery/verification CODES reach a mailbox instead of silently failing against a
+  # placeholder. Ory config files do NOT expand ${VARS}; env vars override config by key name, so
+  # that env var — not this file — is the value actually in effect. This one only applies if Kratos
+  # is ever run outside that compose file with the env var unset, and is kept pointed at Mailpit's
+  # in-network address for the same reason rather than left as a placeholder.
+  # Override KRATOS_SMTP_URI in infra/.env to point at a real external SMTP server for an install
+  # that needs mail to leave the stack; mint links server-side via the admin API
+  # (POST /admin/recovery/link) is the other way out, for a deploy with no mail server at all.
   smtp:
-    connection_uri: smtps://placeholder:placeholder@localhost:1025/?skip_ssl_verify=true
+    connection_uri: smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true
     from_address: no-reply@open-gateway.local
     from_name: Open Gateway
 

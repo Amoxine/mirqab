@@ -56,6 +56,10 @@ const DENIED_HOSTS = new Set([
   'kratos-migrate',
   'keto',
   'keto-migrate',
+  // WP22: Kratos's courier SMTP catcher. No auth of its own — proxying to it would let a caller
+  // read every email Kratos has ever sent through it (verification codes, recovery links) via
+  // Mailpit's own HTTP API on the same host.
+  'mailpit',
 ]);
 
 /**

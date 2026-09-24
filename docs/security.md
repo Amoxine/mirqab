@@ -23,7 +23,8 @@ what the current build actually enforces:
 | Append-only audit log | Implemented | `AuditLogInterceptor` |
 | PostgreSQL Row-Level Security policies | **PLANNED — not implemented** | no migration creates any policy |
 | Vault / KMS secret storage, field-level encryption, mTLS, NetworkPolicies | **PLANNED — not implemented** | secrets come from env files (`infra/.env`, `apps/api/.env.local`, chmod 600) |
-| Kratos recovery/verification emails actually reaching a mailbox | **PLANNED — not implemented** | `infra/ory/kratos/kratos.yml`'s `courier.smtp` is a placeholder; set `KRATOS_SMTP_URI` or mint links via Kratos's admin API |
+| Kratos recovery/verification emails actually reaching a mailbox | Implemented (WP22) | Mailpit (`infra/docker-compose.yml`) is the default `COURIER_SMTP_CONNECTION_URI`, and `kratos` now runs with `--watch-courier` — without that flag a flow answers `sent_email` but the courier's dispatch loop never runs, live-verified while wiring this. Set `KRATOS_SMTP_URI` to point at a real external SMTP server for an install that needs mail to leave the stack |
+| Self-service developer portal, separate from the dashboard's Hydra-JWT session: Kratos session (`X-Session-Token`/cookie) via `/sessions/whoami`, never a Hydra JWT | Implemented (WP22) | `modules/portal/`, `DeveloperAuthGuard`, `common/ory/kratos.ts` |
 
 **Dead but deliberately kept (WP7 decision, not deleted this pass):** `modules/auth/services/token.service.ts`, `modules/auth/jwt-secret.ts`, `modules/auth/dto/login.dto.ts`, `modules/auth/dto/register.dto.ts`, `modules/auth/types/auth.types.ts` and their `.spec.ts` files each carry a `DEPRECATED —` header and have no live caller. `JWT_SECRET`, `JWT_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN` likewise still appear in `infra/docker-compose.yml` / `install.sh` / `.env.example` with no reader in the API. `COOKIE_SECURE` is *not* dead — it moved: `apps/web` now reads it to flag its own session cookies `Secure`, the API no longer does. `TRUST_PROXY_HOPS` is unrelated to this migration and still works as before (Express `trust proxy` hop count for rate limiting).
 
@@ -354,14 +355,17 @@ ThrottlerModule.forRoot([{
 
 ### Per-Endpoint Rate Limits
 
-There are no `@Throttle()` overrides anywhere in the API today — `POST /auth/login`,
-`/auth/register` and `/auth/refresh` do not exist any more (Kratos and Hydra own those flows outside
-this app), and the surviving `GET /auth/me` has no route-specific limit either. Every endpoint,
-`/auth/me` included, gets the single global bucket below.
+`POST /auth/login`, `/auth/register` and `/auth/refresh` do not exist any more (Kratos and Hydra own
+those flows outside this app), and the surviving `GET /auth/me` has no route-specific limit either —
+it gets the single global bucket. WP22's portal is the first real `@Throttle()` consumer, on its two
+abusable, unauthenticated-by-design endpoints (live-verified: a flood of `POST /portal/auth/register`
+calls trips 429 within its own limit).
 
 | Endpoint | Limit | Window | Rationale |
 |----------|-------|--------|-----------|
-| All endpoints | 100 requests (production) / 1000 (development) | 60 seconds | Default global limit — no per-endpoint override exists |
+| `POST /portal/auth/register` | 5 requests | 60 seconds | Per-IP sign-up abuse control (WP22 acceptance) |
+| `POST /portal/applications/:id/subscriptions` | 10 requests | 60 seconds | Per-IP key-issue abuse control (WP22 acceptance) — this is the expensive step, a live Tyk policy + key |
+| Everything else | 100 requests (production) / 1000 (development) | 60 seconds | Default global limit — no other per-endpoint override exists |
 
 ### Rate Limit Response
 

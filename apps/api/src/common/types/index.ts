@@ -35,6 +35,18 @@ export interface UserPayload {
   permissions?: string[];
 }
 
+/**
+ * WP22: the portal's session payload — deliberately NOT `UserPayload`. A Developer has exactly one
+ * tenant (no switcher, no roles, no permissions array) and authenticates with a Kratos session, not
+ * a Hydra JWT, so it carries none of the dashboard session's fields that assume either.
+ */
+export interface DeveloperPayload {
+  sub: string;
+  tenantId: string;
+  email: string;
+  name: string;
+}
+
 export interface RequestContext {
   userId: string;
   tenantId: string;

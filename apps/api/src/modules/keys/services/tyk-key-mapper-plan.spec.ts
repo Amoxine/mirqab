@@ -100,4 +100,29 @@ describe('buildKeyAclPolicy', () => {
     expect(buildKeyAclPolicy('acl-policy-1', null, 'og-tenant')).toBeNull();
     expect(buildKeyAclPolicy('acl-policy-1', { name: 'x', tykApiId: null }, 'og-tenant')).toBeNull();
   });
+
+  it('grants every API in an array (WP22: a portal subscription bundles a whole Product)', () => {
+    const orders = { name: 'Orders', tykApiId: 'og-orders' };
+    const invoices = { name: 'Invoices', tykApiId: 'og-invoices' };
+
+    const policy = buildKeyAclPolicy('acl-policy-1', [orders, invoices], 'og-tenant');
+
+    expect(policy?.access_rights).toEqual({
+      'og-orders': { api_id: 'og-orders', api_name: 'Orders', versions: ['Default'] },
+      'og-invoices': { api_id: 'og-invoices', api_name: 'Invoices', versions: ['Default'] },
+    });
+  });
+
+  it('drops an API with no tykApiId from the array rather than failing the whole grant', () => {
+    const synced = { name: 'Orders', tykApiId: 'og-orders' };
+    const unsynced = { name: 'Draft API', tykApiId: null };
+
+    const policy = buildKeyAclPolicy('acl-policy-1', [synced, unsynced], 'og-tenant');
+
+    expect(Object.keys(policy?.access_rights as object)).toEqual(['og-orders']);
+  });
+
+  it('is null for an empty array — same as no API at all', () => {
+    expect(buildKeyAclPolicy('acl-policy-1', [], 'og-tenant')).toBeNull();
+  });
 });
