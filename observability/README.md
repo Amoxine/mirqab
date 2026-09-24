@@ -9,7 +9,7 @@ asked for one.
 |---|---|
 | `otel-collector.yaml` | OTLP trace intake; the edge's WAF log → `coraza_rule_detections_total` |
 | `prometheus.yml` | Scrape targets and where the rules live |
-| `rules/open-gateway.yml` | The six alert rules §5's detection signals call for |
+| `rules/open-gateway.yml` | Eleven alert rules: §5's detection signals, plus four that fire when the others cannot |
 
 Neither service publishes a port, so everything below runs from an in-network curl container — the
 same pattern the Tyk control API uses:
@@ -54,6 +54,35 @@ they are not what the roadmap assumed:
   `tls internal` issues 12-hour leaves off a 7-day intermediate, so a 14-day threshold on either
   would be permanently firing. It reads `infra/edge/root.crt`, which must exist and be
   world-readable — see `infra/edge/README.md`.
+
+### The four rules that watch the other seven
+
+`MetricsService` **resets** a gauge family when its probe fails, rather than leaving a stale value —
+a stale number lies to a rule that cannot tell stale from current. The cost is that in PromQL a
+missing series makes the whole expression yield an empty vector, so the rule over it does not fire,
+it goes **silent**, which reads exactly like health:
+
+```
+(edge_certificate_expiry_timestamp_seconds{role="nonexistent"} - time())
+  / edge_certificate_lifetime_seconds{role="nonexistent"} < 0.25    ->  0 results
+```
+
+So every rule above had a failure mode in which it reports nothing. The sharpest was R14's own
+scenario: an unreachable edge drops the leaf gauges and `EdgeCertificateRenewalStalled` stops
+evaluating — **the edge being down produced no alert at all**, while `up{job="open-gateway-api"}`
+stayed 1, because Prometheus scrapes the api directly and never touches the edge.
+
+`MetricsTargetDown`, `EdgeCertificateMetricsAbsent`, `RedisMetricsAbsent` and
+`GatewaySyncMetricsAbsent` close that. Two things about them worth knowing before editing:
+
+- **The three `absent()` rules are gated on `up{job="open-gateway-api"} == 1`.** These gauges are
+  exported *by* the api, so without the gate one api outage fires all four at once for a single root
+  cause. With it, `MetricsTargetDown` owns "the api is gone" and each `absent()` rule means the
+  narrower, separately actionable "the api is up but this probe inside it is failing". Verified: with
+  the api target dead, only `MetricsTargetDown` fires.
+- **There is deliberately no `absent(coraza_rule_detections_total)`.** That counter legitimately has
+  no series until the first WAF detection, so an absence alert on it would fire on every clean stack.
+  An alert that is wrong at rest is worse than the gap it closes.
 
 ## Traces
 

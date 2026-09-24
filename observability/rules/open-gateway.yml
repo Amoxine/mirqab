@@ -127,3 +127,77 @@ groups:
         annotations:
           summary: 'Only {{ $value }} gateway nodes hold every definition identically'
           description: 'A node is missing a definition or holds a different one. POST /apis/:id/sync re-pushes it.'
+
+      # ── 7-11. The rules that fire when the rules above CANNOT ───────────────
+      # Every rule above reads a gauge that `MetricsService` RESETS when its probe fails
+      # (metrics.service.ts: Redis :210-212, gateway sync :232, certificates :258-259). That was a
+      # deliberate choice — a stale value lies to a rule that cannot tell stale from current — but
+      # absence is not free either: in PromQL a missing series makes the whole expression yield an
+      # empty vector, so the alert does not fire, it goes SILENT. Verified against this Prometheus:
+      #
+      #   (edge_certificate_expiry_timestamp_seconds{role="nonexistent"} - time())
+      #     / edge_certificate_lifetime_seconds{role="nonexistent"} < 0.25   ->  0 results
+      #
+      # So every rule above had a matching failure mode in which it reports nothing and reads
+      # exactly like health. The worst was R14's own scenario: if the edge's TLS endpoint goes
+      # unreachable the leaf gauges vanish and EdgeCertificateRenewalStalled stops evaluating —
+      # the edge being DOWN produced no alert at all, while up{job="open-gateway-api"} stayed 1,
+      # because Prometheus scrapes the api directly and never touches the edge.
+      #
+      # These four make the silence audible. They were missed in WP20's own six-rule review because
+      # that review checked every rule fires when it should, and never that a rule stays silent when
+      # it should not be able to.
+      #
+      # Deliberately NOT here: `absent(coraza_rule_detections_total)`. That counter legitimately has
+      # no series until the first WAF detection, so an absence alert on it fires on every clean
+      # stack — an alert that is wrong at rest is worse than the gap it closes.
+      - alert: MetricsTargetDown
+        expr: up{job=~"open-gateway-api|tyk-pump|otel-collector"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Prometheus cannot scrape {{ $labels.job }}'
+          description: 'Every rule reading this target is blind for as long as this lasts, reporting no data rather than a problem. 2m is ~8 missed scrapes at the 15s interval.'
+
+      # The three below are gated on `up{job="open-gateway-api"} == 1`, which is a real design
+      # choice and not decoration: these gauges are exported BY the api, so without the gate an api
+      # outage fires all four of these rules at once for a single root cause. With it,
+      # MetricsTargetDown owns "the api is gone" and each rule below means the narrower, separately
+      # actionable thing — "the api is up and answering, but THIS probe inside it is failing".
+      #
+      # `and on()` joins on the empty label set, which is what lets a one-element absent() vector
+      # match the `up` series despite sharing no labels with it.
+      #
+      # `for: 10m` on all three: these say the observability is blind, not that the product is
+      # down, and 10 minutes is long enough to ride out a restart or a flaky handshake while still
+      # being well inside the window where blindness matters.
+      - alert: EdgeCertificateMetricsAbsent
+        expr: |
+          (absent(edge_certificate_expiry_timestamp_seconds{role="root"})
+            or absent(edge_certificate_expiry_timestamp_seconds{role="leaf"}))
+            and on() (up{job="open-gateway-api"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Edge certificate metric for role={{ $labels.role }} is absent, so its expiry rules are silent'
+          description: 'role="root" means the api cannot read EDGE_ROOT_CERT_PATH — infra/edge/root.crt must exist AND be world-readable (`docker compose cp` leaves it 0600; see infra/edge/README.md), and that exact case has bitten this stack before. role="leaf" means the TLS probe of EDGE_TLS_PROBE is failing, which usually means the edge itself is unreachable. EdgeRootCertificateExpiringSoon and EdgeCertificateRenewalStalled cannot fire while this is true.'
+
+      - alert: RedisMetricsAbsent
+        expr: absent(redis_used_memory_bytes) and on() (up{job="open-gateway-api"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Redis metrics are absent, so the R3 rules are silent'
+          description: 'The api reset these after a failed INFO call, so it is up but cannot reach Redis. RedisEvictingKeys and RedisMemoryHigh cannot fire while this is true — and an unreachable Redis is itself the outage those rules exist to warn about.'
+
+      - alert: GatewaySyncMetricsAbsent
+        expr: absent(gateway_nodes_in_sync) and on() (up{job="open-gateway-api"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'gateway_nodes_in_sync is absent, so the drift rule is silent'
+          description: 'The api reset this after a failed syncState read from Postgres. gateway_nodes_total is set before that read and SURVIVES, so GatewayNodesOutOfSync compares a present value against a missing one and yields nothing at all — it reads exactly like "no drift".'
