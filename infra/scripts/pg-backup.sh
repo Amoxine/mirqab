@@ -9,23 +9,20 @@
 # /wal_archive is for point-in-time recovery PAST the backup, not for making the backup work — the
 # two answer different questions and only the first one has to be right at 3am.
 #
-# ── Restore (to a SCRATCH instance — never over a running data directory) ──────────────────────
-#   BK=20260924T120000Z   # pick one from /backups
-#   docker volume create pg_restore_scratch
-#   docker run --rm -v opengatewayinfrastructure_pg_backups:/backups:ro \
-#     -v pg_restore_scratch:/restore postgres:16-alpine sh -c '
-#       tar -xzf /backups/'"$BK"'/base.tar.gz -C /restore &&
-#       tar -xzf /backups/'"$BK"'/pg_wal.tar.gz -C /restore/pg_wal &&
-#       chown -R 70:70 /restore && chmod 0700 /restore'
-#   docker run -d --name pg-scratch -v pg_restore_scratch:/var/lib/postgresql/data \
-#     -e POSTGRES_PASSWORD=scratch postgres:16-alpine \
-#     postgres -c archive_mode=off
-#   # ...compare row counts against the primary, then:
-#   docker rm -f pg-scratch && docker volume rm pg_restore_scratch
+# ── Restore: infra/scripts/pg-restore-scratch.sh ───────────────────────────────────────────────
+#   infra/scripts/pg-restore-scratch.sh            # latest backup -> scratch, verify, destroy
+#   infra/scripts/pg-restore-scratch.sh --list
 #
-# `archive_mode=off` on the scratch instance is not optional: left on, it inherits the primary's
-# archive_command, has no /wal_archive to write to, and jams its own pg_wal — and if it DID have the
-# volume it would write the restored cluster's segments over the primary's archive.
+# That is a SCRIPT and not a procedure in this comment on purpose. This block used to spell the
+# restore out as copy-pasteable docker commands, and a reviewer pointed out the obvious: prose
+# cannot refuse a bad volume name. Restoring over the primary's data directory is the one mistake
+# in this repository that destroys data irrecoverably, so the safeguard has to be executable —
+# the script refuses any target naming `postgres_data`, or matching the primary's actual volume
+# (discovered by inspecting the running container, not hardcoded), or already in use, before it
+# creates anything. It also forces `archive_mode=off` on the scratch instance, which is not
+# optional: left on it inherits the primary's archive_command, has no /wal_archive to write to and
+# jams its own pg_wal — and if it DID get that volume it would write the restored cluster's
+# segments over the primary's archive.
 set -eu
 
 : "${PG_BACKUP_INTERVAL:=86400}"

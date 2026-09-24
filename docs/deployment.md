@@ -413,46 +413,32 @@ which came back byte-identical.
 
 ### Restore — to a scratch instance
 
-**Never restore over the running data directory.** Extract into a new volume, start a second
-postgres against it, compare, then throw both away. The primary is not touched at any point.
-
 ```bash
-BK=20260924T172613Z    # docker run --rm -v opengatewayinfrastructure_pg_backups:/b:ro alpine ls /b
-
-docker volume create pg-restore-scratch
-
-docker run --rm \
-  -v opengatewayinfrastructure_pg_backups:/backups:ro \
-  -v pg-restore-scratch:/restore \
-  postgres:16-alpine sh -euc "
-    tar -xzf /backups/$BK/base.tar.gz   -C /restore
-    tar -xzf /backups/$BK/pg_wal.tar.gz -C /restore/pg_wal
-    chown -R 70:70 /restore && chmod 0700 /restore"
-
-docker run -d --name pg-scratch \
-  -v pg-restore-scratch:/var/lib/postgresql/data \
-  postgres:16-alpine postgres -c archive_mode=off -c listen_addresses=localhost
+infra/scripts/pg-restore-scratch.sh --list     # what is available
+infra/scripts/pg-restore-scratch.sh            # latest -> scratch, verify by row count, destroy
+infra/scripts/pg-restore-scratch.sh --backup 20260924T172613Z --keep
 ```
 
-`archive_mode=off` is not optional. Left on, the restored cluster inherits an `archive_command`
-pointing at a `/wal_archive` it does not have and jams its own `pg_wal`; given the volume, it would
-write its segments **over the primary's archive**.
+**Use the script, not hand-typed docker commands.** This section used to spell the restore out as
+copy-pasteable steps; it is a script now because prose cannot refuse a bad volume name, and
+restoring over the primary's data directory is the one mistake here that destroys data
+irrecoverably. Before it creates anything, the script refuses a target that names `postgres_data`,
+that matches the primary's actual data volume (discovered by inspecting the running container, not
+hardcoded), that is already in use by another container, or that already exists.
 
-Recovery is automatic and takes about a second — `docker logs pg-scratch` ends with
-`consistent recovery state reached` then `database system is ready to accept connections`.
+What it does: extracts `base.tar.gz` + `pg_wal.tar.gz` into a **new** volume, starts a second
+postgres against it with `archive_mode=off`, waits for recovery, compares exact row counts for
+every table in all four databases against the primary (read-only), prints a per-database verdict,
+then destroys the scratch instance. Exit 0 only when every count matches.
 
-Verify by row count across all four databases, then destroy the scratch:
+`archive_mode=off` is not optional, which is why the script forces it rather than trusting the
+operator. Left on, the restored cluster inherits an `archive_command` pointing at a `/wal_archive`
+it does not have and jams its own `pg_wal`; given that volume, it would write its segments **over
+the primary's archive**.
 
-```bash
-docker exec pg-scratch psql -U opengateway -d opengateway -c "
-  select relname, (xpath('/row/c/text()', x))[1]::text::bigint as n
-  from (select relname, query_to_xml(
-          format('select count(*) as c from %I.%I', schemaname, relname),
-          false, true, '') as x
-        from pg_stat_user_tables) t order by relname;"
-
-docker rm -f pg-scratch && docker volume rm pg-restore-scratch
-```
+A mismatch is not automatically a bad backup — a primary that took writes after the backup will
+differ, which is why the output names *which* databases differ. `opengateway` matching while the
+Ory databases have moved is ordinary traffic; `opengateway` differing is the one worth chasing.
 
 ### Point-in-time recovery
 
