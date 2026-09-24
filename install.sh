@@ -161,8 +161,16 @@ load_existing_secrets() {
   local env_file="${SCRIPT_DIR}/infra/.env" key value
   [ -f "$env_file" ] || return 0
   for key in "${MANAGED_SECRETS[@]}"; do
-    # First occurrence wins, matching how docker compose itself reads a duplicated key.
-    value=$(sed -n "s/^${key}=\(.*\)$/\1/p" "$env_file" | head -n 1)
+    # LAST occurrence wins, because that is what docker compose resolves for a duplicated key —
+    # measured, not assumed: a file holding `FOO=first` then `FOO=second` makes `compose config`
+    # report `second`. Taking the first would have this script reuse a value compose never used and
+    # then rewrite the file with it, silently rotating the live credential — the exact failure this
+    # function exists to prevent, hiding in a hand-edited .env.
+    #
+    # `tail -n 1`, never `head -n 1`: head exits as soon as it has its line, and once the file is
+    # long enough for sed to still be writing, the resulting SIGPIPE makes the pipeline exit 141
+    # under this script's `set -o pipefail` and aborts the install. tail drains the pipe instead.
+    value=$(sed -n "s/^${key}=\(.*\)$/\1/p" "$env_file" | tail -n 1)
     [ -n "$value" ] || continue
     printf -v "$key" '%s' "$value"
     debug "$key reused from existing infra/.env"
