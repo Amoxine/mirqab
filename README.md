@@ -288,11 +288,12 @@ This was not always true. Until it was fixed, every re-run minted fresh values a
 file, so a second run rotated every credential *and* dropped every hand-set line — see the rotation
 table under **Security Notes** for what that costs per secret.
 
-One constraint comes with it: a managed key has to be written as plain `KEY=value`. An `export`
-prefix, indentation, spaces around `=`, quotes, or a trailing space or CR make the line unreadable
-to the installer, and it stops with the key and line number rather than treating the secret as
-missing and regenerating it. Compose accepts all of those forms, which is exactly why the
-mismatch was worth failing on instead of guessing.
+One constraint comes with it: a managed key has to be written as plain `KEY=value`, with a value. An
+`export` prefix, indentation, spaces around `=`, quotes, a trailing space or CR — or an empty value —
+make the line unusable to the installer, and it stops with the key and line number rather than
+treating the secret as missing and regenerating it. Compose accepts most of those forms, which is
+exactly why the mismatch was worth failing on instead of guessing. To regenerate a key, delete its
+line rather than blanking it.
 
 ### Security Notes
 

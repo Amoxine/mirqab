@@ -181,10 +181,24 @@ assert_strict_env_lines() {
     loose=$(grep -nE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$env_file" || true)
     [ -n "$loose" ] || continue
     offender=$(printf '%s\n' "$loose" | grep -vE "^[0-9]+:${key}=([^[:space:]'\"][^[:space:]]*)?$" || true)
-    [ -n "$offender" ] || continue
-    line_no=${offender%%$'\n'*}
-    line_no=${line_no%%:*}
-    fail "infra/.env line ${line_no}: ${key} is set in a form install.sh cannot read (an \`export\` prefix, leading whitespace, spaces around \`=\`, quotes, or a trailing space or CR). Normalise it to ${key}=value — left as is, the secret would be treated as missing and regenerated, silently replacing the one your stack is already using."
+    if [ -n "$offender" ]; then
+      line_no=${offender%%$'\n'*}
+      line_no=${line_no%%:*}
+      fail "infra/.env line ${line_no}: ${key} is set in a form install.sh cannot read (an \`export\` prefix, leading whitespace, spaces around \`=\`, quotes, or a trailing space or CR). Normalise it to ${key}=value — left as is, the secret would be treated as missing and regenerated, silently replacing the one your stack is already using."
+    fi
+
+    # Present but EMPTY. The reader skips it as absent and mints a value, which reaches the derived
+    # apps/*/.env.local files — but the writer below leaves the empty line alone, because the key
+    # does exist. The two files would then disagree: compose rejects the empty `${VAR:?}` loudly, so
+    # nothing is silent, but the error points at the wrong thing.
+    #
+    # Judged on the LAST occurrence, the same rule the reader and compose both use, so an empty line
+    # followed by a real one is fine rather than a false alarm.
+    last=$(printf '%s\n' "$loose" | tail -n 1)
+    if [ -z "${last#*"${key}="}" ]; then
+      line_no=${last%%:*}
+      fail "infra/.env line ${line_no}: ${key} is empty. Delete the line to have install.sh regenerate it, or set a value."
+    fi
   done
   return 0
 }
