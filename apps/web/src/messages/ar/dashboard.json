@@ -84,6 +84,9 @@
     "pageOf": "الصفحة {page} من {totalPages}",
     "totalCount": "(الإجمالي {count})",
     "previous": "السابق",
-    "next": "التالي"
+    "next": "التالي",
+    "viewMode": "وضع العرض",
+    "tableView": "عرض جدولي",
+    "cardView": "عرض البطاقات"
   }
 }

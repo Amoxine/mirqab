@@ -84,6 +84,9 @@
     "pageOf": "Page {page} sur {totalPages}",
     "totalCount": "({count} au total)",
     "previous": "Précédent",
-    "next": "Suivant"
+    "next": "Suivant",
+    "viewMode": "Mode d'affichage",
+    "tableView": "Vue tableau",
+    "cardView": "Vue cartes"
   }
 }

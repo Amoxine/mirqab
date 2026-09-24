@@ -1,12 +1,101 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { flexRender, type Table as ReactTable } from '@tanstack/react-table';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, LayoutGrid, Table2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+/**
+ * FROZEN AT WP17. This is the contract later work packages build on, so what "frozen" means is
+ * spelled out rather than implied:
+ *
+ *   FROZEN — will not change shape without its own work package:
+ *     • the `ViewMode` union is exactly `'table' | 'card'`; no third member is added silently
+ *     • `useViewMode(storageKey)` returns exactly `[mode, setMode]`, in that order
+ *     • `<ViewModeToggle mode onChange />` — those three props, those names
+ *     • `<DataTable renderCard />` is OPTIONAL; omitting it keeps a table-only component, so every
+ *       existing caller compiles untouched
+ *     • persistence is per `storageKey`, so two pages never share a preference
+ *
+ *   NOT frozen — free to change:
+ *     • the markup and classes either component renders
+ *     • the storage mechanism behind `useViewMode` (localStorage today)
+ *     • anything else in this file
+ *
+ * A later WP wanting a third view adds its own component rather than widening this union, because
+ * every `renderCard` caller would otherwise have to handle a mode it was never written for.
+ */
+export type ViewMode = 'table' | 'card';
+
+/**
+ * Remembered table/card preference, per page.
+ *
+ * Reads on mount rather than during render: the server render has no localStorage, and seeding
+ * state from it directly would make the first client render disagree with the server's HTML and
+ * trip a hydration mismatch. Every access is guarded — Safari in private mode throws on
+ * `localStorage` rather than returning null, and a table that cannot render because of a remembered
+ * preference is a worse failure than forgetting the preference.
+ */
+export function useViewMode(storageKey: string): [ViewMode, (mode: ViewMode) => void] {
+  const [mode, setModeState] = useState<ViewMode>('table');
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored === 'table' || stored === 'card') setModeState(stored);
+    } catch {
+      // No stored preference available; the default stands.
+    }
+  }, [storageKey]);
+
+  const setMode = useCallback(
+    (next: ViewMode) => {
+      setModeState(next);
+      try {
+        window.localStorage.setItem(storageKey, next);
+      } catch {
+        // Preference is not persisted; the current view still changes.
+      }
+    },
+    [storageKey],
+  );
+
+  return [mode, setMode];
+}
+
+/** Table/card switch. Pure presentation — the caller owns the state, via `useViewMode` or its own. */
+export function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
+  const t = useTranslations('dashboard.dataTable');
+  return (
+    <div className="inline-flex rounded-md border" role="group" aria-label={t('viewMode')}>
+      <Button
+        type="button"
+        variant={mode === 'table' ? 'secondary' : 'ghost'}
+        size="sm"
+        aria-pressed={mode === 'table'}
+        title={t('tableView')}
+        onClick={() => { onChange('table'); }}
+      >
+        <Table2 className="h-4 w-4" />
+        <span className="sr-only">{t('tableView')}</span>
+      </Button>
+      <Button
+        type="button"
+        variant={mode === 'card' ? 'secondary' : 'ghost'}
+        size="sm"
+        aria-pressed={mode === 'card'}
+        title={t('cardView')}
+        onClick={() => { onChange('card'); }}
+      >
+        <LayoutGrid className="h-4 w-4" />
+        <span className="sr-only">{t('cardView')}</span>
+      </Button>
+    </div>
+  );
+}
 
 interface DataTableProps<TData> {
   table: ReactTable<TData>;
@@ -16,6 +105,10 @@ interface DataTableProps<TData> {
   onRetry?: () => void;
   emptyMessage: string;
   skeletonRows?: number;
+  /** Current view. Omit for table-only, which is what every pre-WP17 caller gets. */
+  viewMode?: ViewMode;
+  /** Card renderer for one row. Required to use `viewMode: 'card'`; without it the table renders. */
+  renderCard?: (row: TData) => ReactNode;
 }
 
 /**
@@ -31,6 +124,8 @@ export function DataTable<TData>({
   onRetry,
   emptyMessage,
   skeletonRows = 5,
+  viewMode = 'table',
+  renderCard,
 }: DataTableProps<TData>) {
   const columnCount = table.getAllColumns().length;
   const rows = table.getRowModel().rows;
@@ -79,6 +174,18 @@ export function DataTable<TData>({
           {emptyMessage}
         </TableCell>
       </TableRow>
+    );
+  }
+
+  // Card mode only applies to real rows: loading, error and empty are one shared presentation, and
+  // duplicating them per view is how the two drift apart.
+  if (viewMode === 'card' && renderCard && !isLoading && !isError && rows.length > 0) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.id}>{renderCard(row.original)}</div>
+        ))}
+      </div>
     );
   }
 

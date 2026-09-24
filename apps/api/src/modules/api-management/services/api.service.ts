@@ -36,7 +36,8 @@ import {
   readConfig,
   type ApiVersionChild,
 } from './tyk-mappers';
-import type { NodeOutcome } from '../../tyk-integration/services/tyk-client.service';
+import type { NodeOutcome, TykDebugResult } from '../../tyk-integration/services/tyk-client.service';
+import type { DebugRequestDto } from '../dto/debug-request.dto';
 import { ReconcileService, type SyncState } from './reconcile.service';
 
 export interface PaginatedResult<T> {
@@ -135,6 +136,16 @@ function toJsonObject(config: ApiConfigDto): Prisma.InputJsonObject {
 
 
 
+
+/** Shape `POST /tyk/debug` wants for the sample request itself. */
+function buildDebugRequest(dto: DebugRequestDto): Record<string, unknown> {
+  return {
+    method: dto.method,
+    path: dto.path,
+    ...(dto.headers ? { headers: dto.headers } : {}),
+    ...(dto.body === undefined ? {} : { body: dto.body }),
+  };
+}
 
 /**
  * Message stored in `syncError` and returned to the UI. `TykClientService` already turns gateway
@@ -702,6 +713,30 @@ export class ApiService {
     const apiDef = await this.findRow(id, tenantId);
     const { row, nodes } = await this.syncToTykWithNodes(apiDef);
     return { detail: toApiDetail(row), nodes };
+  }
+
+  /**
+   * Run a sample request against this API's own definition and return what the gateway saw.
+   *
+   * The definition is rebuilt from the stored row rather than accepted from the caller, so a test
+   * request can only ever exercise an upstream this API is already configured for — or the one
+   * `targetUrl` override, which carries the same SSRF deny list and is rejected with 400 before
+   * anything is sent.
+   */
+  async debugRequest(id: string, tenantId: string, dto: DebugRequestDto): Promise<TykDebugResult> {
+    const apiDef = await this.findRow(id, tenantId);
+    const tenant = await loadTenantScope(apiDef.tenantId);
+    const signingKey = await this.oauthSigningKey(apiDef.authType);
+
+    // The override only changes where THIS test points; the stored row is untouched.
+    const effective = dto.targetUrl ? { ...apiDef, proxyUrl: dto.targetUrl } : apiDef;
+
+    const payload =
+      apiDef.defFormat === ApiDefFormat.OAS
+        ? { request: buildDebugRequest(dto), oas: mapToTykOas(effective, tenant, signingKey) }
+        : { request: buildDebugRequest(dto), spec: mapToTykFormat(effective, tenant, signingKey) };
+
+    return this.tykClient.debug(payload);
   }
 
   /**

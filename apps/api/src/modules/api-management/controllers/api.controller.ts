@@ -19,7 +19,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { ApiService, ApiDetail, PaginatedResult } from '../services/api.service';
-import type { NodeOutcome } from '../../tyk-integration/services/tyk-client.service';
+import type { NodeOutcome, TykDebugResult } from '../../tyk-integration/services/tyk-client.service';
+import { DebugRequestDto } from '../dto/debug-request.dto';
 import type { SyncState } from '../services/reconcile.service';
 import { CreateApiDto } from '../dto/create-api.dto';
 import { UpdateApiDto } from '../dto/update-api.dto';
@@ -157,6 +158,26 @@ export class ApiManagementController {
     if (nodes.some((n) => !n.ok)) res.status(HttpStatus.MULTI_STATUS);
 
     return { ...detail, nodes };
+  }
+
+  @Post(':id/debug')
+  @Permissions('api:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Run a sample request against this API and return what the gateway saw',
+    description:
+      "The definition is rebuilt server-side from the stored row — a caller cannot supply one. The " +
+      'optional `targetUrl` override carries the same SSRF deny list as the API\'s own proxyUrl, so a ' +
+      'denied host is rejected with 400 before anything is sent. The gateway admin secret is ' +
+      'redacted from the response and never reaches the browser.',
+  })
+  @ApiResponse({ status: 400, description: 'The target host is on the SSRF deny list' })
+  async debug(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+    @Body() dto: DebugRequestDto,
+  ): Promise<{ success: true; data: TykDebugResult }> {
+    return { success: true, data: await this.apiService.debugRequest(id, tenantId, dto) };
   }
 
   @Post(':id/cache/invalidate')

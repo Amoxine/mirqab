@@ -120,6 +120,27 @@ const CIRCUIT_NAME = 'tyk';
  */
 export const tykCacheKeyPattern = (tykApiId: string): string => `cache-${tykApiId}*`;
 
+/** What `POST /tyk/debug` answers with: the upstream response plus the gateway's own log lines. */
+export interface TykDebugResult {
+  response?: { code?: number; headers?: Record<string, string>; body?: string };
+  logs?: { mw?: string; msg?: string; level?: string }[];
+  [key: string]: unknown;
+}
+
+/**
+ * Remove anything that must not reach a browser.
+ *
+ * The admin secret is the one that matters: this process authenticates to Tyk with it, Tyk echoes
+ * request context into its debug logs, and the whole point of this endpoint is to hand that output
+ * to the Designer UI. A redaction pass here is cheaper than trusting every future field Tyk adds.
+ */
+export function stripSecrets<T>(value: T, secret: string): T {
+  if (!secret) return value;
+  const json = JSON.stringify(value);
+  if (!json.includes(secret)) return value;
+  return JSON.parse(json.split(secret).join('[redacted]')) as T;
+}
+
 /** Result of one node's participation in a fan-out write. Never throws; failure is a value. */
 export interface NodeOutcome<T = unknown> {
   nodeUrl: string;
@@ -329,6 +350,24 @@ export class TykClientService {
 
     if (dropped === 0) this.logger.debug(`No cached responses held for ${apiId}`);
     return dropped;
+  }
+
+  /**
+   * Run a sample request against a definition via `POST /tyk/debug` and return what the gateway saw.
+   *
+   * Single node, not a fan-out: this is a diagnostic, and running it on three nodes would make
+   * three real upstream calls to answer one question.
+   *
+   * The response is SANITISED before it leaves this method. Tyk echoes its own logs back, and this
+   * process holds the admin secret — so the raw body is never returned to a caller. See
+   * `stripSecrets`.
+   */
+  async debug(payload: Record<string, unknown>): Promise<TykDebugResult> {
+    const raw = await this.request<TykDebugResult>('/debug', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return stripSecrets(raw, this.adminKey);
   }
 
   /** Read a definition from one specific node — the drift check's per-node fetch. */
