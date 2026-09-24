@@ -7,23 +7,44 @@
 # infra/docker-compose*.yml, and the first person to trust the wrong one finds out in production.
 # If Kubernetes is ever adopted it is an owner decision that revisits O1 — and deletes this file in
 # the same commit, which is exactly the visible moment this guard exists to create.
+#
+# NO DEPTH LIMIT, deliberately. The first version capped `find` at -maxdepth 2/3, which sounded
+# careful and made the guard trivially evadable — `deploy/charts/app/Chart.yaml`, `infra/charts/`,
+# `a/b/c/k8s/` and `deploy/overlays/prod/kustomization.yaml` all sailed past it (found by worker-3).
+# A guard with a depth limit only catches the tidy case, which is not the case worth catching. The
+# prune list below is what keeps it fast, and it is about directories that are not ours to police.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 fail=0
 
-# Directories, at the repo root and one level down — the two places a chart actually lands.
+# Everything under here is either not source or not ours: vendored deps, VCS internals, build
+# output. `-prune` stops find descending rather than filtering after the fact, which is what makes
+# an unbounded search cheap.
+prune=(
+  -name node_modules -o
+  -name .git -o
+  -name .next -o
+  -name dist -o
+  -name .turbo -o
+  -name coverage
+)
+
+# Directory names that mean Kubernetes, at ANY depth. `charts` is included because a Helm chart is
+# far more often dropped in a `charts/` directory than in one called `helm/`.
 while IFS= read -r dir; do
   echo "::error file=$dir::$dir exists; this repo is Compose-only (O1). Helm/Kustomize were removed in WP12b."
   fail=1
-done < <(find . -maxdepth 2 -type d \( -name helm -o -name k8s -o -name kubernetes -o -name kustomize \) \
-  -not -path './node_modules/*' -not -path './.git/*' | sort)
+done < <(find . \( "${prune[@]}" \) -prune -o \
+  -type d \( -name helm -o -name k8s -o -name kubernetes -o -name kustomize -o -name charts \) -print | sort)
 
-# Kustomize needs no directory of its own: a bare kustomization.yaml anywhere is the same decision.
+# The filenames are unique enough to search for on their own, and a chart or overlay can live in a
+# directory called anything at all — `deploy/overlays/prod/kustomization.yaml` names no directory
+# the list above would catch.
 while IFS= read -r file; do
   echo "::error file=$file::$file exists; this repo is Compose-only (O1)."
   fail=1
-done < <(find . -maxdepth 3 -type f \( -name 'kustomization.yaml' -o -name 'kustomization.yml' -o -name 'Chart.yaml' \) \
-  -not -path './node_modules/*' -not -path './.git/*' | sort)
+done < <(find . \( "${prune[@]}" \) -prune -o \
+  -type f \( -name 'kustomization.yaml' -o -name 'kustomization.yml' -o -name 'Chart.yaml' -o -name 'Chart.yml' \) -print | sort)
 
 exit "$fail"

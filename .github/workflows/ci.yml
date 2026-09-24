@@ -62,21 +62,27 @@ jobs:
       # that guards the workflows cannot itself be the softest way in. The release archive is now
       # pinned by version AND verified by checksum before anything from it executes.
       #
-      # To bump: take the new version's line from
-      # https://github.com/rhysd/actionlint/releases/download/v<VER>/actionlint_<VER>_checksums.txt
+      # It runs from the official image, PINNED BY DIGEST, rather than a downloaded binary — and
+      # that choice is the fix for a defect this step shipped with. actionlint runs shellcheck on
+      # every `run:` block whenever shellcheck is on PATH. It is on ubuntu-latest and it was not on
+      # either machine that reviewed this workflow, so a local `actionlint` exited 0 while CI's
+      # first step would have gone red on SC2016 (found by worker-3's independent pass, not by us).
+      # A downloaded binary leaves shellcheck runner-provided and unpinned, which is both a second
+      # unpinned tool in the supply chain and the exact reason local and CI disagreed. The image
+      # carries both at fixed versions, so `docker run … rhysd/actionlint@sha256:…` reproduces CI
+      # byte for byte on any machine — run that before touching a workflow file.
+      #
+      # To bump: pull the new tag, then take its digest from
+      #   docker buildx imagetools inspect rhysd/actionlint:<VER> --format '{{.Manifest.Digest}}'
       - name: actionlint
         shell: bash
         env:
-          ACTIONLINT_VERSION: 1.7.12
-          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          # rhysd/actionlint:1.7.12 — the version stays in the tag for readability; the digest is
+          # what Docker resolves, and a tag can be repushed.
+          ACTIONLINT_IMAGE: rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
         run: |
           set -euo pipefail
-          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -fsSLo "$archive" \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
-          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
-          tar -xzf "$archive" actionlint
-          ./actionlint -color
+          docker run --rm -v "$PWD:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -color
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

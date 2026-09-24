@@ -144,15 +144,24 @@ fi
 #
 # A tag is rejected even when it looks specific: `:v1.2.3` is still mutable, and this check exists
 # precisely for the case where someone repushed one.
+#
+# The digest has to be 64 HEX characters, and the length alone is not the check. This used to be a
+# `case` glob of 64 `?`s, which accepted `@sha256:zzzz…z` as a valid pin (found by worker-3) — `?`
+# matches any character, so it tested the shape and not the content. Strip every hex digit and
+# require nothing to be left, the same way the whitespace check above works: no 64-way glob to
+# miscount and no dependency on a regex engine this `sh` may not have.
 case "$EDGE_IMAGE" in
   '')
     bad "EDGE_IMAGE is unset — the prod overlay needs a digest-pinned edge image (see infra/edge/README.md)"
     ;;
-  *@sha256:????????????????????????????????????????????????????????????????)
-    ok "EDGE_IMAGE is digest-pinned"
-    ;;
   *@sha256:*)
-    bad "EDGE_IMAGE has a malformed sha256 digest: $EDGE_IMAGE"
+    _digest=${EDGE_IMAGE##*@sha256:}
+    _nonhex=$(printf '%s' "$_digest" | tr -d '0-9a-f')
+    if [ "${#_digest}" -eq 64 ] && [ -z "$_nonhex" ]; then
+      ok "EDGE_IMAGE is digest-pinned"
+    else
+      bad "EDGE_IMAGE has a malformed sha256 digest (need 64 hex characters, got ${#_digest}): $EDGE_IMAGE"
+    fi
     ;;
   *)
     bad "EDGE_IMAGE '$EDGE_IMAGE' is a mutable tag — pin it by digest (ghcr.io/<owner>/<repo>/edge@sha256:...)"

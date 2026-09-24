@@ -570,7 +570,7 @@ Runs on every push to `main` and every pull request. Two jobs.
 
 | Step | Notes |
 | --- | --- |
-| `actionlint` | First, so a broken workflow fails before anything else runs. The binary is pinned by version **and** verified by sha256 before it executes — see below. |
+| `actionlint` | First, so a broken workflow fails before anything else runs. Runs from the official image pinned **by digest**, which carries shellcheck at a fixed version — see below. |
 | `pnpm audit --prod --audit-level=high` | Blocking since WP29b. Previously `continue-on-error`. |
 | `pnpm db:generate`, `pnpm db:migrate` | Against the service Postgres. |
 | `pnpm typecheck`, `pnpm lint` | |
@@ -585,17 +585,37 @@ job because it shares nothing with the Node pipeline and should not sit in serie
 
 It carried `continue-on-error: true` because `pnpm audit --prod` reported 34 high advisories. All 34
 were transitive and every one had a published fix, so WP29b forced the patched versions through
-`pnpm.overrides` in the root `package.json` — 34 → 0 (1 low and 5 moderate remain, below this
-threshold). A new high now turns the build red, which is the point. Fix it with an override; if one
+`pnpm.overrides` in the root `package.json` — 34 → 0.
+
+Read that claim precisely: it is **`pnpm audit --prod --audit-level=high` exits 0**, not "no
+vulnerabilities". A low and several moderates remain below this threshold, and `--prod` is doing real
+work — the full dev tree still reports criticals and highs from build-time tooling that never ships.
+Widening the gate to the dev tree is a separate decision with a different cost. A new high now turns the build red, which is the point. Fix it with an override; if one
 genuinely cannot be fixed, that is an owner decision and it belongs in a comment beside the reason,
 not behind `continue-on-error`.
 
-#### Why actionlint is downloaded the long way
+#### Why actionlint runs from a pinned image
 
 It used to be `bash <(curl -s https://raw.githubusercontent.com/.../main/scripts/download-actionlint.bash)`
-— an unpinned script from a moving branch, piped into a shell with the repository checked out. The
-job now downloads a pinned release archive and verifies its sha256 before anything from it runs. To
-bump, take the new line from that release's `checksums.txt`.
+— an unpinned script from a moving branch, piped into a shell with the repository checked out.
+
+It then briefly became a version-pinned, sha256-verified release archive, which was better but still
+wrong in a way that shipped a defect: **actionlint runs shellcheck on every `run:` block whenever
+shellcheck is on PATH.** It is on `ubuntu-latest` and it was not on the machines that reviewed the
+workflow, so a local `actionlint` exited 0 while CI's first step would have failed on SC2016. A
+downloaded binary leaves shellcheck runner-provided and unpinned — a second unpinned tool, and the
+reason local and CI disagreed.
+
+The job now runs the official image pinned by digest, which carries both at fixed versions. Reproduce
+CI exactly, on any machine, before touching a workflow file:
+
+```bash
+docker run --rm -v "$PWD:/repo:ro" -w /repo \
+  rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+```
+
+To bump: pull the new tag, then take its digest from
+`docker buildx imagetools inspect rhysd/actionlint:<VER> --format '{{.Manifest.Digest}}'`.
 
 ### CD — staging (`.github/workflows/cd-staging.yml`)
 
@@ -619,11 +639,26 @@ the infrastructure below, and a CD job that fails on every push is a red build e
 ignore — which is how the health check this replaced came to be an `echo`. When the variable is not
 set the run states that images were published and no deployment ran.
 
-#### Repository variable
+#### Repository variables
+
+Variables rather than secrets: these are public URLs that end up inside a client bundle anyone can
+read, and `vars` keeps them visible in the run log where a wrong one is diagnosable.
 
 | Variable | Value |
 | --- | --- |
 | `STAGING_DEPLOY` | `true` to enable the deploy job. Anything else publishes images only. |
+| `STAGING_API_URL` | e.g. `https://staging.example.com/api` |
+| `STAGING_KRATOS_URL` | e.g. `https://staging.example.com:33012` |
+| `STAGING_HYDRA_URL` | e.g. `https://staging.example.com:33010` |
+| `STAGING_APP_URL` | e.g. `https://staging.example.com` — also what the health check probes |
+| `STAGING_GATEWAY_URL` | e.g. `https://staging.example.com:33005` |
+
+The five URL variables are passed as **build args** to the web image. `NEXT_PUBLIC_*` values are
+inlined into the client bundle at build time and are **not** read when the container starts, so
+setting them in compose on the staging host does nothing. Left unset, the image ships
+`apps/web/Dockerfile`'s localhost defaults and every visitor's browser calls *their own* machine —
+which is why the health check now fetches the app and fails if a localhost URL is baked into what
+it served.
 
 #### Secrets
 
@@ -663,13 +698,13 @@ docker buildx imagetools inspect ghcr.io/<owner>/<repo>/edge:<tag> --format '{{.
 
 | Artifact | Pin | Where |
 | --- | --- | --- |
-| Caddy base images (builder + runtime) | **digest** | `infra/edge/Dockerfile` |
+| Caddy base images (builder + runtime) | **index digest**, not a per-platform one | `infra/edge/Dockerfile` |
 | Caddy version compiled by xcaddy | `v2.11.4` | `infra/edge/Dockerfile` |
 | `coraza-caddy` | `v2.6.1` — never float it, earlier releases stall SSE and WebSocket | `infra/edge/Dockerfile` |
 | OWASP CRS ruleset | `coraza-coreruleset/v4 v4.25.0` — previously arrived transitively and was unnamed | `infra/edge/Dockerfile` |
 | The built edge image | **digest**, required, tag refused | `infra/docker-compose.prod.yml` + `infra/scripts/prod-preflight.sh` |
 | web / api images | digest when CD sets them, local build otherwise | `infra/docker-compose.prod.yml` |
-| `actionlint` | version + sha256 | `.github/workflows/ci.yml` |
+| `actionlint` + shellcheck | image digest | `.github/workflows/ci.yml` |
 | npm dependency tree | `pnpm-lock.yaml` + `pnpm.overrides` | root `package.json` |
 
 The edge Dockerfile asserts its own pins at build time (`caddy build-info` greps), so a pin that
