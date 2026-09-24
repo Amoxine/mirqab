@@ -37,9 +37,17 @@
 		format json
 	}
 
-	# WP20: the per-rule WAF detections get a second sink — a file on a volume the otel-collector
-	# tails (`filelog` -> `count` -> Prometheus, observability/otel-collector.yaml). They keep going
-	# to stdout too, so `docker compose logs edge` is unchanged.
+	# WP20: the per-rule WAF detections are MOVED to a file on a volume the otel-collector tails
+	# (`filelog` -> `count` -> Prometheus, observability/otel-collector.yaml).
+	#
+	# Moved, not copied — `include` takes a logger away from the default log rather than teeing it.
+	# Measured on this build: `docker compose logs edge` carries ZERO "http.handlers.waf" lines
+	# (0 over 15 minutes while 71 KB accumulated in waf.log). That is the one thing to know before
+	# debugging the WAF from container logs, because the stdout that remains is the per-transaction
+	# AUDIT record only, which names no rule id in its own `msg` — so a WAF that is detecting
+	# normally looks, from `docker compose logs edge` alone, exactly like a WAF that has stopped.
+	# Read /var/log/caddy/waf.log (or the `coraza_rule_detections_total` counter) instead:
+	#   docker run --rm -v opengatewayinfrastructure_edge_logs:/d alpine tail -f /d/waf.log
 	#
 	# `mode 0644` is load-bearing: Caddy writes log files 0600 by default and the collector runs as
 	# a different uid, so without it the tail fails with EACCES and the block-rate counter silently
@@ -100,11 +108,19 @@
 		#     severity critical) and 949110 (Inbound Anomaly Score Exceeded) while STILL
 		#     returning 200, because the engine is DetectionOnly. This is the feed to scrape.
 		#
-		#   - The AUDIT record below is the per-transaction envelope. In "json" format this
-		#     build emits "messages": null and an empty "highest_severity" even for a
-		#     transaction it interrupted; the rule detail only survives in "native" format. So
-		#     the audit record is good for "is_interrupted" once blocking is on, and useless
-		#     for rule ids — do not build WP20's block-rate counter on its "messages" field.
+		#   - The AUDIT record below is the per-transaction envelope, and it still goes to
+		#     stdout. CORRECTED at WP20 by a same-transaction capture of both sinks on this
+		#     build: its "messages" is NOT null. It is a populated array, one entry per matched
+		#     rule; what is empty is each entry's "message" field and the top-level
+		#     "highest_severity", while the rule id lives in the entry's "error_message"
+		#     ([id "942100"], [id "949110"]). "is_interrupted" is false, correctly, because the
+		#     engine is DetectionOnly.
+		#
+		#     So the counter COULD have been built here. It is built on the per-rule logger
+		#     above anyway, and that is still the right choice: one flat line per rule beats
+		#     digging a rule id out of a nested array inside a multi-KB envelope, and it is what
+		#     the collector's filelog+regex pipeline consumes. Note "SecAuditLogParts" below
+		#     decides what the envelope carries, so dropping a part can empty it again.
 		SecAuditEngine RelevantOnly
 		SecAuditLogType Serial
 		SecAuditLog /dev/stdout
