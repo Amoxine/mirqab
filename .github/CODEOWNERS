@@ -20,9 +20,10 @@
 /packages/database/        @team/backend-leads
 
 # Infrastructure
+# Compose-only (owner decision O1). The /helm/ and /k8s/ entries that used to sit here outlived the
+# directories WP12b deleted, and an ownership line for a path that does not exist reads as an
+# invitation to recreate it. infra/scripts/check-no-k8s.sh fails CI if one comes back.
 /infra/                    @team/devops-leads
-/helm/                     @team/devops-leads
-/k8s/                      @team/devops-leads
 
 # CI/CD
 /.github/                  @team/devops-leads

@@ -30,6 +30,7 @@ ok() { echo "ok    $*"; }
 : "${REDIS_PASSWORD:=}"
 : "${DB_PASS:=}"
 : "${TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING:=}"
+: "${EDGE_IMAGE:=}"
 : "${KRATOS_PUBLIC_URL:=http://kratos:4433}"
 : "${DEFAULT_ADMIN_EMAIL:=admin@opengateway.io}"
 : "${DEFAULT_ADMIN_PASSWORD:=Admin123!}"
@@ -110,7 +111,30 @@ if [ -r /pump.conf ] && grep -qE '"connection_string": *"[^"]*password=[^ "]' /p
   bad "infra/pump/pump.conf has a password baked into connection_string — that file is committed"
 fi
 
-# ── 5. The seeded default administrator ────────────────────────────────────────
+# ── 5. The edge image is digest-pinned ─────────────────────────────────────────
+# The edge is the only SELF-COMPILED artifact in the stack (infra/edge/Dockerfile), so it is the
+# only image whose contents are decided here rather than by an upstream publisher — and the one
+# place where "the tag we deployed last week" and "the tag we deploy today" can differ with nothing
+# in any diff to show it. A digest is content-addressed and cannot.
+#
+# A tag is rejected even when it looks specific: `:v1.2.3` is still mutable, and this check exists
+# precisely for the case where someone repushed one.
+case "$EDGE_IMAGE" in
+  '')
+    bad "EDGE_IMAGE is unset — the prod overlay needs a digest-pinned edge image (see infra/edge/README.md)"
+    ;;
+  *@sha256:????????????????????????????????????????????????????????????????)
+    ok "EDGE_IMAGE is digest-pinned"
+    ;;
+  *@sha256:*)
+    bad "EDGE_IMAGE has a malformed sha256 digest: $EDGE_IMAGE"
+    ;;
+  *)
+    bad "EDGE_IMAGE '$EDGE_IMAGE' is a mutable tag — pin it by digest (ghcr.io/<owner>/<repo>/edge@sha256:...)"
+    ;;
+esac
+
+# ── 6. The seeded default administrator ────────────────────────────────────────
 # Behavioural, not a grep, and deliberately so. The seed's bcrypt hash is COPIED into Kratos as
 # `hashed_password` (README, migrate-users-to-kratos.ts), so the credential that actually signs in
 # lives in Kratos and a grep of the `users` table would both miss a Kratos-only change and flag a

@@ -12,12 +12,31 @@ env:
   REGISTRY: ghcr.io
   IMAGE_WEB: ${{ github.repository }}/web
   IMAGE_API: ${{ github.repository }}/api
+  IMAGE_EDGE: ${{ github.repository }}/edge
+
+# Read the repo, write packages. Spelled out because the default for a workflow token is broader
+# than this job needs, and `packages: write` is the one capability that can publish an artifact the
+# staging host will then execute.
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  deploy-staging:
-    name: Deploy to Staging
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Build and publish, emitting each image's DIGEST rather than only a tag.
+  #
+  # The digests are what the deploy job hands the host: a tag can be repushed between this job and
+  # the next, and `infra/docker-compose.prod.yml` requires the edge by digest for exactly that
+  # reason (prod-preflight refuses a tag).
+  build:
+    name: Build and publish images
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+
+    outputs:
+      web: ${{ steps.web.outputs.digest }}
+      api: ${{ steps.api.outputs.digest }}
+      edge: ${{ steps.edge.outputs.digest }}
 
     steps:
       - name: Checkout
@@ -46,6 +65,9 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to Container Registry
         uses: docker/login-action@v3
         with:
@@ -54,6 +76,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Web image
+        id: web
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -64,6 +87,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push API image
+        id: api
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -73,11 +97,145 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # TODO: Add deployment step to staging (Compose-only, O1 — no Helm/K8s in this repo):
-      # - ssh the staging host and `docker compose -f infra/docker-compose.yml pull && up -d`
-      # - or a Compose-aware host (e.g. a Swarm/Nomad job) that pulls the tags just pushed above
+      # WP29b: the edge is built and published HERE rather than on a developer's laptop. It is the
+      # only self-compiled artifact in the stack (infra/edge/Dockerfile pins Caddy, coraza-caddy and
+      # the CRS ruleset, and asserts all three at build time), and its digest is what
+      # infra/docker-compose.prod.yml requires.
+      - name: Build and push Edge image
+        id: edge
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/edge
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_EDGE }}:staging-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Health check
+      - name: Record published digests
         run: |
-          echo "Add health check for staging deployment"
-          # curl -f https://staging.open-gateway.example.com/api/health
+          {
+            echo "### Published images"
+            echo ''
+            echo '| image | digest |'
+            echo '| --- | --- |'
+            echo "| web | \`${{ steps.web.outputs.digest }}\` |"
+            echo "| api | \`${{ steps.api.outputs.digest }}\` |"
+            echo "| edge | \`${{ steps.edge.outputs.digest }}\` |"
+            echo ''
+            echo 'For a manual deploy, set in the host'"'"'s infra/.env:'
+            echo ''
+            echo '```'
+            echo "EDGE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_EDGE }}@${{ steps.edge.outputs.digest }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────────────────────────────
+  # Deploy to the staging host over SSH and prove it came back up.
+  #
+  # Gated on `vars.STAGING_DEPLOY == 'true'` rather than running unconditionally. Every secret below
+  # is repo-specific infrastructure that a fork or a fresh clone does not have, and a CD job that
+  # fails on every push to main is a red build everyone learns to ignore — which is how the health
+  # check this replaces came to be an `echo` in the first place. Setting the variable is the
+  # explicit statement that the secrets exist.
+  #
+  # Required (documented in docs/deployment.md § "CD — staging"):
+  #   vars.STAGING_DEPLOY        'true' to enable this job
+  #   secrets.STAGING_SSH_HOST   hostname or IP of the staging host
+  #   secrets.STAGING_SSH_USER   user with permission to run docker compose there
+  #   secrets.STAGING_SSH_KEY    private key, PEM, no passphrase
+  #   secrets.STAGING_KNOWN_HOSTS  `ssh-keyscan <host>` output — NOT optional, see below
+  #   secrets.STAGING_PATH       absolute path to the checkout on that host
+  #   secrets.STAGING_HEALTH_URL e.g. https://staging.example.com/api/health
+  deploy:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.STAGING_DEPLOY == 'true'
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # No third-party action for this: a deploy key with write access to the staging host is the
+      # most valuable secret in the repository, and every extra action in the path is another
+      # publisher who could reach it. `ssh` and `install` are already on the runner.
+      #
+      # StrictHostKeyChecking stays ON and known_hosts is a required secret. `accept-new` would
+      # make the very first connection — the one an attacker would race — trust whatever answered.
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # Pull by DIGEST, not by the tag just pushed. Between the build job and this one the tag could
+      # have been repushed; the digest names the exact bytes CI tested.
+      #
+      # `pull` before `up` so an image that cannot be fetched fails while the old stack is still
+      # serving, rather than half way through a recreate.
+      - name: Deploy
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          REMOTE_PATH: ${{ secrets.STAGING_PATH }}
+          DEPLOY_SHA: ${{ github.sha }}
+          WEB_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_WEB }}@${{ needs.build.outputs.web }}
+          API_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_API }}@${{ needs.build.outputs.api }}
+          EDGE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_EDGE }}@${{ needs.build.outputs.edge }}
+        run: |
+          set -euo pipefail
+          # The body lives in infra/scripts/deploy-staging.sh and is piped in, so the same steps run
+          # for a manual deploy and are reviewed like any other code. Values are passed as
+          # environment assignments on the remote command line, single-quoted, so a digest or path
+          # cannot turn into a command on the far side.
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "REMOTE_PATH='$REMOTE_PATH' DEPLOY_SHA='$DEPLOY_SHA' WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' EDGE_IMAGE='$EDGE_IMAGE' bash -s" \
+            < infra/scripts/deploy-staging.sh
+
+      # A real probe with a real failure. `--fail` turns a 5xx into a non-zero exit, and the retry
+      # loop covers the window where the containers are up but the API has not finished booting —
+      # without it this races the deploy and reports whichever side won.
+      - name: Health check
+        env:
+          HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 "$HEALTH_URL" > /tmp/health.json; then
+              echo "healthy after ${attempt} attempt(s):"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "attempt ${attempt}: not healthy yet"
+            sleep 5
+          done
+          echo "::error::staging did not become healthy within 150s of the deploy" >&2
+          exit 1
+
+  # A push to main that does NOT deploy says so, once, instead of leaving an empty CD run that
+  # looks like a successful deployment to anyone scanning the Actions tab.
+  deploy-skipped:
+    name: Deploy to staging (not configured)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.STAGING_DEPLOY != 'true'
+    steps:
+      - name: Explain
+        run: |
+          {
+            echo '### Staging deploy skipped'
+            echo ''
+            echo 'Images were built and published, but no deployment ran:'
+            echo '`vars.STAGING_DEPLOY` is not `true` for this repository.'
+            echo ''
+            echo 'See docs/deployment.md § "CD — staging" for the variable and the six secrets'
+            echo 'the deploy job needs.'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -13,6 +13,7 @@
 #   REDIS_PASSWORD   openssl rand -hex 32
 #   TYK_GW_SECRET    openssl rand -hex 32 — the committed default is rejected
 #   DB_PASS          already required by the base file
+#   EDGE_IMAGE       the digest-pinned edge image CD last published (WP29b); a tag is rejected
 # and the seeded admin@opengateway.io / Admin123! login must no longer work.
 
 services:
@@ -35,6 +36,9 @@ services:
       # The exact string the pump is handed in the base file, so the check tests what the pump gets
       # rather than what this file hopes it gets.
       TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING: "host=postgres port=5432 user=opengateway password=${DB_PASS:-} dbname=opengateway sslmode=disable"
+      # WP29b: checked here rather than only by the `:?` on the edge service below, so the failure
+      # reads as one preflight line among the others instead of a compose interpolation error.
+      EDGE_IMAGE: ${EDGE_IMAGE:-}
       KRATOS_PUBLIC_URL: http://kratos:4433
     volumes:
       - ./scripts/prod-preflight.sh:/preflight.sh:ro
@@ -99,15 +103,42 @@ services:
     environment:
       TYK_PMP_ANALYTICSSTORAGECONFIG_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
 
-  # ─── Edge: front all three gateway nodes ───────────────
-  # The base file's default is the single `tyk-gateway`, because the other two do not exist without
-  # --profile multinode and Caddy would round-robin a third of the data plane into a dead name.
+  # ─── Edge: digest-pinned image, fronting all three gateway nodes ───────────────
+  # `image` overrides the base file's locally-built `open-gateway-edge:wp26b`. The base file's
+  # `build:` stanza is still inherited — a compose overlay cannot remove one — and compose does
+  # still attempt a build when the pull fails. That is not a hole, and the reason is worth stating
+  # because it is the whole basis of this pin: a locally built image cannot be tagged with a
+  # digest, so it can never satisfy a `@sha256:` reference. Verified by pointing this at a digest
+  # that does not exist — the pull 403s, the build runs, and the `up` then fails with
+  # "No such image: ...@sha256:...". Prod either gets exactly the bytes the digest names or it does
+  # not start.
+  #
+  # `pull_policy: always` is belt-and-braces rather than the guarantee: a digest is
+  # content-addressed, so a local copy of that digest is already the same bytes.
+  #
+  # `:?` rather than a committed default digest, deliberately. A default would be a digest produced
+  # on one machine at one moment, and the honest value is whatever CD last published — so the
+  # deployment states it and `prod-preflight` refuses anything that is not a sha256 digest. CD
+  # writes it into the staging host's .env from the build it just pushed; for a manual deploy:
+  #   docker buildx imagetools inspect ghcr.io/<owner>/<repo>/edge:<tag> --format '{{.Manifest.Digest}}'
   edge:
+    image: ${EDGE_IMAGE:?set EDGE_IMAGE to a digest-pinned edge image (ghcr.io/<owner>/<repo>/edge@sha256:...)}
+    pull_policy: always
     environment:
       EDGE_GATEWAY_UPSTREAMS: ${EDGE_GATEWAY_UPSTREAMS:-tyk-gateway:8080 tyk-gateway-2:8080 tyk-gateway-3:8080}
 
   # ─── API ───────────────────────────────────────────────
+  # `image` added by WP29b so a CD deploy runs the artifact CI actually tested. The base file gives
+  # `api`/`web` a `build:` and no `image:`, so without this the staging host would pull nothing and
+  # rebuild from its own checkout — and the images CD published would be decoration.
+  #
+  # Unlike `edge` this keeps a local-build fallback rather than `:?`. The edge is the one image this
+  # repo compiles itself, so a floating edge is a supply-chain hole; api and web are built from the
+  # very source tree sitting on the host, so a `docker compose up` with no CD in the picture is a
+  # legitimate way to run prod and should not be blocked. Set to a digest, it pulls that digest; left
+  # unset, compose builds and tags the fallback name.
   api:
+    image: ${API_IMAGE:-open-gateway-api:local}
     environment:
       # app.module.ts reads this directly for the throttler: 100 req/min at production, 1000
       # otherwise. The preflight refuses to let the stack start if it is anything else.
@@ -123,7 +154,9 @@ services:
       prod-preflight:
         condition: service_completed_successfully
 
+  # Same reasoning as `api` above.
   web:
+    image: ${WEB_IMAGE:-open-gateway-web:local}
     environment:
       NODE_ENV: production
     depends_on:

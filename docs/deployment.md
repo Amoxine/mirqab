@@ -559,107 +559,130 @@ service:
 
 ## CI/CD Pipeline
 
-### GitHub Actions CI (`.github/workflows/ci.yml`)
+Both workflows are real files; this section describes what they do rather than restating them, so it
+cannot drift the way the Helm-based fiction that used to sit here did.
 
-Triggers on every push and pull request:
+### CI — `.github/workflows/ci.yml`
 
-```yaml
-name: CI
+Runs on every push to `main` and every pull request. Two jobs.
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+**`ci`** — Postgres 16 and Redis 7 as services, then, in order and all blocking:
 
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+| Step | Notes |
+| --- | --- |
+| `actionlint` | First, so a broken workflow fails before anything else runs. The binary is pinned by version **and** verified by sha256 before it executes — see below. |
+| `pnpm audit --prod --audit-level=high` | Blocking since WP29b. Previously `continue-on-error`. |
+| `pnpm db:generate`, `pnpm db:migrate` | Against the service Postgres. |
+| `pnpm typecheck`, `pnpm lint` | |
+| Guards | docs paths exist · locale key sets match across en/fr/ar · every dashboard page is permission-gated · **no Helm/Kustomize** (`infra/scripts/check-no-k8s.sh`) |
+| `pnpm format:check`, `pnpm test`, `pnpm build` | |
+| `pnpm --filter @open-gateway/api test:e2e` | API auth flows, no browser. |
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.4.1
+**`edge-image`** — builds `infra/edge` (xcaddy + Coraza) and asserts the pinned module set. Separate
+job because it shares nothing with the Node pipeline and should not sit in series with the tests.
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
+#### Why the audit step is blocking now
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+It carried `continue-on-error: true` because `pnpm audit --prod` reported 34 high advisories. All 34
+were transitive and every one had a published fix, so WP29b forced the patched versions through
+`pnpm.overrides` in the root `package.json` — 34 → 0 (1 low and 5 moderate remain, below this
+threshold). A new high now turns the build red, which is the point. Fix it with an override; if one
+genuinely cannot be fixed, that is an owner decision and it belongs in a comment beside the reason,
+not behind `continue-on-error`.
 
-      - name: Generate Prisma client
-        run: pnpm db:generate
+#### Why actionlint is downloaded the long way
 
-      - name: Lint
-        run: pnpm lint
+It used to be `bash <(curl -s https://raw.githubusercontent.com/.../main/scripts/download-actionlint.bash)`
+— an unpinned script from a moving branch, piped into a shell with the repository checked out. The
+job now downloads a pinned release archive and verifies its sha256 before anything from it runs. To
+bump, take the new line from that release's `checksums.txt`.
 
-      - name: Type check
-        run: pnpm typecheck
+### CD — staging (`.github/workflows/cd-staging.yml`)
 
-      - name: Test
-        run: pnpm test
+On every push to `main`, in two jobs.
 
-      - name: Build
-        run: pnpm build
+**`build`** builds and pushes three images to GHCR — web, api and **edge** — and exports each one's
+**digest** as a job output. The edge is built here rather than on a developer's laptop because it is
+the only self-compiled artifact in the stack.
+
+**`deploy`** pipes `infra/scripts/deploy-staging.sh` to the staging host over SSH. That script
+checks out the exact commit CI tested (by sha, never `pull --ff-only`), writes the three digests
+into `infra/.env`, then `docker compose … pull` followed by `up -d`. Pull before up, so an image
+that cannot be fetched fails while the previous stack is still serving.
+
+`prod-preflight` gates the `up`, so a default secret or an `EDGE_IMAGE` that is not digest-pinned
+aborts the deploy rather than warning. The health check that follows is a real `curl --fail` retried
+for up to 150 s; the job fails if staging never answers.
+
+The deploy job runs only when `vars.STAGING_DEPLOY` is `true`. A fork or a fresh clone has none of
+the infrastructure below, and a CD job that fails on every push is a red build everyone learns to
+ignore — which is how the health check this replaced came to be an `echo`. When the variable is not
+set the run states that images were published and no deployment ran.
+
+#### Repository variable
+
+| Variable | Value |
+| --- | --- |
+| `STAGING_DEPLOY` | `true` to enable the deploy job. Anything else publishes images only. |
+
+#### Secrets
+
+All are repository (or `staging` environment) secrets. `GITHUB_TOKEN` is supplied by Actions and
+needs no configuration; the workflow narrows its own permissions to `contents: read` +
+`packages: write`.
+
+| Secret | What it is | How to produce it |
+| --- | --- | --- |
+| `STAGING_SSH_HOST` | Hostname or IP of the staging host | — |
+| `STAGING_SSH_USER` | User permitted to run `docker compose` there | — |
+| `STAGING_SSH_KEY` | Private key, PEM, **no passphrase** | `ssh-keygen -t ed25519 -f deploy_key -N ""`, then append `deploy_key.pub` to that user's `~/.ssh/authorized_keys` |
+| `STAGING_KNOWN_HOSTS` | The host's public key | `ssh-keyscan <host>` — **required**, not optional: `StrictHostKeyChecking=accept-new` would trust whatever answered the first connection, which is the one worth attacking |
+| `STAGING_PATH` | Absolute path to the checkout on that host | — |
+| `STAGING_HEALTH_URL` | URL the health check polls | e.g. `https://staging.example.com/api/health` |
+
+#### Deploying by hand
+
+The same script CD uses, so a manual deploy is not an approximation of it:
+
+```bash
+REMOTE_PATH=/srv/open-gateway \
+DEPLOY_SHA=$(git rev-parse HEAD) \
+WEB_IMAGE=ghcr.io/<owner>/<repo>/web@sha256:… \
+API_IMAGE=ghcr.io/<owner>/<repo>/api@sha256:… \
+EDGE_IMAGE=ghcr.io/<owner>/<repo>/edge@sha256:… \
+  bash infra/scripts/deploy-staging.sh
 ```
 
-### CD Staging (`.github/workflows/cd-staging.yml`)
+Resolve a digest from a tag with:
 
-Triggers on merge to `main`:
-
-```yaml
-name: CD — Staging
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy-staging:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build and push Docker images
-        run: |
-          docker build -f apps/api/Dockerfile -t ghcr.io/open-gateway/api:${{ github.sha }} .
-          docker build -f apps/web/Dockerfile -t ghcr.io/open-gateway/web:${{ github.sha }} .
-          # Push to registry...
-
-      - name: Deploy to staging
-        run: |
-          helm upgrade open-gateway-staging ./infra/helm \
-            -f infra/helm/values.staging.yaml \
-            --set image.tag=${{ github.sha }} \
-            --namespace staging
-
-      - name: Health check
-        run: |
-          curl -f https://staging.open-gateway.example.com/api/health || exit 1
+```bash
+docker buildx imagetools inspect ghcr.io/<owner>/<repo>/edge:<tag> --format '{{.Manifest.Digest}}'
 ```
 
-### CD Production
+### Supply chain: what is pinned, and where
 
-Triggers on release tag or manual approval:
+| Artifact | Pin | Where |
+| --- | --- | --- |
+| Caddy base images (builder + runtime) | **digest** | `infra/edge/Dockerfile` |
+| Caddy version compiled by xcaddy | `v2.11.4` | `infra/edge/Dockerfile` |
+| `coraza-caddy` | `v2.6.1` — never float it, earlier releases stall SSE and WebSocket | `infra/edge/Dockerfile` |
+| OWASP CRS ruleset | `coraza-coreruleset/v4 v4.25.0` — previously arrived transitively and was unnamed | `infra/edge/Dockerfile` |
+| The built edge image | **digest**, required, tag refused | `infra/docker-compose.prod.yml` + `infra/scripts/prod-preflight.sh` |
+| web / api images | digest when CD sets them, local build otherwise | `infra/docker-compose.prod.yml` |
+| `actionlint` | version + sha256 | `.github/workflows/ci.yml` |
+| npm dependency tree | `pnpm-lock.yaml` + `pnpm.overrides` | root `package.json` |
 
-```yaml
-name: CD — Production
+The edge Dockerfile asserts its own pins at build time (`caddy build-info` greps), so a pin that
+stopped holding fails the build rather than a request weeks later. CI re-runs that build on every
+pull request.
 
-on:
-  push:
-    tags: ['v*']
-  workflow_dispatch:
+### No Kubernetes
 
-jobs:
-  deploy-production:
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      # Similar to staging but with production values and approvals
-```
+This repository is Compose-only (owner decision **O1**). `helm/` and `k8s/` were deleted in WP12b,
+and `infra/scripts/check-no-k8s.sh` fails CI if a chart, a `kustomization.yaml` or either directory
+reappears. This section previously documented a `helm upgrade` deploy against `infra/helm`, which
+had not existed for some time — if Kubernetes is ever adopted, that revisits O1 and deletes the
+guard in the same commit.
 
 ---
 
@@ -669,13 +692,14 @@ Before deploying to production, verify ALL items:
 
 ### Infrastructure
 
-- [ ] PostgreSQL 16 running with daily automated backups
+- [ ] PostgreSQL 16 running with WAL archiving and scheduled base backups (`postgres-backup`)
 - [ ] Redis 7 running with AOF enabled and maxmemory policy
-- [ ] TLS certificates valid (cert-manager auto-renewal confirmed)
-- [ ] NGINX reverse proxy configured with correct upstreams
+- [ ] TLS serving from the Caddy edge, and its renewal proven — the leaf/intermediate
+      fraction-of-lifetime alert is firing-capable (WP29a), not just configured
+- [ ] Edge fronting all three gateway nodes with correct upstreams
 - [ ] Resource limits set for all containers (CPU, memory)
 - [ ] Health checks configured for all services
-- [ ] HPA configured for auto-scaling
+- [ ] `EDGE_IMAGE` set to the digest CD published — `prod-preflight` refuses a tag
 
 ### Security
 

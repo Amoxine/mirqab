@@ -78,11 +78,16 @@ describe('RoleService', () => {
 
       expect(db.role.create).toHaveBeenCalledWith(
         expect.objectContaining({
+          // `as unknown` because @types/jest types `expect.objectContaining` as `any`, and nesting
+          // one as a PROPERTY VALUE (rather than passing it as an argument, which is what every
+          // other spec in this repo does) is an unsafe assignment the lint config rejects. The cast
+          // narrows the matcher, it does not change what is asserted. Found by WP29b: this file was
+          // the one thing keeping `pnpm lint` — a blocking CI step — red at HEAD.
           data: expect.objectContaining({
             name: 'billing-viewer',
             tenantId: TENANT,
             permissions: { create: [{ permissionId: 'perm-key:read' }, { permissionId: 'perm-plan:read' }] },
-          }),
+          }) as unknown,
         }),
       );
       expect(result).toEqual(
