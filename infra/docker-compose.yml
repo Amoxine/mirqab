@@ -14,6 +14,9 @@ name: Open Gateway Infrastructure
 #   KRATOS_SECRETS_DEFAULT   required — Kratos
 #   KRATOS_SECRETS_COOKIE    required — Kratos
 #   KRATOS_SECRETS_CIPHER    required — Kratos (must be exactly 32 characters)
+#   TYK_WEBHOOK_RELAY_SECRET required — the api; Tyk's event handler presents it to the @Public()
+#                            relay endpoint, which is what separates a real Tyk event from a forged
+#                            one (the endpoint is reachable through the edge, not only in-network)
 #   TYK_GW_SECRET            falls back to a well-known dev value below; that default is only safe
 #                            because the gateway's control API (/tyk/*) is NOT published to the host
 #                            (see TYK_GW_CONTROLAPIPORT). Set it for anything reachable by someone else.

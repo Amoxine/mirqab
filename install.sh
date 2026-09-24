@@ -91,6 +91,9 @@ KRATOS_SECRETS_CIPHER=""
 # WP29a: only infra/docker-compose.prod.yml reads this.
 REDIS_PASSWORD=""
 
+# WP27: the shared secret Tyk's event handler presents to the api's own relay endpoint.
+TYK_WEBHOOK_RELAY_SECRET=""
+
 NON_INTERACTIVE=false
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/infra/docker-compose.yml"
@@ -166,6 +169,16 @@ generate_all_secrets() {
   REDIS_PASSWORD=$(rand_hex 32)
   if [ -z "$REDIS_PASSWORD" ]; then
     fail "Cannot generate Redis password: openssl and node both unavailable"
+  fi
+
+  # WP27: required by the DEFAULT infra/docker-compose.yml (`${...:?}`), unlike REDIS_PASSWORD
+  # above — without it the api container refuses to start, so a fresh install never came up at all.
+  # The relay endpoint is `@Public()` and reachable through the edge like any other route, so this
+  # header secret is the only thing separating a real Tyk event from a forged one. An empty value
+  # makes the controller reject every call (fail closed), which is safe but silently dead.
+  TYK_WEBHOOK_RELAY_SECRET=$(rand_hex 32)
+  if [ -z "$TYK_WEBHOOK_RELAY_SECRET" ]; then
+    fail "Cannot generate webhook relay secret: openssl and node both unavailable"
   fi
 
   # Not a credential: the host's primary LAN address, so the WP26b edge's internal CA issues for
@@ -454,6 +467,9 @@ umask 077
   # WP29a: read only by infra/docker-compose.prod.yml (Redis `--requirepass`, and the matching
   # password on the API, the gateway nodes and the pump). Unused by the default dev profile.
   printf 'REDIS_PASSWORD=%s\n' "$REDIS_PASSWORD"
+  # WP27: Tyk's own event handler sends this back to the api's @Public() relay endpoint, which is
+  # what tells a real Tyk event from a forged one. Required by the default compose file.
+  printf 'TYK_WEBHOOK_RELAY_SECRET=%s\n' "$TYK_WEBHOOK_RELAY_SECRET"
   # WP26b edge: the host's LAN address, so `tls internal` also issues a certificate for
   # https://<lan-ip>:<port>. Not a secret; empty falls back to loopback-only listeners.
   printf 'EDGE_LAN_IP=%s\n' "$EDGE_LAN_IP"
