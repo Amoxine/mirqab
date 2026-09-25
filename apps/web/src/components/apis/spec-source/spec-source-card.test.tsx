@@ -93,6 +93,21 @@ describe('SpecSourceCard', () => {
     expect(allToasts().join()).not.toContain('S3CRET');
   });
 
+  it('a stored CHECK_FAILED is shown with its own text', async () => {
+    mockFetch(() => ok({ ...SOURCE, lastErrorCode: 'CHECK_FAILED' }));
+    renderUi(<SpecSourceCard apiId="api-1" canUpdate />);
+    expect(await screen.findByText(`Failed: ${S.errors.CHECK_FAILED}`)).toBeDefined();
+  });
+
+  it('Check now while the URL was edited (409 SPEC_SOURCE_CHANGED) says to check again', async () => {
+    mockFetch((c) => (c.method === 'POST' ? fail(409, 'changed', 'SPEC_SOURCE_CHANGED') : ok(SOURCE)));
+    renderUi(<SpecSourceCard apiId="api-1" canUpdate />);
+    fireEvent.click(await screen.findByRole('button', { name: S.card.checkNow }));
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(S.errors.SPEC_SOURCE_CHANGED);
+    });
+  });
+
   it('Remove is confirmed first, then DELETEs', async () => {
     const calls = mockFetch((c) => (c.method === 'DELETE' ? ok({ removed: true }) : ok(SOURCE)));
     renderUi(<SpecSourceCard apiId="api-1" canUpdate />);

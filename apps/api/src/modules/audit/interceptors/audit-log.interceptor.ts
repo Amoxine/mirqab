@@ -104,7 +104,8 @@ function redact(value: unknown, mode: UrlMode, depth = 0): unknown {
 }
 
 /** OAS-08: the routes whose body carries a spec URL. Only its origin is kept. */
-const SPEC_URL_ROUTE = /\/spec-source$|\/import\/url(\/preview)?$/;
+// Case-insensitive, optional trailing slash: Express routes `/Spec-Source/` to the same handler.
+const SPEC_URL_ROUTE = /\/(spec-source|import\/url(\/preview)?)\/?$/i;
 
 /** The redacted body, or — past the size cap — a marked preview of it (still redacted). */
 function auditBody(body: unknown, mode: UrlMode): unknown {

@@ -1,7 +1,7 @@
 /**
  * OAS-08a: the guarded spec fetcher against the REAL transport, DNS and sockets.
  *
- * Run it (the lead adds the package script; same shape as oas-endpoint-capabilities.e2e.mjs):
+ * Run it (`pnpm --filter @open-gateway/api test:e2e:oas-spec-fetch`; same shape as oas-endpoint-capabilities.e2e.mjs):
  *   docker cp apps/api/test/e2e/oas-spec-fetch.e2e.mjs open-gateway-api:/tmp/oas-spec-fetch.e2e.mjs \
  *     && docker exec open-gateway-api node /tmp/oas-spec-fetch.e2e.mjs
  *

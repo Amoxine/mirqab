@@ -21,6 +21,7 @@ describe('fetchErrorKey', () => {
     ['SPEC_FETCH_TOO_LARGE', 'errors.TOO_LARGE'],
     ['TOO_MANY_REDIRECTS', 'errors.TOO_MANY_REDIRECTS'],
     ['NOT_A_SPEC', 'errors.NOT_A_SPEC'],
+    ['CHECK_FAILED', 'errors.CHECK_FAILED'],
     ['SOMETHING_NEW', 'errors.unknown'],
     [null, 'errors.unknown'],
     // Only a 3-digit status is a status; anything else is not echoed as one.
@@ -64,6 +65,7 @@ describe('specErrorMessage', () => {
     for (const code of [
       'SPEC_SOURCE_LIMIT',
       'SPEC_SOURCE_URL_REQUIRED',
+      'SPEC_SOURCE_CHANGED',
       'OAS_LINT_FAILED',
       'OAS_IMPORT_TOO_MANY_ENDPOINTS',
       'OAS_IMPORT_UNPARSEABLE',

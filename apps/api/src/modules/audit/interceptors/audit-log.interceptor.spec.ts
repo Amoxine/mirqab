@@ -209,6 +209,17 @@ describe('AuditLogInterceptor', () => {
       expect(recorded(record).details).toMatchObject({ requestBody: { url: 'https://h.example/…', intervalMinutes: 60 } });
     });
 
+    // Express routes a trailing slash and any letter case to the same handler: the mode must follow.
+    it.each([
+      ['/api/apis/api-1/spec-source/'],
+      ['/api/apis/api-1/SPEC-SOURCE'],
+      ['/api/apis/api-1/Spec-Source/'],
+    ])('origin only on %s too', async (path) => {
+      await run(interceptor, contextFor('PUT', { id: 'api-1' }, path, { url: 'https://h.example/t0ken-in-path/spec.json' }), of({}));
+
+      expect(JSON.stringify(recorded(record).details)).not.toContain('t0ken-in-path');
+    });
+
     it('PUT spec-source: a secret in the PATH is not stored', async () => {
       await run(interceptor, contextFor('PUT', { id: 'api-1' }, '/api/apis/api-1/spec-source', { url: 'https://h.example/t0ken-in-path/spec.json' }), of({}));
 

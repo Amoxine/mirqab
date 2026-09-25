@@ -174,7 +174,8 @@ The URL-import routes are POSTs: their body is not stored at all.
 | `?token=` absent from the stored audit details; no URL from a 5xx message | unit (shown failing first) | `audit/interceptors/audit-log.interceptor.spec.ts` |
 | PUT through the real ValidationPipe (unknown field, interval 61, "60" → 60, 2049-char url, `"false"`) and the real audit interceptor (four URL spellings: origin only) | HTTP, service doubles | `controllers/spec-source.http.spec.ts` |
 | Review fixes M1 (URL edited mid-check), LOW 1 (applied meanwhile), LOW 3 (no-op PUT), H1 normalisation, LOW 2 (DB clock) | throwaway Postgres 16 | `services/spec-source.db-spec.ts` |
-| Live: import from URL + watch, 304, cooldown, change → candidate → apply → gateway sync, dismiss, NOT_A_SPEC, blocked target, other tenant 404 | **not run yet** (written) | `apps/api/test/e2e/oas-spec-source.e2e.mjs` |
+| Live: import from URL + watch, 304, cooldown, change → candidate → apply → gateway sync, dismiss, NOT_A_SPEC, blocked target, other tenant 404 | **live, deployed build: 38/38** (run by the lead, 2026-09-25) | `apps/api/test/e2e/oas-spec-source.e2e.mjs` |
+| HTTP as the seeded admin through the edge (guards, pipes, interceptor) | **live, deployed build: 28/28** (run by the lead, 2026-09-25) — a scratch script, **not in the repo**, so not re-runnable from here | lead's session notes |
 
 ## Known limits
 
@@ -183,8 +184,15 @@ The URL-import routes are POSTs: their body is not stored at all.
   `next_check_at` already advanced): it is retried at the next interval rather than recorded.
 - The URL-import routes create the API, then the source: a source insert failing after the import
   (a race past the cap check) leaves the API without a watcher; add one with `PUT …/spec-source`.
-- The e2e drives the controller classes directly: guards, pipes, the audit interceptor and pino are
-  not exercised live (the pipe and the interceptor are exercised over HTTP in
-  `controllers/spec-source.http.spec.ts`, with service doubles). The lead runs an HTTP proof as the
-  seeded admin after deploy.
+- The committed e2e drives the controller classes directly: guards, pipes, the audit interceptor and
+  pino are not exercised by it (the pipe and the interceptor are exercised over HTTP in
+  `controllers/spec-source.http.spec.ts`, with service doubles). The live HTTP proof as the seeded
+  admin (28/28) was a scratch script and is not committed: it cannot be re-run from the repo.
+- Tenant 404 coverage: the live e2e calls five handlers with a real second tenant (`GET spec-source`,
+  `GET spec-candidates`, `POST …/check`, `POST …/dismiss`, `DELETE spec-source`) and checks that
+  `GET /spec-updates` of that tenant excludes the API. `PUT`, `…/diff` and `…/apply` are covered for
+  another tenant at the service level only (`services/spec-source.db-spec.ts`, real Postgres).
+- The audit origin-only mode is chosen from the request path (`/spec-source`, `/import/url`,
+  `/import/url/preview`; case-insensitive, optional trailing slash), not from the handler's `@Audit`
+  metadata: a new route that carries a spec URL must be added to that pattern.
 - No outbound notification (webhook/email): in-app only (owner decision Q2a).

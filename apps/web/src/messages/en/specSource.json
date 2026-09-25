@@ -91,7 +91,9 @@
     "OAS_IMPORT_UNPARSEABLE": "The URL did not serve readable JSON or YAML.",
     "OAS_IMPORT_UNSAFE_YAML": "The document the URL serves uses YAML features that are refused for safety (such as too many aliases).",
     "OAS_IMPORT_UNSUPPORTED_VERSION": "The document the URL serves is not OpenAPI 3.x.",
-    "OAS_IMPORT_UNUSABLE": "The document the URL serves cannot be used to create or update an API."
+    "OAS_IMPORT_UNUSABLE": "The document the URL serves cannot be used to create or update an API.",
+    "CHECK_FAILED": "The check could not be completed. It will be retried.",
+    "SPEC_SOURCE_CHANGED": "The source was changed while it was being checked. Check again."
   },
   "banner": {
     "title": "A new version of the specification is available",

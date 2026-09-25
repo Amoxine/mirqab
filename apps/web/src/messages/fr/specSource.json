@@ -91,7 +91,9 @@
     "OAS_IMPORT_UNPARSEABLE": "L'URL n'a pas servi de JSON ou de YAML lisible.",
     "OAS_IMPORT_UNSAFE_YAML": "Le document servi par l'URL utilise des fonctions YAML refusées par sécurité (par exemple trop d'alias).",
     "OAS_IMPORT_UNSUPPORTED_VERSION": "Le document servi par l'URL n'est pas en OpenAPI 3.x.",
-    "OAS_IMPORT_UNUSABLE": "Le document servi par l'URL ne peut pas servir à créer ou mettre à jour une API."
+    "OAS_IMPORT_UNUSABLE": "Le document servi par l'URL ne peut pas servir à créer ou mettre à jour une API.",
+    "CHECK_FAILED": "La vérification n'a pas pu aboutir. Elle sera relancée.",
+    "SPEC_SOURCE_CHANGED": "La source a été modifiée pendant sa vérification. Vérifiez de nouveau."
   },
   "banner": {
     "title": "Une nouvelle version de la spécification est disponible",

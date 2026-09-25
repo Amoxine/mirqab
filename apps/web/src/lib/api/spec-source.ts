@@ -93,7 +93,17 @@ export interface UrlImportOptions extends ImportOptions {
 }
 
 /** The fixed codes the fetcher/checker report, with or without the `SPEC_FETCH_` prefix of a 422. */
-const FETCH_CODES = new Set(['BAD_URL', 'BLOCKED_TARGET', 'UNREACHABLE', 'TIMEOUT', 'TOO_LARGE', 'TOO_MANY_REDIRECTS', 'NOT_A_SPEC']);
+const FETCH_CODES = new Set([
+  'BAD_URL',
+  'BLOCKED_TARGET',
+  'UNREACHABLE',
+  'TIMEOUT',
+  'TOO_LARGE',
+  'TOO_MANY_REDIRECTS',
+  'NOT_A_SPEC',
+  // A check that failed for a reason of its own (not the fetch); the scheduler retries it.
+  'CHECK_FAILED',
+]);
 
 /**
  * A fetch/check error code as a `specSource.errors.*` key and its values. `DNS_FAILED` (an older
@@ -116,6 +126,7 @@ const OWN_CODES = new Set([
   'CANDIDATE_STALE',
   'SPEC_SOURCE_LIMIT',
   'SPEC_SOURCE_URL_REQUIRED',
+  'SPEC_SOURCE_CHANGED',
   // The OAS-04 gates, run on what the URL served (diff, apply, import from a URL).
   'OAS_LINT_FAILED',
   'OAS_IMPORT_TOO_MANY_ENDPOINTS',
