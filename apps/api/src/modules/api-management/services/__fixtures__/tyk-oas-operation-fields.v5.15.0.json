@@ -1,0 +1,104 @@
+{
+  "_comment": "The per-operation controls that `x-tyk-api-gateway.middleware.operations.<operationId>` ACCEPTS on the pinned gateway. Read from the OAS schema embedded in the binary (X-Tyk-Operation and the definitions below), NOT from documentation. 'Accepts' is not 'enforces': see endpoint-capabilities.ts and test/e2e/oas-endpoint-capabilities.e2e.mjs.",
+  "source": "tykio/tyk-gateway:v5.15.0 @ sha256:0c8fcb5784b5d4960ee2609be655d22fd3cd1aaaba569cd2211901c85b8443d3, /opt/tyk-gateway/tyk, extracted 2026-09-25",
+  "operationControls": {
+    "allow": "X-Tyk-Allowance",
+    "block": "X-Tyk-Allowance",
+    "ignoreAuthentication": "X-Tyk-Allowance",
+    "internal": "X-Tyk-Internal",
+    "transformRequestMethod": "X-Tyk-TransformRequestMethod",
+    "transformRequestBody": "X-Tyk-TransformBody",
+    "transformResponseBody": "X-Tyk-TransformBody",
+    "transformRequestHeaders": "X-Tyk-TransformHeaders",
+    "transformResponseHeaders": "X-Tyk-TransformHeaders",
+    "virtualEndpoint": "X-Tyk-VirtualEndpoint",
+    "trackEndpoint": "X-Tyk-TrackEndpoint",
+    "doNotTrackEndpoint": "X-Tyk-TrackEndpoint",
+    "circuitBreaker": "X-Tyk-CircuitBreaker",
+    "urlRewrite": "X-Tyk-URLRewrite",
+    "postPlugins": "array",
+    "cache": "X-Tyk-CachePlugin",
+    "enforceTimeout": "X-Tyk-EnforceTimeout",
+    "validateRequest": "X-Tyk-ValidateRequest",
+    "mockResponse": "X-Tyk-MockResponse",
+    "requestSizeLimit": "X-Tyk-RequestSizeLimit",
+    "rateLimit": "X-Tyk-RateLimit",
+    "scopeCheck": "X-Tyk-ScopeCheck",
+    "exchange": "X-Tyk-OAuth2-Exchange"
+  },
+  "shapes": {
+    "X-Tyk-Allowance": {
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "ignoreCase": "boolean"
+      }
+    },
+    "X-Tyk-RateLimit": {
+      "required": [
+        "enabled",
+        "rate",
+        "per"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "rate": "number",
+        "per": "string"
+      }
+    },
+    "X-Tyk-CachePlugin": {
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "cacheByRegex": "string",
+        "cacheResponseCodes": "array",
+        "timeout": "integer"
+      }
+    },
+    "X-Tyk-EnforceTimeout": {
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "value": "integer",
+        "duration": "string"
+      }
+    },
+    "X-Tyk-RequestSizeLimit": {
+      "required": [
+        "enabled",
+        "value"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "value": "integer"
+      }
+    },
+    "X-Tyk-ValidateRequest": {
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "errorResponseCode": "integer"
+      }
+    },
+    "X-Tyk-MockResponse": {
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": "boolean",
+        "code": "integer",
+        "body": "string",
+        "headers": "array",
+        "fromOASExamples": "object"
+      }
+    }
+  }
+}
