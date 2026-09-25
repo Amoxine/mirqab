@@ -20,8 +20,11 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
 import { useApis, useSetApiStatus, type ApiDefinition } from '@/hooks/use-apis';
 import { usePermissions } from '@/hooks/use-permissions';
+import { FormattedDate } from '@/components/shared/formatted';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 const PAGE_SIZE = 20;
 const NO_ROWS: ApiDefinition[] = [];
@@ -45,7 +48,7 @@ function ApiRowActions({ item, onToggleStatus, onDelete }: ApiRowActionsProps) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only">{t('actions.openMenu')}</span>
         </Button>
       </DropdownMenuTrigger>
@@ -54,7 +57,7 @@ function ApiRowActions({ item, onToggleStatus, onDelete }: ApiRowActionsProps) {
           <>
             <DropdownMenuItem asChild>
               <Link href={`/apis/${item.id}`}>
-                <Pencil className="me-2 h-4 w-4" />
+                <Pencil className="h-4 w-4" />
                 {tCommon('edit')}
               </Link>
             </DropdownMenuItem>
@@ -63,7 +66,7 @@ function ApiRowActions({ item, onToggleStatus, onDelete }: ApiRowActionsProps) {
                 onToggleStatus(item);
               }}
             >
-              <Power className="me-2 h-4 w-4" />
+              <Power className="h-4 w-4" />
               {item.status === 'ACTIVE' ? t('actions.disable') : t('actions.activate')}
             </DropdownMenuItem>
           </>
@@ -75,7 +78,7 @@ function ApiRowActions({ item, onToggleStatus, onDelete }: ApiRowActionsProps) {
               onDelete(item);
             }}
           >
-            <Trash2 className="me-2 h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
             {tCommon('delete')}
           </DropdownMenuItem>
         )}
@@ -107,8 +110,8 @@ function ApisPage() {
     async (item: ApiDefinition) => {
       const next = item.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
       try {
-        await setApiStatus({ id: item.id, status: next });
-        toast.success(next === 'ACTIVE' ? t('actions.activatedToast') : t('actions.disabledToast'));
+        const saved = await setApiStatus({ id: item.id, status: next });
+        toastSyncOutcome(t, saved, next === 'ACTIVE' ? t('actions.activatedToast') : t('actions.disabledToast'));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t('actions.statusErrorToast'));
       }
@@ -123,10 +126,10 @@ function ApisPage() {
         header: tCommon('name'),
         cell: ({ row }) => (
           <div className="min-w-0">
-            <Link href={`/apis/${row.original.id}`} className="font-medium hover:underline">
+            <Link href={`/apis/${row.original.id}`} className="rounded-sm font-medium hover:underline">
               {row.original.name}
             </Link>
-            <p className="text-xs text-muted-foreground">{'/'}{row.original.slug}</p>
+            <p className="font-mono text-xs text-muted-foreground">{'/'}{row.original.slug}</p>
           </div>
         ),
       },
@@ -153,7 +156,7 @@ function ApisPage() {
       {
         accessorKey: 'createdAt',
         header: tCommon('createdAt'),
-        cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+        cell: ({ row }) => <FormattedDate value={row.original.createdAt} />,
       },
       {
         id: 'actions',
@@ -174,24 +177,22 @@ function ApisPage() {
   const totalPages = Math.max(1, data?.meta.totalPages ?? 1);
   const filtered = statusFilter !== 'ALL' || syncFilter !== 'ALL';
 
+  const createButton = (
+    <PermissionGate permission="api:create">
+      <Button
+        onClick={() => {
+          setCreateOpen(true);
+        }}
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t('createButton')}
+      </Button>
+    </PermissionGate>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-          <p className="mt-1 text-muted-foreground">{t('subtitle')}</p>
-        </div>
-        <PermissionGate permission="api:create">
-          <Button
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="me-2 h-4 w-4" />
-            {t('createButton')}
-          </Button>
-        </PermissionGate>
-      </div>
+      <PageHeader title={t('title')} description={t('subtitle')} actions={createButton} />
 
       {/* Filters */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
@@ -238,6 +239,23 @@ function ApisPage() {
         error={error}
         onRetry={() => void refetch()}
         emptyMessage={filtered ? t('empty.filtered') : t('empty.all')}
+        emptyAction={
+          filtered ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setStatusFilter('ALL');
+                setSyncFilter('ALL');
+                setPage(1);
+              }}
+            >
+              {tCommon('clearFilters')}
+            </Button>
+          ) : (
+            createButton
+          )
+        }
       />
 
       <DataTablePagination

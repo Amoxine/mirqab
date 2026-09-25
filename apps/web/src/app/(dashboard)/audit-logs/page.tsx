@@ -24,11 +24,13 @@ import {
 import { toast } from '@/components/ui/sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
 import { api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useQuery } from '@tanstack/react-query';
 import type { AuditLogEntry } from '@/hooks/use-audit';
 import type { PaginatedResponse } from '@/types';
+import { AUDIT_ACTION_VALUES, auditActionLabel } from '@/lib/audit-actions';
 import { dateFnsLocale } from '@/lib/date-fns-locale';
 import type { Locale } from '@/i18n/locales';
 
@@ -38,30 +40,6 @@ type AuditLog = AuditLogEntry & {
   corrId: string | null;
   details: Record<string, unknown> | null;
 };
-
-/** Prisma `AuditAction` enum values (the API 500s on anything else); labels come from `auditLogs.actions.*`. */
-const ACTION_VALUES = [
-  'CREATED',
-  'UPDATED',
-  'DELETED',
-  'REVOKED',
-  'ASSIGNED',
-  'UNASSIGNED',
-  'LOGIN',
-  'LOGOUT',
-  'ROLE_CHANGED',
-  'PERMISSION_GRANTED',
-  'PERMISSION_REVOKED',
-  'QUOTA_EXCEEDED',
-  'SYNC_SUCCEEDED',
-  'SYNC_FAILED',
-] as const;
-
-// ponytail: `AuditLogEntry.action` is typed wider than this list (see use-audit.ts) since the API's
-// enum can grow independently — an action outside it falls back to the raw value instead of a missing-key warning.
-function actionLabel(t: ReturnType<typeof useTranslations>, action: string): string {
-  return (ACTION_VALUES as readonly string[]).includes(action) ? t(`auditLogs.actions.${action}`) : action;
-}
 
 function actionColor(action: string) {
   switch (action) {
@@ -103,26 +81,27 @@ function useAuditLogColumns(): ColumnDef<AuditLog>[] {
       {
         id: 'user',
         header: t('auditLogs.columns.user'),
-        cell: ({ row }) => row.original.user?.email ?? t('auditLogs.systemUser'),
+        cell: ({ row }) =>
+          row.original.user ? <span dir="ltr">{row.original.user.email}</span> : t('auditLogs.systemUser'),
       },
       {
         accessorKey: 'action',
         header: t('auditLogs.action'),
         cell: ({ row }) => (
-          <Badge variant={actionColor(row.original.action)}>{actionLabel(t, row.original.action)}</Badge>
+          <Badge variant={actionColor(row.original.action)}>{auditActionLabel(t, row.original.action)}</Badge>
         ),
       },
       {
         accessorKey: 'resource',
         header: t('auditLogs.columns.resource'),
         cell: ({ row }) => (
-          <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{row.original.resource}</code>
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{row.original.resource}</code>
         ),
       },
       {
         accessorKey: 'ipAddress',
         header: t('auditLogs.columns.ipAddress'),
-        cell: ({ row }) => row.original.ipAddress ?? '—',
+        cell: ({ row }) => (row.original.ipAddress ? <span dir="ltr">{row.original.ipAddress}</span> : '—'),
       },
     ],
     [t, locale],
@@ -214,41 +193,41 @@ function AuditLogsView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('auditLogs.title')}</h1>
-          <p className="text-muted-foreground mt-1">{t('auditLogs.subtitle')}</p>
-        </div>
-        <PermissionGate permission="audit:export">
-          <Button
-            variant="outline"
-            disabled={exporting}
-            title={t('auditLogs.exportHint')}
-            onClick={() => {
-              void handleExport();
-            }}
-          >
-            <Download className="me-2 h-4 w-4" />
-            {exporting ? t('auditLogs.exporting') : t('auditLogs.export')}
-          </Button>
-        </PermissionGate>
-      </div>
+      <PageHeader
+        title={t('auditLogs.title')}
+        description={t('auditLogs.subtitle')}
+        actions={
+          <PermissionGate permission="audit:export">
+            <Button
+              variant="outline"
+              loading={exporting}
+              title={t('auditLogs.exportHint')}
+              onClick={() => {
+                void handleExport();
+              }}
+            >
+              {!exporting && <Download className="h-4 w-4" aria-hidden="true" />}
+              {exporting ? t('auditLogs.exporting') : t('auditLogs.export')}
+            </Button>
+          </PermissionGate>
+        }
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm">
-              <Filter className="me-2 h-4 w-4" />
+              <Filter className="h-4 w-4" aria-hidden="true" />
               {t('auditLogs.filters')}
               {hasActiveFilters && (
-                <span className="bg-primary text-primary-foreground ms-1 flex h-5 w-5 items-center justify-center rounded-full text-xs">
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs text-primary-foreground tabular-nums">
                   {[resourceFilter, actionFilter, dateFrom, dateTo].filter(Boolean).length}
                 </span>
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-80" align="start">
+          <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]" align="start">
             <div className="space-y-4">
               <h4 className="font-medium">{t('auditLogs.filterOptions')}</h4>
               <div className="space-y-2">
@@ -281,9 +260,9 @@ function AuditLogsView() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">{t('auditLogs.allActions')}</SelectItem>
-                    {ACTION_VALUES.map((value) => (
+                    {AUDIT_ACTION_VALUES.map((value) => (
                       <SelectItem key={value} value={value}>
-                        {actionLabel(t, value)}
+                        {auditActionLabel(t, value)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -341,6 +320,13 @@ function AuditLogsView() {
         error={error}
         onRetry={() => void refetch()}
         emptyMessage={t('auditLogs.empty')}
+        emptyAction={
+          hasActiveFilters ? (
+            <Button type="button" variant="outline" onClick={clearFilters}>
+              {t('auditLogs.clearAll')}
+            </Button>
+          ) : undefined
+        }
       />
 
       <DataTablePagination

@@ -4,18 +4,23 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* #0da9be only cleared 2.82:1 against white — below WCAG AA. This is the darkest shade that still
-     reads as the same teal while hitting 4.5:1 (see scripts/check-contrast.js). */
-  --color-primary: #0a8090;
+  /* #0da9be only cleared 2.82:1 against white — below WCAG AA. #0a8090 fixed the button pair but,
+     as text, sat at 4.46:1 on the page background and ~4.1:1 on the active-nav tint (primary/10).
+     #087482 is the same teal hue clearing 4.5:1 in all three (see scripts/check-contrast.js). */
+  --color-primary: #087482;
   --color-primary-foreground: #ffffff;
-  --color-primary-dark: #087f90;
+  --color-primary-dark: #06606c;
   --color-primary-light: #dff8fb;
 
   --color-secondary: #1f2937;
   --color-secondary-foreground: #f9fafb;
 
-  --color-success: #16a34a;
-  --color-warning: #f59e0b;
+  /* Status colours double as badge fills (with their -foreground) and as text on cards, so both
+     pairs are checked. #16a34a/#f59e0b only reached 3.3:1 / 2.1:1 against white text. */
+  --color-success: #15803d;
+  --color-success-foreground: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-foreground: #ffffff;
   --color-danger: #dc2626;
   --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
@@ -28,17 +33,16 @@
   --color-popover: #ffffff;
   --color-popover-foreground: #111827;
   --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
+  /* slate-600: #64748b fell to 4.34:1 on the muted surface (tabs, code chips, skeleton rows). */
+  --color-muted-foreground: #475569;
   --color-accent: #f1f5f9;
   --color-accent-foreground: #0f172a;
   --color-border: #e2e8f0;
   --color-input: #e2e8f0;
-  --color-ring: #0a8090;
+  --color-ring: #087482;
 
   --color-text-primary: #111827;
   --color-text-secondary: #6b7280;
-
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -50,11 +54,33 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
 }
 
+/* Read the family from `next/font`'s `--font-inter` (set on <body> in app/layout.tsx) instead of
+   naming 'Inter' literally: the variable also carries the metric-matched "Inter Fallback", so text
+   doesn't reflow when the web font swaps in. `inline` makes the utility read the variable where it
+   is set, instead of resolving it once at :root, where it does not exist. */
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
 /* next-themes (`attribute="class"`) toggles this on <html>. Same specificity as the :root the @theme
-   block above emits, so it must come after that block in source order to win the cascade. Primary is
-   left unset here on purpose: it already clears 4.5:1 against white in the block above, so the same
-   pair works unchanged in dark mode too (see scripts/check-contrast.js). */
+   block above emits, so it must come after that block in source order to win the cascade.
+   Primary, destructive and the status colours are lightened here, with dark foregrounds: the light
+   values are dark enough for white text but fall to ~3:1 as text on these dark surfaces (links,
+   form errors, active nav) — see scripts/check-contrast.js, which checks both uses in both themes. */
 .dark {
+  color-scheme: dark;
+
+  --color-primary: #22b8c9;
+  --color-primary-foreground: #042f2e;
+  --color-ring: #22b8c9;
+  --color-destructive: #f87171;
+  --color-destructive-foreground: #450a0a;
+  --color-danger: #f87171;
+  --color-success: #4ade80;
+  --color-success-foreground: #052e16;
+  --color-warning: #fbbf24;
+  --color-warning-foreground: #422006;
+
   --color-background: #0f172a;
   --color-foreground: #f1f5f9;
   --color-surface: #1e293b;
@@ -67,14 +93,15 @@
   --color-popover: #1e293b;
   --color-popover-foreground: #f1f5f9;
   --color-muted: #1e293b;
-  --color-muted-foreground: #94a3b8;
+  /* #94a3b8 dropped to 4.04:1 on the accent surface (hovered menu items with secondary text). */
+  --color-muted-foreground: #a3b1c6;
   --color-accent: #334155;
   --color-accent-foreground: #f1f5f9;
   --color-border: #334155;
   --color-input: #334155;
 
   --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
+  --color-text-secondary: #a3b1c6;
 }
 
 @layer base {
@@ -84,6 +111,49 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* One visible focus indicator for everything that does not draw its own ring (links, linked cards,
+     native controls). Components that use `focus-visible:ring-*` also set `outline-none`, which,
+     being a utility, wins over this base rule. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Identifiers — IDs, hashes, slugs, paths, URLs, header names — are all set in mono or <code>.
+     Inside Arabic text the bidi algorithm would reorder their punctuation (`/v1/orders` renders as
+     `v1/orders/`), so they keep left-to-right order, isolated from the surrounding RTL run. Blocks
+     align to the RTL start (visual right, `end` in LTR terms); fields keep typing from the left.
+     In the base layer, so an explicit `text-center`/`text-start` utility still wins. */
+  [dir='rtl'] :is(code, kbd, samp, pre, .font-mono) {
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: end;
+  }
+  [dir='rtl'] :is(input, textarea).font-mono {
+    text-align: start;
+  }
+
+  /* Tailwind v4 dropped `cursor: pointer` from buttons; restore it for everything clickable. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+}
+
+/* Honour the OS setting app-wide rather than per component: skeleton pulses, spinners, sheet slides
+   and chart tweens all collapse to their end state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

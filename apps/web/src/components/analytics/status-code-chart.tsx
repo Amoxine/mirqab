@@ -1,7 +1,7 @@
 'use client';
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   AXIS_TICK,
   ChartCard,
@@ -9,12 +9,15 @@ import {
   TOOLTIP_STYLE,
   formatCount,
 } from '@/components/analytics/analytics-empty-state';
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 import { useAnalyticsStatusCodes } from '@/hooks/use-analytics';
 import { toStatusRows } from './status-code-utils';
 import type { AnalyticsRange } from '@/types';
 
 export function StatusCodeChart({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
+  const locale = useLocale();
+  const animate = !usePrefersReducedMotion();
   const { data, isLoading, error, refetch } = useAnalyticsStatusCodes(range);
 
   // One key per class: stacking then colours each bar by class and gives the legend real meaning
@@ -41,13 +44,13 @@ export function StatusCodeChart({ range }: { range: AnalyticsRange }) {
             axisLine={false}
             allowDecimals={false}
             width={44}
-            tickFormatter={formatCount}
+            tickFormatter={(value: number) => formatCount(value, locale)}
           />
           <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'var(--color-muted)' }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="ok" name={t('charts.statusCodes.success')} stackId="status" fill="var(--color-success)" maxBarSize={48} radius={[4, 4, 0, 0]} />
-          <Bar dataKey="client" name={t('charts.statusCodes.clientError')} stackId="status" fill="var(--color-warning)" maxBarSize={48} radius={[4, 4, 0, 0]} />
-          <Bar dataKey="server" name={t('charts.statusCodes.serverError')} stackId="status" fill="var(--color-destructive)" maxBarSize={48} radius={[4, 4, 0, 0]} />
+          <Bar isAnimationActive={animate} dataKey="ok" name={t('charts.statusCodes.success')} stackId="status" fill="var(--color-success)" maxBarSize={48} radius={[4, 4, 0, 0]} />
+          <Bar isAnimationActive={animate} dataKey="client" name={t('charts.statusCodes.clientError')} stackId="status" fill="var(--color-warning)" maxBarSize={48} radius={[4, 4, 0, 0]} />
+          <Bar isAnimationActive={animate} dataKey="server" name={t('charts.statusCodes.serverError')} stackId="status" fill="var(--color-destructive)" maxBarSize={48} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

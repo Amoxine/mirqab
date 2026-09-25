@@ -10,14 +10,16 @@ import {
   AnalyticsEmptyState,
   AnalyticsErrorState,
   AnalyticsStaleNotice,
-  formatMs,
-  formatPercent,
 } from '@/components/analytics/analytics-empty-state';
 import { isPipelineStale } from '@/components/analytics/pipeline-status';
 import { LatencyChart } from '@/components/analytics/latency-chart';
 import { RequestsChart } from '@/components/analytics/requests-chart';
 import { StatusCodeChart } from '@/components/analytics/status-code-chart';
 import { Badge } from '@/components/ui/badge';
+import { ApiStatusBadge } from '@/components/apis/api-status-badge';
+import { StatCard, StatCardSkeleton } from '@/components/dashboard/stat-card';
+import { keyStatusVariant } from '@/components/keys/key-utils';
+import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,45 +32,11 @@ import {
   useAnalyticsOverview,
 } from '@/hooks/use-analytics';
 import type { AnalyticsApiRow, AnalyticsKeyRow, AnalyticsRange } from '@/types';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  description?: string;
-}
-
-function StatCard({ title, value, icon: Icon, description }: StatCardProps) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatCardSkeleton() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-4 w-24" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-20" />
-        <Skeleton className="mt-2 h-3 w-32" />
-      </CardContent>
-    </Card>
-  );
-}
+import { useFormat, type Format } from '@/hooks/use-format';
 
 function OverviewTiles({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
+  const fmt = useFormat();
   const { data, isLoading, error, refetch } = useAnalyticsOverview(range);
 
   if (isLoading) {
@@ -92,22 +60,22 @@ function OverviewTiles({ range }: { range: AnalyticsRange }) {
   const hasTraffic = data.totalRequests > 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <StatCard title={t('overview.totalRequests')} value={data.totalRequests.toLocaleString()} icon={Activity} />
+      <StatCard title={t('overview.totalRequests')} value={fmt.number(data.totalRequests)} icon={Activity} />
       <StatCard
         title={t('table.columns.errorRate')}
-        value={hasTraffic ? formatPercent(data.errorRate) : '—'}
+        value={hasTraffic ? fmt.percent(data.errorRate) : '—'}
         icon={CheckCircle}
-        description={t('overview.successCount', { count: data.successCount.toLocaleString() })}
+        description={t('overview.successCount', { count: fmt.number(data.successCount) })}
       />
       <StatCard
         title={t('table.columns.avgLatency')}
-        value={hasTraffic ? formatMs(data.avgLatencyMs) : '—'}
+        value={hasTraffic ? fmt.ms(data.avgLatencyMs) : '—'}
         icon={Clock}
-        description={hasTraffic ? t('overview.upstreamLatency', { value: formatMs(data.avgUpstreamLatencyMs) }) : undefined}
+        description={hasTraffic ? t('overview.upstreamLatency', { value: fmt.ms(data.avgUpstreamLatencyMs) }) : undefined}
       />
-      <StatCard title={t('table.columns.errors')} value={data.errorCount.toLocaleString()} icon={AlertTriangle} />
-      <StatCard title={t('overview.activeApis')} value={data.activeApis} icon={ShieldCheck} />
-      <StatCard title={t('overview.activeKeys')} value={data.activeKeys} icon={KeyRound} />
+      <StatCard title={t('table.columns.errors')} value={fmt.number(data.errorCount)} icon={AlertTriangle} />
+      <StatCard title={t('overview.activeApis')} value={fmt.number(data.activeApis)} icon={ShieldCheck} />
+      <StatCard title={t('overview.activeKeys')} value={fmt.number(data.activeKeys)} icon={KeyRound} />
     </div>
   );
 }
@@ -172,7 +140,8 @@ function MetricsTableCard<T>({ title, query, columns, rowKey, emptyMessage }: Me
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="w-0 min-w-full">
+        {/* A metrics table keeps its columns aligned for comparison; it scrolls inside the card on phones. */}
         <Table className="min-w-[560px]">
           <TableHeader>
             <TableRow>
@@ -191,46 +160,61 @@ function MetricsTableCard<T>({ title, query, columns, rowKey, emptyMessage }: Me
 }
 
 /** `t` is `analytics`'s translator, `tStatus` is `common`'s (reused for the shared "Status" header). */
-function apiColumns(t: ReturnType<typeof useTranslations>, tStatus: ReturnType<typeof useTranslations>): Column<AnalyticsApiRow>[] {
+function apiColumns(
+  t: ReturnType<typeof useTranslations>,
+  tStatus: ReturnType<typeof useTranslations>,
+  fmt: Format,
+): Column<AnalyticsApiRow>[] {
   return [
     {
       header: t('table.columns.api'),
       cell: (row) => (
         <>
           <div className="font-medium">{row.name}</div>
-          <div className="text-xs text-muted-foreground">{row.slug}</div>
+          <div className="font-mono text-xs text-muted-foreground">{row.slug}</div>
         </>
       ),
     },
-    { header: tStatus('status'), cell: (row) => <Badge variant="outline">{row.status}</Badge> },
-    { header: t('table.columns.requests'), numeric: true, cell: (row) => row.requests.toLocaleString() },
-    { header: t('table.columns.errors'), numeric: true, cell: (row) => row.errors.toLocaleString() },
-    { header: t('table.columns.errorRate'), numeric: true, cell: (row) => formatPercent(row.errorRate) },
-    { header: t('table.columns.avgLatency'), numeric: true, cell: (row) => formatMs(row.avgLatencyMs) },
+    { header: tStatus('status'), cell: (row) => <ApiStatusBadge status={row.status} /> },
+    { header: t('table.columns.requests'), numeric: true, cell: (row) => fmt.number(row.requests) },
+    { header: t('table.columns.errors'), numeric: true, cell: (row) => fmt.number(row.errors) },
+    { header: t('table.columns.errorRate'), numeric: true, cell: (row) => fmt.percent(row.errorRate) },
+    { header: t('table.columns.avgLatency'), numeric: true, cell: (row) => fmt.ms(row.avgLatencyMs) },
   ];
 }
 
-function keyColumns(t: ReturnType<typeof useTranslations>, tStatus: ReturnType<typeof useTranslations>): Column<AnalyticsKeyRow>[] {
+/** Same variant and label as the keys page, instead of the raw enum code. */
+function KeyStatus({ status }: { status: AnalyticsKeyRow['status'] }) {
+  const t = useTranslations('keys');
+  return <Badge variant={keyStatusVariant(status)}>{t(`status.${status}`)}</Badge>;
+}
+
+function keyColumns(
+  t: ReturnType<typeof useTranslations>,
+  tStatus: ReturnType<typeof useTranslations>,
+  fmt: Format,
+): Column<AnalyticsKeyRow>[] {
   return [
     { header: t('table.columns.key'), cell: (row) => <span className="font-medium">{row.name}</span> },
     { header: t('table.columns.api'), cell: (row) => row.apiDefName ?? '—' },
-    { header: tStatus('status'), cell: (row) => <Badge variant="outline">{row.status}</Badge> },
-    { header: t('table.columns.requests'), numeric: true, cell: (row) => row.requests.toLocaleString() },
-    { header: t('table.columns.errors'), numeric: true, cell: (row) => row.errors.toLocaleString() },
-    { header: t('table.columns.errorRate'), numeric: true, cell: (row) => formatPercent(row.errorRate) },
-    { header: t('table.columns.avgLatency'), numeric: true, cell: (row) => formatMs(row.avgLatencyMs) },
+    { header: tStatus('status'), cell: (row) => <KeyStatus status={row.status} /> },
+    { header: t('table.columns.requests'), numeric: true, cell: (row) => fmt.number(row.requests) },
+    { header: t('table.columns.errors'), numeric: true, cell: (row) => fmt.number(row.errors) },
+    { header: t('table.columns.errorRate'), numeric: true, cell: (row) => fmt.percent(row.errorRate) },
+    { header: t('table.columns.avgLatency'), numeric: true, cell: (row) => fmt.ms(row.avgLatencyMs) },
   ];
 }
 
 function ApiTable({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
   const tCommon = useTranslations('common');
+  const fmt = useFormat();
   const query = useAnalyticsApis(range);
   return (
     <MetricsTableCard
       title={t('table.apiTitle')}
       query={query}
-      columns={apiColumns(t, tCommon)}
+      columns={apiColumns(t, tCommon, fmt)}
       rowKey={(row) => row.apiDefId}
       emptyMessage={t('table.apiEmpty')}
     />
@@ -240,12 +224,13 @@ function ApiTable({ range }: { range: AnalyticsRange }) {
 function KeyTable({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
   const tCommon = useTranslations('common');
+  const fmt = useFormat();
   const query = useAnalyticsKeys(range);
   return (
     <MetricsTableCard
       title={t('table.keyTitle')}
       query={query}
-      columns={keyColumns(t, tCommon)}
+      columns={keyColumns(t, tCommon, fmt)}
       rowKey={(row) => row.apiKeyId}
       emptyMessage={t('table.keyEmpty')}
     />
@@ -264,24 +249,24 @@ function AnalyticsView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-          <p className="mt-1 text-muted-foreground">{t('subtitle')}</p>
-        </div>
-        <Select value={range} onValueChange={handleRangeChange}>
-          <SelectTrigger className="w-full sm:w-[180px]" aria-label={t('rangeLabel')}>
-            <SelectValue placeholder={t('rangePlaceholder')} />
-          </SelectTrigger>
-          <SelectContent>
-            {ANALYTICS_RANGES.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {t(`ranges.${option.value}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <PageHeader
+        title={t('title')}
+        description={t('subtitle')}
+        actions={
+          <Select value={range} onValueChange={handleRangeChange}>
+            <SelectTrigger className="w-full sm:w-[180px]" aria-label={t('rangeLabel')}>
+              <SelectValue placeholder={t('rangePlaceholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {ANALYTICS_RANGES.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {t(`ranges.${option.value}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       {health && !health.pipelineReady && !isPipelineStale(health) ? (
         // The pump pipeline is not delivering rows: one explanation instead of a wall of empty charts.

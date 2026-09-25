@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 type Translate = (key: string) => string;
 
@@ -67,8 +68,8 @@ export function RequestValidationSheet({ api, open, onOpenChange }: RequestValid
 
   const onSubmit = async (values: Values) => {
     try {
-      await updateMutation.mutateAsync({ config: { validateRequestSchema: values.schema } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { validateRequestSchema: values.schema } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

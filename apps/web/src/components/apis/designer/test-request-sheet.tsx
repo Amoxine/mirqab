@@ -209,7 +209,7 @@ export function TestRequestSheet({ api, open, onOpenChange }: TestRequestSheetPr
               {t('designer.testRequest.close')}
             </Button>
             <Button type="submit" disabled={debugMutation.isPending}>
-              <Send className="me-2 h-4 w-4" />
+              <Send className="h-4 w-4" />
               {debugMutation.isPending ? t('designer.testRequest.running') : t('designer.testRequest.run')}
             </Button>
           </SheetFooter>

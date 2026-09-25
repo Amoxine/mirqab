@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Menu } from 'lucide-react';
 import { navLinkClass, useNavItems } from '@/components/layout/sidebar';
+import { TenantSwitcher } from '@/components/layout/tenant-switcher';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -31,7 +32,7 @@ export function MobileNav() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon" className="shrink-0 lg:hidden">
-          <Menu className="h-5 w-5" />
+          <Menu className="h-5 w-5" aria-hidden="true" />
           <span className="sr-only">{tMobileNav('mobileNav.openMenu')}</span>
         </Button>
       </SheetTrigger>
@@ -40,7 +41,11 @@ export function MobileNav() {
           <SheetTitle>{t('brand')}</SheetTitle>
           <SheetDescription className="sr-only">{tMobileNav('mobileNav.description')}</SheetDescription>
         </SheetHeader>
-        <nav className="flex flex-col gap-1">
+        {/* Same order as the desktop sidebar: tenant context first, then the pages under it. */}
+        <div className="-mx-2 border-b pb-2">
+          <TenantSwitcher />
+        </div>
+        <nav className="flex flex-col gap-1" aria-label={tMobileNav('mobileNav.description')}>
           {items.map((item) => {
             const Icon = item.icon;
             return (
@@ -48,11 +53,12 @@ export function MobileNav() {
                 key={item.href}
                 href={item.href}
                 className={navLinkClass(item.active)}
+                aria-current={item.active ? 'page' : undefined}
                 onClick={() => {
                   setOpen(false);
                 }}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>{item.label}</span>
               </Link>
             );

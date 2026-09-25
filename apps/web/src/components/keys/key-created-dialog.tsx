@@ -56,9 +56,9 @@ export function KeyCreatedDialog({ keyValue, onClose }: KeyCreatedDialogProps) {
         >
           {keyValue}
         </code>
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={handleCopy}>
-            {copied ? <Check className="me-2 h-4 w-4" /> : <Copy className="me-2 h-4 w-4" />}
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? t('createdDialog.copied') : t('createdDialog.copy')}
           </Button>
           <Button type="button" onClick={handleClose}>

@@ -14,6 +14,7 @@ interface MiddlewareCardProps {
   active: boolean;
   activeLabel: string;
   inactiveLabel: string;
+  /** Accessible name of the icon-only Edit button — name the section, since 13 cards sit side by side. */
   editLabel: string;
   onEdit?: () => void;
 }
@@ -37,9 +38,8 @@ export function MiddlewareCard({
           <Badge variant={active ? 'default' : 'outline'}>{active ? activeLabel : inactiveLabel}</Badge>
         </div>
         {onEdit && (
-          <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
-            <Pencil className="h-4 w-4" />
-            <span className="sr-only">{editLabel}</span>
+          <Button type="button" variant="ghost" size="icon" className="-me-2 -mt-2 shrink-0" onClick={onEdit} aria-label={editLabel}>
+            <Pencil className="h-4 w-4" aria-hidden="true" />
           </Button>
         )}
       </CardHeader>

@@ -15,6 +15,7 @@ import { useInvalidateCache, useUpdateApi, type ApiDefinition } from '@/hooks/us
 import type { ApiConfig } from '@/types';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
 import { csvNumbers, wholeNumber } from './list-codec';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
@@ -66,8 +67,8 @@ export function ResponseCacheSheet({ api, open, onOpenChange }: ResponseCacheShe
 
   const save = async (cache: ApiConfig['cache']) => {
     try {
-      await updateMutation.mutateAsync({ config: { cache } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { cache } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));
@@ -179,7 +180,7 @@ export function ResponseCacheSheet({ api, open, onOpenChange }: ResponseCacheShe
                 void handleInvalidate();
               }}
             >
-              <Trash2 className="me-2 h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
               {invalidateMutation.isPending ? t('designer.cache.invalidating') : t('designer.cache.invalidateNow')}
             </Button>
           </div>

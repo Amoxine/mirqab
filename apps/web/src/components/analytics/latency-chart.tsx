@@ -1,7 +1,7 @@
 'use client';
 
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   AXIS_TICK,
   ChartCard,
@@ -10,6 +10,7 @@ import {
   formatBucket,
   formatCount,
 } from '@/components/analytics/analytics-empty-state';
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 import { useAnalyticsTimeSeries } from '@/hooks/use-analytics';
 import type { AnalyticsRange } from '@/types';
 
@@ -19,6 +20,8 @@ import type { AnalyticsRange } from '@/types';
  */
 export function LatencyChart({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
+  const locale = useLocale();
+  const animate = !usePrefersReducedMotion();
   const { data, isLoading, error, refetch } = useAnalyticsTimeSeries('latency', range);
 
   return (
@@ -40,20 +43,21 @@ export function LatencyChart({ range }: { range: AnalyticsRange }) {
             tickLine={false}
             axisLine={false}
             minTickGap={32}
-            tickFormatter={(value: string) => formatBucket(value, range)}
+            tickFormatter={(value: string) => formatBucket(value, range, false, locale)}
           />
           <YAxis
             tick={AXIS_TICK}
             tickLine={false}
             axisLine={false}
             width={64}
-            tickFormatter={(value: number) => `${formatCount(value)} ms`}
+            tickFormatter={(value: number) => `${formatCount(value, locale)} ms`}
           />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
-            labelFormatter={(label: unknown) => (typeof label === 'string' ? formatBucket(label, range, true) : '')}
+            labelFormatter={(label: unknown) => (typeof label === 'string' ? formatBucket(label, range, true, locale) : '')}
           />
           <Line
+            isAnimationActive={animate}
             type="monotone"
             dataKey="avgLatencyMs"
             name={t('charts.latency.series')}

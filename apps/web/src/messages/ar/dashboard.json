@@ -66,14 +66,22 @@
     "analytics": "التحليلات",
     "auditLogs": "سجلات التدقيق",
     "login": "تسجيل الدخول",
-    "details": "التفاصيل"
+    "details": "التفاصيل",
+    "plans": "الخطط",
+    "products": "المنتجات",
+    "settings": "الإعدادات",
+    "roles": "الأدوار",
+    "certificates": "الشهادات"
   },
   "header": {
     "logoutError": "فشل تسجيل الخروج",
     "switchTenant": "تبديل المستأجر",
     "noTenantSelected": "لم يتم تحديد مستأجر",
     "accountSettings": "إعدادات الحساب",
-    "logOut": "تسجيل الخروج"
+    "logOut": "تسجيل الخروج",
+    "userMenu": "فتح قائمة المستخدم",
+    "tenantLabel": "المستأجر",
+    "switchTenantCurrent": "تبديل المستأجر (الحالي: {name})"
   },
   "mobileNav": {
     "openMenu": "فتح قائمة التنقل",
@@ -88,5 +96,11 @@
     "viewMode": "وضع العرض",
     "tableView": "عرض جدولي",
     "cardView": "عرض البطاقات"
+  },
+  "layout": {
+    "skipToContent": "انتقل إلى المحتوى الرئيسي"
+  },
+  "errorBoundary": {
+    "home": "الذهاب إلى لوحة التحكم"
   }
 }

@@ -14,6 +14,7 @@ import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import type { ApiConfig } from '@/types';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
 import { pairLines, pairsToLines, wholeNumber } from './list-codec';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
@@ -70,8 +71,8 @@ export function MockResponseSheet({ api, open, onOpenChange }: MockResponseSheet
 
   const save = async (mock: ApiConfig['mock']) => {
     try {
-      await updateMutation.mutateAsync({ config: { mock } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { mock } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

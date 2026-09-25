@@ -35,8 +35,8 @@ export function LocaleSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isPending} aria-label={t('label')}>
-          <Languages className="h-4 w-4" />
+        <Button variant="ghost" size="icon" disabled={isPending} aria-label={t('label')}>
+          <Languages className="h-4 w-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -44,6 +44,8 @@ export function LocaleSwitcher() {
           <DropdownMenuItem
             key={code}
             disabled={code === locale}
+            // The option names itself in its own language, so tag it for correct pronunciation.
+            lang={code}
             onClick={() => {
               startTransition(() => {
                 void setLocale(code).then(() => {

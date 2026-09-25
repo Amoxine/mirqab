@@ -129,7 +129,7 @@ function InviteMemberForm({ tenantId, onOpenChange }: InviteMemberSheetProps) {
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               {tCommon('cancel')}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" loading={isSubmitting}>
               {isSubmitting ? t('invite.submitting') : t('invite.submit')}
             </Button>
           </div>

@@ -158,11 +158,11 @@ function QuotaForm({ tenantId, onOpenChange }: { tenantId: string; onOpenChange:
             </FormItem>
           )}
         />
-        <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+        <SheetFooter className="mt-auto gap-2 pt-2">
           <Button type="button" variant="outline" onClick={handleClose}>
             {tCommon('cancel')}
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" loading={isSubmitting}>
             {isSubmitting ? t('quota.submitSaving') : t('quota.submitSave')}
           </Button>
         </SheetFooter>

@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, ArrowLeft, KeyRound, Plus } from 'lucide-react';
+import { AlertTriangle, KeyRound, Plus } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +18,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/sonner';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { KeyRevealDialog } from '@/components/portal/key-reveal-dialog';
 import { SubscribeSheet } from '@/components/portal/subscribe-sheet';
 import { SubscriptionUsage } from '@/components/portal/subscription-usage';
@@ -48,10 +50,10 @@ function RevokeDialog({
     try {
       await revokeMutation.mutateAsync(target.id);
       onClose();
-    } catch {
-      // Left open on failure — the AlertDialogAction below stays disabled while pending and the
-      // mutation's own error is not silently swallowed, just not toasted here (no `t` hook needed
-      // beyond this file's own).
+    } catch (error) {
+      // Left open on failure so the user can retry — but told why, instead of a button that
+      // silently re-enables.
+      toast.error(error instanceof Error ? error.message : t('subscription.revokeError'));
     }
   };
 
@@ -74,6 +76,7 @@ function RevokeDialog({
           <AlertDialogCancel disabled={revokeMutation.isPending}>{tCommon('cancel')}</AlertDialogCancel>
           <AlertDialogAction
             disabled={revokeMutation.isPending}
+            aria-busy={revokeMutation.isPending || undefined}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={(event) => {
               event.preventDefault();
@@ -97,28 +100,25 @@ export default function PortalApplicationPage() {
   const [revokeTarget, setRevokeTarget] = useState<PortalSubscription | null>(null);
   const { data: subscriptions, isLoading, isError, error, refetch } = usePortalSubscriptions(id);
 
+  const subscribeButton = (
+    <Button
+      type="button"
+      onClick={() => {
+        setSubscribeOpen(true);
+      }}
+    >
+      <Plus className="h-4 w-4" aria-hidden="true" />
+      {t('subscribe.title')}
+    </Button>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <Button asChild variant="ghost" size="sm" className="-ms-3">
-          <Link href="/portal/applications">
-            <ArrowLeft className="me-2 h-4 w-4" />
-            {t('applications.title')}
-          </Link>
-        </Button>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">{t('subscription.title')}</h1>
-          <Button
-            type="button"
-            onClick={() => {
-              setSubscribeOpen(true);
-            }}
-          >
-            <Plus className="me-2 h-4 w-4" />
-            {t('subscribe.title')}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        back={{ href: '/portal/applications', label: t('applications.title') }}
+        title={t('subscription.title')}
+        actions={subscribeButton}
+      />
 
       {isLoading && (
         <div className="space-y-3" aria-busy="true">
@@ -129,30 +129,21 @@ export default function PortalApplicationPage() {
       )}
 
       {isError && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{error.message}</p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                void refetch();
-              }}
-            >
-              {tCommon('retry')}
-            </Button>
-          </CardContent>
-        </Card>
+        <StateCard role="alert" icon={<AlertTriangle className="text-destructive" aria-hidden="true" />} message={error.message}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void refetch();
+            }}
+          >
+            {tCommon('retry')}
+          </Button>
+        </StateCard>
       )}
 
       {!isLoading && !isError && subscriptions?.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <KeyRound className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{t('subscription.empty')}</p>
-          </CardContent>
-        </Card>
+        <StateCard icon={<KeyRound aria-hidden="true" />} message={t('subscription.empty')} />
       )}
 
       {!isLoading &&
@@ -162,8 +153,8 @@ export default function PortalApplicationPage() {
         subscriptions.map((sub) => (
           <Card key={sub.id}>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">{sub.productName}</CardTitle>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <CardTitle className="break-words text-base">{sub.productName}</CardTitle>
                 <Badge variant={STATUS_VARIANT[sub.status]}>{t(`subscription.status.${sub.status}`)}</Badge>
               </div>
               {sub.status !== 'REVOKED' && (

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { useTranslations } from 'next-intl';
-import { ChevronRight, FileKey, RefreshCw, Shield } from 'lucide-react';
+import { AlertTriangle, ChevronRight, FileKey, RefreshCw, Shield } from 'lucide-react';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,14 +13,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/sonner';
 import { DataTable } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { useNodeHealth, useReloadGateways, useSettings } from '@/hooks/use-settings';
 import type { NodeHealthEntry } from '@/types';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b py-3 text-sm last:border-0">
+    <div className="flex flex-col gap-1 border-b py-3 text-sm last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{children}</dd>
+      <dd className="min-w-0 break-all font-medium">{children}</dd>
     </div>
   );
 }
@@ -45,14 +47,15 @@ function GeneralTab() {
 
   if (isError || !data) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-          <p className="text-sm text-muted-foreground">{tSettings('loadError')}</p>
-          <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
-            {tCommon('retry')}
-          </Button>
-        </CardContent>
-      </Card>
+      <StateCard
+        role="alert"
+        icon={<AlertTriangle className="text-destructive" aria-hidden="true" />}
+        message={tSettings('loadError')}
+      >
+        <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+          {tCommon('retry')}
+        </Button>
+      </StateCard>
     );
   }
 
@@ -81,7 +84,7 @@ function nodeColumns(t: ReturnType<typeof useTranslations>): ColumnDef<NodeHealt
       header: t('columns.status'),
       cell: ({ row }) =>
         row.original.health.reachable ? (
-          <Badge className="border-transparent bg-success text-white">{t('reachable')}</Badge>
+          <Badge variant="success">{t('reachable')}</Badge>
         ) : (
           <Badge variant="destructive">{t('unreachable')}</Badge>
         ),
@@ -126,11 +129,11 @@ function NodesTab() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardDescription>{t('description')}</CardDescription>
         <PermissionGate permission="settings:update">
           <Button type="button" size="sm" onClick={handleReload} disabled={reload.isPending}>
-            <RefreshCw className={`me-2 h-4 w-4 ${reload.isPending ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <RefreshCw className={`h-4 w-4 ${reload.isPending ? 'animate-spin' : ''}`} aria-hidden="true" />
             {reload.isPending ? t('reloadingButton') : t('reloadButton')}
           </Button>
         </PermissionGate>
@@ -166,17 +169,17 @@ function SettingsLinkCard({
 }) {
   return (
     <PermissionGate permission={permission}>
-      <Link href={href}>
-        <Card className="transition-colors hover:bg-accent/50">
+      <Link href={href} className="block rounded-lg">
+        <Card className="transition-colors duration-200 hover:bg-accent/50">
           <CardContent className="flex items-center justify-between gap-4 py-4">
-            <div className="flex items-center gap-3">
-              <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
+            <div className="flex min-w-0 items-center gap-3">
+              <Icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
               <div>
                 <CardTitle className="text-base">{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden="true" />
           </CardContent>
         </Card>
       </Link>
@@ -189,24 +192,23 @@ function SettingsView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('description')}</p>
+      <PageHeader title={t('title')} description={t('description')} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <SettingsLinkCard
+          href="/settings/roles"
+          permission="role:read"
+          icon={Shield}
+          title={t('rolesCard.title')}
+          description={t('rolesCard.description')}
+        />
+        <SettingsLinkCard
+          href="/settings/certificates"
+          permission="cert:read"
+          icon={FileKey}
+          title={t('certificatesCard.title')}
+          description={t('certificatesCard.description')}
+        />
       </div>
-      <SettingsLinkCard
-        href="/settings/roles"
-        permission="role:read"
-        icon={Shield}
-        title={t('rolesCard.title')}
-        description={t('rolesCard.description')}
-      />
-      <SettingsLinkCard
-        href="/settings/certificates"
-        permission="cert:read"
-        icon={FileKey}
-        title={t('certificatesCard.title')}
-        description={t('certificatesCard.description')}
-      />
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>

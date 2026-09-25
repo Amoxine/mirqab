@@ -11,6 +11,7 @@ import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import type { ApiConfig } from '@/types';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
 import { arrayToLines, linesToArray } from './list-codec';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 const schema = z.object({ allow: linesToArray, block: linesToArray });
 type Input_ = z.input<typeof schema>;
@@ -48,8 +49,8 @@ export function IpAccessSheet({ api, open, onOpenChange }: IpAccessSheetProps) {
 
   const save = async (ipAccessControl: ApiConfig['ipAccessControl']) => {
     try {
-      await updateMutation.mutateAsync({ config: { ipAccessControl } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { ipAccessControl } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

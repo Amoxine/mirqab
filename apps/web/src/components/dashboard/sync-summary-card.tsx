@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ShieldCheck } from 'lucide-react';
 import { AnalyticsErrorState } from '@/components/analytics/analytics-empty-state';
 import { PermissionGate } from '@/components/auth/permission-gate';
+import { StateMessage } from '@/components/shared/state-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,12 +15,14 @@ import { useGatewayStatus, useRetrySync } from '@/hooks/use-gateway-status';
 import { dateFnsLocale } from '@/lib/date-fns-locale';
 import { cn } from '@/lib/utils';
 import type { Locale } from '@/i18n/locales';
+import { FormattedNumber } from '@/components/shared/formatted';
 
 function Count({ label, value, className }: { label: string; value: number; className?: string }) {
   return (
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn('text-2xl font-bold', className)}>{value.toLocaleString()}</dd>
+      <dd className={cn('text-2xl font-bold tabular-nums', className)}><FormattedNumber value={value} />
+      </dd>
     </div>
   );
 }
@@ -57,14 +60,13 @@ export function SyncSummaryCard() {
         ) : error || !data ? (
           <AnalyticsErrorState message={error?.message ?? t('noStatus')} onRetry={() => void refetch()} />
         ) : data.apis.total === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <p className="text-sm text-muted-foreground">{t('emptyTitle')}</p>
+          <StateMessage icon={<ShieldCheck aria-hidden="true" />} message={t('emptyTitle')} className="py-6">
             <PermissionGate permission="api:create">
               <Button asChild size="sm">
                 <Link href="/apis">{t('createApi')}</Link>
               </Button>
             </PermissionGate>
-          </div>
+          </StateMessage>
         ) : (
           <div className="space-y-4">
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">

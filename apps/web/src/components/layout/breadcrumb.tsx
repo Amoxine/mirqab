@@ -23,6 +23,11 @@ export function Breadcrumb() {
     tenants: t('tenants'),
     analytics: t('analytics'),
     'audit-logs': t('auditLogs'),
+    plans: t('plans'),
+    products: t('products'),
+    settings: t('settings'),
+    roles: t('roles'),
+    certificates: t('certificates'),
     login: t('login'),
   };
 
@@ -35,8 +40,8 @@ export function Breadcrumb() {
   if (breadcrumbs.length === 0) {
     return (
       <nav aria-label={t('ariaLabel')} className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Home className="h-4 w-4" />
-        <span className="font-medium text-foreground">{t('home')}</span>
+        <Home className="h-4 w-4" aria-hidden="true" />
+        <span className="font-medium text-foreground" aria-current="page">{t('home')}</span>
       </nav>
     );
   }
@@ -46,24 +51,24 @@ export function Breadcrumb() {
       <Link
         href="/"
         aria-label={t('home')}
-        className="flex items-center gap-1 transition-colors hover:text-foreground"
+        className="flex shrink-0 items-center gap-1 rounded-sm transition-colors hover:text-foreground"
       >
-        <Home className="h-4 w-4" />
+        <Home className="h-4 w-4" aria-hidden="true" />
         {/* Icon-only on phones: the header also has to fit the tenant name. */}
         <span className="hidden sm:inline">{t('home')}</span>
       </Link>
       {breadcrumbs.map((crumb, index) => {
         const isLast = index === breadcrumbs.length - 1;
         return (
-          <span key={crumb.href} className="flex items-center gap-1">
+          <span key={crumb.href} className={isLast ? 'flex min-w-0 items-center gap-1' : 'hidden items-center gap-1 sm:flex'}>
             {/* Points visual "forward" — flip in RTL so it doesn't read backwards. */}
-            <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" />
+            <ChevronRight className="h-4 w-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
             {isLast ? (
-              <span className="font-medium text-foreground">{crumb.label}</span>
+              <span className="truncate font-medium text-foreground" aria-current="page">{crumb.label}</span>
             ) : (
               <Link
                 href={crumb.href}
-                className="transition-colors hover:text-foreground"
+                className="rounded-sm transition-colors hover:text-foreground"
               >
                 {crumb.label}
               </Link>

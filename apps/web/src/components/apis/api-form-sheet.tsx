@@ -29,6 +29,7 @@ import {
   type ApiFormInput,
   type ApiFormValues,
 } from './api-form-schema';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 
 type TextFieldName =
@@ -154,11 +155,11 @@ function ApiFormBody(props: ApiFormSheetProps) {
   const onSubmit = async (values: ApiFormValues) => {
     try {
       if (api) {
-        await updateMutation.mutateAsync(toUpdatePayload(values));
-        toast.success(t('form.updatedToast'));
+        const saved = await updateMutation.mutateAsync(toUpdatePayload(values));
+        toastSyncOutcome(t, saved, t('form.updatedToast'));
       } else {
-        await createMutation.mutateAsync(toCreatePayload(values));
-        toast.success(t('form.createdToast'));
+        const saved = await createMutation.mutateAsync(toCreatePayload(values));
+        toastSyncOutcome(t, saved, t('form.createdToast'));
       }
       handleClose();
     } catch (error) {
@@ -295,7 +296,7 @@ function ApiFormBody(props: ApiFormSheetProps) {
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               {tCommon('cancel')}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" loading={isSubmitting}>
               {isSubmitting ? t('form.saving') : api ? t('form.saveChanges') : tCommon('create')}
             </Button>
           </div>

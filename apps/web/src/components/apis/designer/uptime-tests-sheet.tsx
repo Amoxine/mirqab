@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import type { ApiConfig } from '@/types';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 type UptimeTest = NonNullable<ApiConfig['uptimeTests']>[number];
@@ -83,8 +84,8 @@ export function UptimeTestsSheet({ api, open, onOpenChange }: UptimeTestsSheetPr
 
   const save = async (uptimeTests: ApiConfig['uptimeTests']) => {
     try {
-      await updateMutation.mutateAsync({ config: { uptimeTests } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { uptimeTests } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

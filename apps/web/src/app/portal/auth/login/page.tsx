@@ -53,7 +53,7 @@ function PortalLoginPageContent() {
       </CardHeader>
       <CardContent className="space-y-4">
         <KratosFlowForm ui={flow.ui} onSuccess={onSuccess} onFlowUpdate={onFlowUpdate} onError={onError} />
-        <div className="flex justify-between text-sm text-muted-foreground">
+        <div className="flex flex-wrap justify-between gap-x-4 gap-y-2 text-sm text-muted-foreground">
           <Link href="/portal/auth/recovery" className="underline">
             {t('auth.login.forgotPassword')}
           </Link>

@@ -3,35 +3,34 @@
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
+import { History } from 'lucide-react';
 import { AnalyticsErrorState } from '@/components/analytics/analytics-empty-state';
+import { StateMessage } from '@/components/shared/state-card';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRecentAudit } from '@/hooks/use-audit';
+import { auditActionLabel } from '@/lib/audit-actions';
 import { dateFnsLocale } from '@/lib/date-fns-locale';
 import type { Locale } from '@/i18n/locales';
+import { useFormat } from '@/hooks/use-format';
 
 const DESTRUCTIVE_ACTIONS = new Set(['DELETED', 'REVOKED', 'SYNC_FAILED', 'QUOTA_EXCEEDED']);
 
-/** `SYNC_SUCCEEDED` -> `Sync succeeded`
- * ponytail: left untranslated — this titlecases whatever Prisma `AuditAction` value the backend
- * sends, which (per `use-audit.ts`) is wider than this app's closed `AuditAction` union, so there's
- * no fixed set of action codes to map to translation keys without breaking on the next backend value. */
-function actionLabel(action: string): string {
-  const words = action.toLowerCase().replaceAll('_', ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
 
 export function RecentActivityCard() {
   const { data, isLoading, error, refetch } = useRecentAudit();
   const t = useTranslations('dashboard.recentActivity');
+  // Known actions are translated (the same labels as the Audit Logs page); an unknown one shows its raw code.
+  const tAnalytics = useTranslations('analytics');
   const locale = dateFnsLocale(useLocale() as Locale);
+  const fmt = useFormat();
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-base">{t('title')}</CardTitle>
-        <Link href="/audit-logs" className="text-sm text-primary hover:underline">
+        <Link href="/audit-logs" className="rounded-sm text-sm font-medium text-primary hover:underline">
           {t('viewAll')}
         </Link>
       </CardHeader>
@@ -45,14 +44,14 @@ export function RecentActivityCard() {
         ) : error ? (
           <AnalyticsErrorState message={error.message} onRetry={() => void refetch()} />
         ) : !data?.length ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">{t('empty')}</p>
+          <StateMessage icon={<History aria-hidden="true" />} message={t('empty')} className="py-6" />
         ) : (
           <ul className="divide-y">
             {data.map((entry) => (
               <li key={entry.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="flex min-w-0 items-center gap-3">
                   <Badge variant={DESTRUCTIVE_ACTIONS.has(entry.action) ? 'destructive' : 'secondary'} className="shrink-0">
-                    {actionLabel(entry.action)}
+                    {auditActionLabel(tAnalytics, entry.action)}
                   </Badge>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium capitalize">{entry.resource}</p>
@@ -64,7 +63,7 @@ export function RecentActivityCard() {
                 <time
                   dateTime={entry.createdAt}
                   className="shrink-0 text-xs text-muted-foreground"
-                  title={new Date(entry.createdAt).toLocaleString()}
+                  title={fmt.dateTime(entry.createdAt)}
                 >
                   {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale })}
                 </time>

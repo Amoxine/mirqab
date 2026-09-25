@@ -2,10 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, renderHook, act } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
+import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
+import commonMessages from '@/messages/en/common.json';
 import dashboardMessages from '@/messages/en/dashboard.json';
 
 const M = dashboardMessages.dataTable;
-import { ViewModeToggle, useViewMode, type ViewMode } from './data-table';
+import { DataTable, ViewModeToggle, useViewMode, type ViewMode } from './data-table';
 
 // RTL's auto-cleanup only runs when vitest has `globals: true` or a setup file calls it; this
 // project has neither, so renders from earlier tests otherwise stay in the document and the next
@@ -14,8 +16,67 @@ import { ViewModeToggle, useViewMode, type ViewMode } from './data-table';
 afterEach(cleanup);
 
 const wrap = (ui: React.ReactNode) => (
-  <NextIntlClientProvider locale="en" messages={{ dashboard: dashboardMessages }}>{ui}</NextIntlClientProvider>
+  <NextIntlClientProvider locale="en" messages={{ dashboard: dashboardMessages, common: commonMessages }}>
+    {ui}
+  </NextIntlClientProvider>
 );
+
+interface Row { name: string; status: string }
+const COLUMNS: ColumnDef<Row>[] = [
+  { accessorKey: 'name', header: 'Name' },
+  { accessorKey: 'status', header: 'Status' },
+  { id: 'actions', cell: () => <button type="button">{'row menu'}</button> },
+];
+
+function Harness({ rows, emptyAction }: { rows: Row[]; emptyAction?: React.ReactNode }) {
+  const table = useReactTable({ data: rows, columns: COLUMNS, getCoreRowModel: getCoreRowModel() });
+  return (
+    <DataTable table={table} isLoading={false} isError={false} emptyMessage="Nothing here" emptyAction={emptyAction} />
+  );
+}
+
+/** Stubs `matchMedia` so the `sm` breakpoint query reports `narrow`. */
+function stubViewport(narrow: boolean) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: narrow,
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+}
+
+describe('DataTable responsive layout', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('renders a real table on wide screens', () => {
+    stubViewport(false);
+    render(wrap(<Harness rows={[{ name: 'orders', status: 'ACTIVE' }]} />));
+    expect(screen.queryByRole('table')).not.toBeNull();
+  });
+
+  it('renders label/value cards instead of a table below sm, labelled by the column headers', () => {
+    stubViewport(true);
+    render(wrap(<Harness rows={[{ name: 'orders', status: 'ACTIVE' }]} />));
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getByText('orders')).toBeDefined();
+    // The header becomes the value's label, and the header-less actions column still renders.
+    expect(screen.getByText('Status').tagName).toBe('DT');
+    expect(screen.getByText('ACTIVE').tagName).toBe('DD');
+    expect(screen.getByRole('button', { name: 'row menu' })).toBeDefined();
+  });
+
+  it('falls back to the table when matchMedia is unavailable', () => {
+    vi.stubGlobal('matchMedia', undefined);
+    render(wrap(<Harness rows={[{ name: 'orders', status: 'ACTIVE' }]} />));
+    expect(screen.queryByRole('table')).not.toBeNull();
+  });
+
+  it('offers the caller\'s next action in the empty state', () => {
+    render(wrap(<Harness rows={[]} emptyAction={<button type="button">{'Create the first one'}</button>} />));
+    expect(screen.getByText('Nothing here')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Create the first one' })).toBeDefined();
+  });
+});
 
 describe('ViewModeToggle (frozen at WP17)', () => {
   it('marks the active view with aria-pressed, so the state is not colour-only', () => {

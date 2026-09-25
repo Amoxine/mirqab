@@ -15,8 +15,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { PageHeader } from '@/components/shared/page-header';
 import { DataTable } from '@/components/shared/data-table';
 import { usePlans, type Plan } from '@/hooks/use-plans';
+import { FormattedNumber } from '@/components/shared/formatted';
 
 const NO_ROWS: Plan[] = [];
 
@@ -44,7 +46,7 @@ function PlanRowActions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only">{t('list.openMenu')}</span>
         </Button>
       </DropdownMenuTrigger>
@@ -102,7 +104,7 @@ function getColumns(
       id: 'quota',
       header: t('list.columns.quota'),
       cell: ({ row }) =>
-        row.original.quotaMax < 0 ? t('list.unlimited') : row.original.quotaMax.toLocaleString(),
+        row.original.quotaMax < 0 ? t('list.unlimited') : <FormattedNumber value={row.original.quotaMax} />,
     },
     {
       accessorKey: 'keyCount',
@@ -152,24 +154,26 @@ function PlansView() {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const createButton = (
+    <PermissionGate permission="plan:create">
+      <Button
+        onClick={() => {
+          setCreateOpen(true);
+        }}
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t('list.createButton')}
+      </Button>
+    </PermissionGate>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
-          <p className="mt-1 text-muted-foreground">{t('list.description')}</p>
-        </div>
-        <PermissionGate permission="plan:create">
-          <Button
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="me-2 h-4 w-4" />
-            {t('list.createButton')}
-          </Button>
-        </PermissionGate>
-      </div>
+      <PageHeader
+        title={t('list.title')}
+        description={t('list.description')}
+        actions={createButton}
+      />
 
       <PlanFormSheet mode="create" open={createOpen} onOpenChange={setCreateOpen} />
       {editTarget && (
@@ -196,6 +200,7 @@ function PlansView() {
         error={error}
         onRetry={() => void refetch()}
         emptyMessage={t('list.empty')}
+        emptyAction={createButton}
       />
     </div>
   );

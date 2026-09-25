@@ -119,12 +119,12 @@ function UploadForm({ onOpenChange }: { onOpenChange: (open: boolean) => void })
             </FormItem>
           )}
         />
-        <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+        <SheetFooter className="mt-auto gap-2 pt-2">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
             {tCommon('cancel')}
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            <Upload className="me-2 h-4 w-4" />
+          <Button type="submit" loading={isSubmitting}>
+            <Upload className="h-4 w-4" />
             {isSubmitting ? t('form.submitUploading') : t('form.submitUpload')}
           </Button>
         </SheetFooter>

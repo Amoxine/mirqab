@@ -1,28 +1,55 @@
+import { getActiveTenantId } from './active-tenant';
+
+/**
+ * Every dashboard key starts with `['tenant', tenantId]` (guidelines §8): cached data of one tenant
+ * can never answer a query made for another, and one tenant's cache can be dropped as a unit
+ * (`queryKeys.tenantScope(id)`) on a switch. `tenantId` is read at call time, so the prefix follows
+ * `X-Tenant-ID` exactly; `null` means "no explicit choice yet — the server's default tenant".
+ * The constant-looking members are getters for the same reason.
+ *
+ * The portal's keys (`hooks/use-portal.ts`) are separate on purpose: a developer's tenant comes from
+ * their own session there, never from this header.
+ */
+const scoped = <T extends readonly unknown[]>(...parts: T) => ['tenant', getActiveTenantId(), ...parts] as const;
+
 export const queryKeys = {
+  tenantScope: (tenantId: string | null) => ['tenant', tenantId] as const,
   apis: {
-    all: ['apis'] as const,
+    get all() {
+      return scoped('apis');
+    },
     lists: () => [...queryKeys.apis.all, 'list'] as const,
     list: (params: Record<string, string>) => [...queryKeys.apis.lists(), params] as const,
     detail: (id: string) => [...queryKeys.apis.all, 'detail', id] as const,
-    keys: (id: string) => [...queryKeys.apis.all, 'detail', id, 'keys'] as const,
+    keys: (id: string, pageSize: number) => [...queryKeys.apis.all, 'detail', id, 'keys', { pageSize }] as const,
     clients: (id: string) => [...queryKeys.apis.all, 'detail', id, 'clients'] as const,
   },
   keys: {
-    all: ['keys'] as const,
+    get all() {
+      return scoped('keys');
+    },
     lists: () => [...queryKeys.keys.all, 'list'] as const,
     list: (params: Record<string, string>) => [...queryKeys.keys.lists(), params] as const,
     detail: (id: string) => [...queryKeys.keys.all, 'detail', id] as const,
     usage: (id: string, range: string) => [...queryKeys.keys.all, 'detail', id, 'usage', range] as const,
   },
   gateway: {
-    status: ['gateway', 'status'] as const,
-    nodeHealth: ['gateway', 'nodes', 'health'] as const,
+    get status() {
+      return scoped('gateway', 'status');
+    },
+    get nodeHealth() {
+      return scoped('gateway', 'nodes', 'health');
+    },
   },
   settings: {
-    all: ['settings'] as const,
+    get all() {
+      return scoped('settings');
+    },
   },
   tenants: {
-    all: ['tenants'] as const,
+    get all() {
+      return scoped('tenants');
+    },
     lists: () => [...queryKeys.tenants.all, 'list'] as const,
     list: (params: Record<string, string>) => [...queryKeys.tenants.lists(), params] as const,
     detail: (id: string) => [...queryKeys.tenants.all, 'detail', id] as const,
@@ -31,37 +58,57 @@ export const queryKeys = {
     usage: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'usage'] as const,
   },
   plans: {
-    all: ['plans'] as const,
+    get all() {
+      return scoped('plans');
+    },
     detail: (id: string) => [...queryKeys.plans.all, 'detail', id] as const,
   },
   products: {
-    all: ['products'] as const,
+    get all() {
+      return scoped('products');
+    },
     detail: (id: string) => [...queryKeys.products.all, 'detail', id] as const,
   },
   roles: {
-    all: ['roles'] as const,
+    get all() {
+      return scoped('roles');
+    },
     detail: (id: string) => [...queryKeys.roles.all, 'detail', id] as const,
-    permissions: ['roles', 'permissions'] as const,
+    get permissions() {
+      return scoped('roles', 'permissions');
+    },
   },
   certificates: {
-    all: ['certificates'] as const,
+    get all() {
+      return scoped('certificates');
+    },
   },
   analytics: {
-    all: ['analytics'] as const,
+    get all() {
+      return scoped('analytics');
+    },
     overview: (range: string) => [...queryKeys.analytics.all, 'overview', range] as const,
     apis: (range: string) => [...queryKeys.analytics.all, 'apis', range] as const,
     keys: (range: string) => [...queryKeys.analytics.all, 'keys', range] as const,
     timeseries: (metric: string, range: string) => [...queryKeys.analytics.all, 'timeseries', metric, range] as const,
     statusCodes: (range: string) => [...queryKeys.analytics.all, 'status-codes', range] as const,
-    health: ['analytics', 'health'] as const,
+    get health() {
+      return scoped('analytics', 'health');
+    },
   },
   audit: {
-    all: ['audit-logs'] as const,
+    get all() {
+      return scoped('audit-logs');
+    },
     lists: (params: Record<string, string>) => [...queryKeys.audit.all, 'list', params] as const,
     stats: (range: string) => [...queryKeys.audit.all, 'stats', range] as const,
-    recent: ['audit-logs', 'recent'] as const,
+    get recent() {
+      return scoped('audit-logs', 'recent');
+    },
   },
   auth: {
-    me: ['auth', 'me'] as const,
+    get me() {
+      return scoped('auth', 'me');
+    },
   },
 };

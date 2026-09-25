@@ -7,58 +7,23 @@ import {
   AnalyticsEmptyState,
   AnalyticsErrorState,
   AnalyticsStaleNotice,
-  formatMs,
-  formatPercent,
 } from '@/components/analytics/analytics-empty-state';
 import { isPipelineStale } from '@/components/analytics/pipeline-status';
 import { PermissionGate } from '@/components/auth/permission-gate';
 import { GatewayHealthCard } from '@/components/dashboard/gateway-health-card';
 import { RecentActivityCard } from '@/components/dashboard/recent-activity-card';
+import { StatCard, StatCardSkeleton } from '@/components/dashboard/stat-card';
 import { SyncSummaryCard } from '@/components/dashboard/sync-summary-card';
+import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsHealth, useAnalyticsOverview } from '@/hooks/use-analytics';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  description?: string;
-}
-
-function StatCard({ title, value, icon: Icon, description }: StatCardProps) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatCardSkeleton() {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-4 w-24" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-20" />
-        <Skeleton className="mt-2 h-3 w-32" />
-      </CardContent>
-    </Card>
-  );
-}
+import { useFormat } from '@/hooks/use-format';
 
 /** Only mounted once the pump pipeline reports ready, so the overview is never shown as zeros-as-fact. */
 function OverviewTiles() {
   const { data, isLoading, error, refetch } = useAnalyticsOverview('24h');
   const t = useTranslations('dashboard.page');
+  const fmt = useFormat();
 
   if (isLoading) {
     return (
@@ -82,27 +47,27 @@ function OverviewTiles() {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         title={t('stats.requests')}
-        value={data.totalRequests.toLocaleString()}
+        value={fmt.number(data.totalRequests)}
         icon={Activity}
         description={t('stats.requestsDescription')}
       />
       <StatCard
         title={t('stats.errorRate')}
-        value={hasTraffic ? formatPercent(data.errorRate) : '—'}
+        value={hasTraffic ? fmt.percent(data.errorRate) : '—'}
         icon={AlertTriangle}
-        description={t('stats.errorsDescription', { count: data.errorCount.toLocaleString() })}
+        description={t('stats.errorsDescription', { count: fmt.number(data.errorCount) })}
       />
       <StatCard
         title={t('stats.avgLatency')}
-        value={hasTraffic ? formatMs(data.avgLatencyMs) : '—'}
+        value={hasTraffic ? fmt.ms(data.avgLatencyMs) : '—'}
         icon={Timer}
-        description={hasTraffic ? t('stats.upstreamDescription', { ms: formatMs(data.avgUpstreamLatencyMs) }) : undefined}
+        description={hasTraffic ? t('stats.upstreamDescription', { ms: fmt.ms(data.avgUpstreamLatencyMs) }) : undefined}
       />
       <StatCard
         title={t('stats.activeApis')}
-        value={data.activeApis}
+        value={fmt.number(data.activeApis)}
         icon={ShieldCheck}
-        description={t('stats.activeKeysDescription', { count: data.activeKeys.toLocaleString() })}
+        description={t('stats.activeKeysDescription', { count: fmt.number(data.activeKeys) })}
       />
     </div>
   );
@@ -116,7 +81,7 @@ function AnalyticsSection() {
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{t('traffic')}</h2>
-        <Link href="/analytics" className="text-sm text-primary hover:underline">
+        <Link href="/analytics" className="rounded-sm text-sm font-medium text-primary hover:underline">
           {t('viewAnalytics')}
         </Link>
       </div>
@@ -149,10 +114,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-        <p className="mt-1 text-muted-foreground">{t('subtitle')}</p>
-      </div>
+      <PageHeader title={t('title')} description={t('subtitle')} />
 
       <PermissionGate permission="analytics:read">
         <div className="grid gap-4 lg:grid-cols-3">
@@ -174,22 +136,22 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-base">{t('quickActions')}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-1">
             <PermissionGate permission="api:read">
-              <Link href="/apis" className="flex items-center gap-2 rounded-md p-2 text-sm hover:bg-accent">
-                <ShieldCheck className="h-4 w-4" />
+              <Link href="/apis" className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent pointer-coarse:min-h-11">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 {t('manageApis')}
               </Link>
             </PermissionGate>
             <PermissionGate permission="key:read">
-              <Link href="/keys" className="flex items-center gap-2 rounded-md p-2 text-sm hover:bg-accent">
-                <KeyRound className="h-4 w-4" />
+              <Link href="/keys" className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent pointer-coarse:min-h-11">
+                <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 {t('manageKeys')}
               </Link>
             </PermissionGate>
             <PermissionGate permission="tenant:read">
-              <Link href="/tenants" className="flex items-center gap-2 rounded-md p-2 text-sm hover:bg-accent">
-                <Users className="h-4 w-4" />
+              <Link href="/tenants" className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent pointer-coarse:min-h-11">
+                <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 {t('manageTenants')}
               </Link>
             </PermissionGate>

@@ -30,7 +30,7 @@ export function KeyRevealDialog({ keyValue, onClose }: { keyValue: string | null
         {keyValue && (
           <code className="block select-all break-all rounded-md bg-muted p-3 text-sm">{keyValue}</code>
         )}
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           <Button
             type="button"
             variant="outline"
@@ -46,7 +46,7 @@ export function KeyRevealDialog({ keyValue, onClose }: { keyValue: string | null
               );
             }}
           >
-            {copied ? <Check className="me-2 h-4 w-4" /> : <Copy className="me-2 h-4 w-4" />}
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? t('key.copied') : t('key.copyKey')}
           </Button>
           <Button type="button" onClick={onClose}>

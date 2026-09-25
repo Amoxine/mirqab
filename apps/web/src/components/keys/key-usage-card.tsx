@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useKeyUsage } from '@/hooks/use-keys';
 import type { AnalyticsRange } from '@/types';
 import { quotaUsedPercent, toDate } from './key-utils';
+import { useFormat } from '@/hooks/use-format';
 
 const RANGES: AnalyticsRange[] = ['1h', '24h', '7d', '30d'];
 
@@ -36,6 +37,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 /** Quota progress from the gateway plus range-scoped traffic for one key. */
 export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
   const t = useTranslations('keys');
+  const fmt = useFormat();
   const tCommon = useTranslations('common');
   const [range, setRange] = useState<AnalyticsRange>('24h');
   const { data: usage, isLoading, isError, error, refetch, isFetching } = useKeyUsage(keyId, range);
@@ -92,8 +94,8 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
                 {percent !== null && usage.quotaMax !== null && usage.quotaRemaining !== null && (
                   <span className="tabular-nums text-muted-foreground">
                     {t('usage.quotaUsed', {
-                      used: (usage.quotaMax - usage.quotaRemaining).toLocaleString(),
-                      max: usage.quotaMax.toLocaleString(),
+                      used: fmt.number(usage.quotaMax - usage.quotaRemaining),
+                      max: fmt.number(usage.quotaMax),
                     })}
                   </span>
                 )}
@@ -116,8 +118,8 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {t('usage.quotaRemaining', { remaining: usage.quotaRemaining?.toLocaleString() ?? '' })}
-                    {resetAt ? t('usage.quotaResets', { date: resetAt.toLocaleString() }) : ''}
+                    {t('usage.quotaRemaining', { remaining: usage.quotaRemaining === null ? '' : fmt.number(usage.quotaRemaining) })}
+                    {resetAt ? t('usage.quotaResets', { date: fmt.dateTime(resetAt) }) : ''}
                   </p>
                 </>
               ) : (
@@ -128,8 +130,8 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label={t('usage.stats.requests')} value={usage.requests.toLocaleString()} />
-              <Stat label={t('usage.stats.errors')} value={usage.errors.toLocaleString()} />
+              <Stat label={t('usage.stats.requests')} value={fmt.number(usage.requests)} />
+              <Stat label={t('usage.stats.errors')} value={fmt.number(usage.errors)} />
               <Stat label={t('usage.stats.errorRate')} value={`${usage.errorRate.toFixed(1)}%`} />
               <Stat
                 label={t('usage.stats.avgLatencyLabel')}

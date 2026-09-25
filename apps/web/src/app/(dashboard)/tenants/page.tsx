@@ -20,11 +20,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/shared/page-header';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
 import { TenantFormSheet } from '@/components/tenants/tenant-form-sheet';
 import { TenantQuotaSheet } from '@/components/tenants/tenant-quota-sheet';
 import { TenantStatusDialog } from '@/components/tenants/tenant-status-dialog';
 import { useTenantQuota, useTenants, type Tenant } from '@/hooks/use-tenants';
+import { FormattedDate, FormattedNumber } from '@/components/shared/formatted';
 
 function tenantStatusColor(status: string) {
   switch (status) {
@@ -56,7 +58,11 @@ function QuotaCell({ tenantId }: { tenantId: string }) {
   if (isError || quotaMax === null || quotaMax === undefined || quotaMax < 0) {
     return <span className="text-muted-foreground">{t('quota.unlimited')}</span>;
   }
-  return <span className="tabular-nums">{quotaMax.toLocaleString()}</span>;
+  return (
+    <span className="tabular-nums">
+      <FormattedNumber value={quotaMax} />
+    </span>
+  );
 }
 
 function TenantRowActions({
@@ -80,7 +86,7 @@ function TenantRowActions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only">{t('list.openMenu')}</span>
         </Button>
       </DropdownMenuTrigger>
@@ -173,7 +179,7 @@ function getColumns(
     {
       accessorKey: 'createdAt',
       header: tCommon('createdAt'),
-      cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+      cell: ({ row }) => <FormattedDate value={row.original.createdAt} />,
     },
     {
       id: 'actions',
@@ -217,24 +223,26 @@ function TenantsView() {
     pageCount: data?.meta.totalPages ?? 0,
   });
 
+  const createButton = (
+    <PermissionGate permission="tenant:create">
+      <Button
+        onClick={() => {
+          setCreateOpen(true);
+        }}
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t('list.createButton')}
+      </Button>
+    </PermissionGate>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
-          <p className="mt-1 text-muted-foreground">{t('list.description')}</p>
-        </div>
-        <PermissionGate permission="tenant:create">
-          <Button
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="me-2 h-4 w-4" />
-            {t('list.createButton')}
-          </Button>
-        </PermissionGate>
-      </div>
+      <PageHeader
+        title={t('list.title')}
+        description={t('list.description')}
+        actions={createButton}
+      />
 
       <TenantFormSheet mode="create" open={createOpen} onOpenChange={setCreateOpen} />
       {editTarget && (
@@ -272,6 +280,7 @@ function TenantsView() {
         error={error}
         onRetry={() => void refetch()}
         emptyMessage={t('list.empty')}
+        emptyAction={createButton}
       />
 
       <DataTablePagination

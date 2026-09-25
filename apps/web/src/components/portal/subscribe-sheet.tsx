@@ -45,9 +45,9 @@ export function SubscribeSheet({ applicationId, open, onOpenChange, onSubscribed
   const onSubmit = async (values: Values) => {
     try {
       const subscription = await createMutation.mutateAsync(values);
-      toast.success(
-        subscription.status === 'PENDING' ? t('subscribe.pendingToast') : t('subscribe.approvedToast'),
-      );
+      // Only an APPROVED subscription is reported as a success; PENDING is information, not done.
+      if (subscription.status === 'PENDING') toast.info(t('subscribe.pendingToast'));
+      else toast.success(t('subscribe.approvedToast'));
       onSubscribed(subscription);
       handleClose();
     } catch (error) {
@@ -120,11 +120,11 @@ export function SubscribeSheet({ applicationId, open, onOpenChange, onSubscribed
                   </FormItem>
                 )}
               />
-              <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+              <SheetFooter className="mt-auto gap-2 pt-2">
                 <Button type="button" variant="outline" onClick={handleClose} disabled={form.formState.isSubmitting}>
                   {tCommon('cancel')}
                 </Button>
-                <Button type="submit" disabled={form.formState.isSubmitting}>
+                <Button type="submit" loading={form.formState.isSubmitting}>
                   {form.formState.isSubmitting ? t('subscribe.subscribing') : t('subscribe.submit')}
                 </Button>
               </SheetFooter>

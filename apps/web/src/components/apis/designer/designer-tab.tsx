@@ -93,7 +93,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
               setOpenSheet('testRequest');
             }}
           >
-            <FlaskConical className="me-2 h-4 w-4" />
+            <FlaskConical className="h-4 w-4" aria-hidden="true" />
             {t('designer.testRequest.title')}
           </Button>
         </PermissionGate>
@@ -109,7 +109,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={trafficActive}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.unlimited')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.traffic.title') })}
             onEdit={edit('traffic')}
           />
           <MiddlewareCard
@@ -118,7 +118,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={lbTargets > 0}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.loadBalancing.title') })}
             onEdit={edit('loadBalancing')}
           />
           <MiddlewareCard
@@ -127,7 +127,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={uptimeCount > 0}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.uptimeTests.title') })}
             onEdit={edit('uptimeTests')}
           />
           <MiddlewareCard
@@ -136,7 +136,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={headersActive}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.headerTransform.title') })}
             onEdit={edit('headerTransform')}
           />
           <MiddlewareCard
@@ -145,7 +145,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={!!config.urlRewrite}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.urlRewrite.title') })}
             onEdit={edit('urlRewrite')}
           />
           <MiddlewareCard
@@ -154,7 +154,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={bodyTransformActive}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.bodyTransform.title') })}
             onEdit={edit('bodyTransform')}
           />
           <MiddlewareCard
@@ -163,7 +163,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={!!config.mock}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.mock.title') })}
             onEdit={edit('mock')}
           />
           <MiddlewareCard
@@ -172,7 +172,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={cacheActive}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.cache.title') })}
             onEdit={edit('cache')}
           />
           <MiddlewareCard
@@ -181,7 +181,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={!!config.detailedRecording}
             activeLabel={t('config.on')}
             inactiveLabel={t('config.off')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.detailedRecording.title') })}
             onEdit={edit('detailedRecording')}
           />
           <MiddlewareCard
@@ -190,7 +190,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={ipCount > 0}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.ipAccess.title') })}
             onEdit={edit('ipAccess')}
           />
           <MiddlewareCard
@@ -199,7 +199,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={!!config.validateRequestSchema}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.requestValidation.title') })}
             onEdit={edit('requestValidation')}
           />
           <MiddlewareCard
@@ -208,7 +208,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={api.authType !== 'NONE'}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.authentication.title') })}
             onEdit={edit('authentication')}
           />
           <MiddlewareCard
@@ -217,7 +217,7 @@ export function DesignerTab({ api }: DesignerTabProps) {
             active={!!config.upstreamMutualTls}
             activeLabel={t('config.enabled')}
             inactiveLabel={t('config.disabled')}
-            editLabel={tCommon('edit')}
+            editLabel={tCommon('editItem', { name: t('designer.upstreamMtls.title') })}
             onEdit={edit('upstreamMtls')}
           />
         </div>

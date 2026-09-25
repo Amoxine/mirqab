@@ -2,15 +2,19 @@
 'use strict';
 
 /**
- * WCAG 2.1 AA contrast check for the primary/primary-foreground color pair, read straight from the
- * `--color-*` custom properties in globals.css — light from the `@theme` block, dark from `.dark`
- * (falling back to the light value for anything `.dark` doesn't override, same as the browser cascade).
- * Run: node scripts/check-contrast.js
+ * WCAG 2.1 AA contrast check for every foreground/surface pair the UI actually renders, read straight
+ * from the `--color-*` custom properties in globals.css — light from the `@theme` block, dark from
+ * `.dark` (falling back to the light value for anything `.dark` doesn't override, same as the browser
+ * cascade). A token used both as a fill (buttons, badges) and as text (links, form errors, status
+ * text) is checked in both roles, because a shade dark enough for white text on it is often too dark
+ * to read as text on a dark surface.
+ *
+ * Run: node scripts/check-contrast.js [path/to/globals.css]   (default: src/styles/globals.css)
  */
 const fs = require('fs');
 const path = require('path');
 
-const CSS_PATH = path.join(__dirname, '..', 'src', 'styles', 'globals.css');
+const CSS_PATH = process.argv[2] || path.join(__dirname, '..', 'src', 'styles', 'globals.css');
 const MIN_RATIO = 4.5;
 
 function readBlock(css, selector) {
@@ -49,37 +53,68 @@ const css = fs.readFileSync(CSS_PATH, 'utf8');
 const theme = readBlock(css, '@theme');
 const dark = readBlock(css, '\\.dark');
 
-const themes = [
-  {
-    name: 'light',
-    bg: readVar(theme, 'color-primary'),
-    fg: readVar(theme, 'color-primary-foreground'),
-  },
-  {
-    name: 'dark',
-    bg: readVar(dark, 'color-primary') || readVar(theme, 'color-primary'),
-    fg: readVar(dark, 'color-primary-foreground') || readVar(theme, 'color-primary-foreground'),
-  },
+/**
+ * [foreground token, background token, what it is]. `primary-10` is the active-nav / avatar tint:
+ * `bg-primary/10` composited over the page background.
+ */
+const PAIRS = [
+  ['primary-foreground', 'primary', 'primary button'],
+  ['destructive-foreground', 'destructive', 'destructive button / badge'],
+  ['success-foreground', 'success', 'success badge'],
+  ['warning-foreground', 'warning', 'warning badge'],
+  ['secondary-foreground', 'secondary', 'secondary button / badge'],
+  ['foreground', 'background', 'body text'],
+  ['card-foreground', 'card', 'card text'],
+  ['popover-foreground', 'popover', 'menu text'],
+  ['accent-foreground', 'accent', 'hovered menu item'],
+  ['muted-foreground', 'background', 'secondary text on page'],
+  ['muted-foreground', 'card', 'secondary text on card'],
+  ['muted-foreground', 'muted', 'secondary text on muted surface'],
+  ['muted-foreground', 'accent', 'secondary text on hovered item'],
+  ['primary', 'background', 'link text on page'],
+  ['primary', 'card', 'link text on card'],
+  ['primary', 'primary-10', 'active nav item'],
+  ['destructive', 'background', 'error text on page'],
+  ['destructive', 'card', 'error text on card / form message'],
+  ['success', 'card', 'success text on card'],
+  ['warning', 'card', 'warning text on card'],
 ];
 
+/** `alpha` of `fg` composited over `bg` — what `bg-primary/10` actually paints. */
+function mix(fgHex, bgHex, alpha) {
+  const f = hexToRgb(fgHex);
+  const b = hexToRgb(bgHex);
+  const c = (k) => Math.round(f[k] * alpha + b[k] * (1 - alpha));
+  return `#${[c('r'), c('g'), c('b')].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function resolve(name, block) {
+  if (name === 'primary-10') return mix(resolve('primary', block), resolve('background', block), 0.1);
+  return (block && readVar(block, `color-${name}`)) || readVar(theme, `color-${name}`);
+}
+
 let ok = true;
-for (const { name, bg, fg } of themes) {
-  if (!bg || !fg) {
-    console.error(`[contrast] could not read --color-primary/--color-primary-foreground for the ${name} theme`);
-    ok = false;
-    continue;
+for (const [themeName, block] of [['light', null], ['dark', dark]]) {
+  for (const [fgName, bgName, label] of PAIRS) {
+    const fg = resolve(fgName, block);
+    const bg = resolve(bgName, block);
+    if (!fg || !bg) {
+      console.error(`[contrast] ${themeName}: could not read --color-${fgName} / --color-${bgName}`);
+      ok = false;
+      continue;
+    }
+    const ratio = contrastRatio(fg, bg);
+    const pass = ratio >= MIN_RATIO;
+    ok = ok && pass;
+    console.log(
+      `[contrast] ${themeName}: ${fgName} ${fg} on ${bgName} ${bg} (${label}) = ${ratio.toFixed(2)}:1 ` +
+        `${pass ? 'PASS' : 'FAIL'}`,
+    );
   }
-  const ratio = contrastRatio(bg, fg);
-  const pass = ratio >= MIN_RATIO;
-  ok = ok && pass;
-  console.log(
-    `[contrast] ${name}: primary ${bg} vs primary-foreground ${fg} = ${ratio.toFixed(2)}:1 ` +
-      `${pass ? 'PASS' : 'FAIL'} (needs ${MIN_RATIO}:1)`,
-  );
 }
 
 if (!ok) {
-  console.error('[contrast] FAILED — see above');
+  console.error(`[contrast] FAILED — every pair needs ${MIN_RATIO}:1 (WCAG AA), see above`);
   process.exit(1);
 }
-console.log('[contrast] all pairs pass WCAG AA (4.5:1)');
+console.log(`[contrast] all ${PAIRS.length * 2} pairs pass WCAG AA (${MIN_RATIO}:1)`);

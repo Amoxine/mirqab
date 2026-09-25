@@ -51,7 +51,7 @@ export function ApiConfigCard({ config, onEdit }: ApiConfigCardProps) {
         <CardTitle className="text-lg">{t('tabs.configuration')}</CardTitle>
         {onEdit && (
           <Button type="button" variant="outline" size="sm" onClick={onEdit}>
-            <Pencil className="me-2 h-4 w-4" />
+            <Pencil className="h-4 w-4" />
             {tCommon('edit')}
           </Button>
         )}

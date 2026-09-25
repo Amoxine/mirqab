@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 // The auth types this Sheet can set. JWT needs its own bring-your-own-JWKS section (not WP15c, see
 // api-form-schema.ts's own exclusion) and HMAC is PARKED — mapper exists but no signing-string
@@ -60,11 +61,11 @@ export function AuthenticationSheet({ api, open, onOpenChange }: AuthenticationS
 
   const onSubmit = async (values: Values) => {
     try {
-      await updateMutation.mutateAsync({
+      const saved = await updateMutation.mutateAsync({
         authType: values.authType,
         config: { authHeaderName: values.authHeaderName === '' ? 'Authorization' : values.authHeaderName },
       });
-      toast.success(t('designer.savedToast'));
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

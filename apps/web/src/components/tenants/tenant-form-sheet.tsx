@@ -158,7 +158,7 @@ function TenantFormBody(props: TenantFormSheetProps) {
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               {tCommon('cancel')}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" loading={isSubmitting}>
               {isSubmitting ? t('form.submitSaving') : tenant ? t('form.submitSave') : t('form.submitCreate')}
             </Button>
           </div>

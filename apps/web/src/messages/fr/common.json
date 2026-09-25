@@ -11,5 +11,11 @@
   "status": "Statut",
   "name": "Nom",
   "email": "E-mail",
-  "createdAt": "Créé le"
+  "createdAt": "Créé le",
+  "errorBoundary": {
+    "title": "Cette page n'a pas pu se charger",
+    "message": "Une erreur s'est produite lors de son affichage. Réessayez — si le problème persiste, rechargez la page."
+  },
+  "clearFilters": "Effacer les filtres",
+  "editItem": "Modifier : {name}"
 }

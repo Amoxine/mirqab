@@ -8,6 +8,8 @@ import { useForm } from 'react-hook-form';
 import { AlertTriangle, Boxes, Plus } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -87,11 +89,11 @@ function CreateApplicationSheet({ open, onOpenChange }: { open: boolean; onOpenC
                 </FormItem>
               )}
             />
-            <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+            <SheetFooter className="mt-auto gap-2 pt-2">
               <Button type="button" variant="outline" onClick={handleClose} disabled={form.formState.isSubmitting}>
                 {tCommon('cancel')}
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
+              <Button type="submit" loading={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? t('applications.creating') : tCommon('create')}
               </Button>
             </SheetFooter>
@@ -110,21 +112,21 @@ export default function PortalApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('applications.title')}</h1>
-          <p className="mt-1 text-muted-foreground">{t('applications.subtitle')}</p>
-        </div>
-        <Button
-          type="button"
-          onClick={() => {
-            setCreateOpen(true);
-          }}
-        >
-          <Plus className="me-2 h-4 w-4" />
-          {t('applications.createButton')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('applications.title')}
+        description={t('applications.subtitle')}
+        actions={
+          <Button
+            type="button"
+            onClick={() => {
+              setCreateOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            {t('applications.createButton')}
+          </Button>
+        }
+      />
 
       {isLoading && (
         <div className="space-y-3" aria-busy="true">
@@ -135,40 +137,31 @@ export default function PortalApplicationsPage() {
       )}
 
       {isError && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{error.message}</p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                void refetch();
-              }}
-            >
-              {tCommon('retry')}
-            </Button>
-          </CardContent>
-        </Card>
+        <StateCard role="alert" icon={<AlertTriangle className="text-destructive" aria-hidden="true" />} message={error.message}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void refetch();
+            }}
+          >
+            {tCommon('retry')}
+          </Button>
+        </StateCard>
       )}
 
       {!isLoading && !isError && applications?.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <Boxes className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{t('applications.empty')}</p>
-          </CardContent>
-        </Card>
+        <StateCard icon={<Boxes aria-hidden="true" />} message={t('applications.empty')} />
       )}
 
       {!isLoading && !isError && applications && applications.length > 0 && (
         <div className="space-y-3">
           {applications.map((app) => (
-            <Link key={app.id} href={`/portal/applications/${app.id}`}>
-              <Card className="transition-colors hover:border-primary/50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <CardTitle className="text-base">{app.name}</CardTitle>
-                  <span className="text-sm text-muted-foreground">
+            <Link key={app.id} href={`/portal/applications/${app.id}`} className="group block rounded-lg">
+              <Card className="transition-colors duration-200 group-hover:border-primary/50">
+                <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="min-w-0 break-words text-base">{app.name}</CardTitle>
+                  <span className="shrink-0 text-sm text-muted-foreground">
                     {t('applications.subscriptionCount', { count: app.subscriptionCount })}
                   </span>
                 </CardHeader>

@@ -3,7 +3,8 @@
   "nav": {
     "catalog": "Catalogue",
     "applications": "Mes applications",
-    "signOut": "Se déconnecter"
+    "signOut": "Se déconnecter",
+    "ariaLabel": "Navigation du portail"
   },
   "catalog": {
     "title": "Catalogue d'API",
@@ -78,7 +79,8 @@
       "PENDING": "En attente",
       "APPROVED": "Actif",
       "REVOKED": "Révoqué"
-    }
+    },
+    "revokeError": "Impossible de révoquer l'abonnement"
   },
   "key": {
     "dialogTitle": "Copiez votre clé",

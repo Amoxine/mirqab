@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { useResetTenantQuota, useTenantUsage } from '@/hooks/use-tenants';
 import { TenantQuotaSheet } from './tenant-quota-sheet';
+import { useFormat } from '@/hooks/use-format';
 
 function quotaUsedPercent(max: number | null, used: number | null): number | null {
   if (max === null || used === null || max < 0) return null;
@@ -26,6 +27,7 @@ interface TenantUsageCardProps {
  * alongside Overview/Members (this page has no Tabs shell to join today) rather than as its own tab. */
 export function TenantUsageCard({ tenantId, tenantName, canManage }: TenantUsageCardProps) {
   const t = useTranslations('tenants');
+  const fmt = useFormat();
   const tCommon = useTranslations('common');
   const { data: usage, isLoading, isError, error, refetch } = useTenantUsage(tenantId);
   const resetMutation = useResetTenantQuota(tenantId);
@@ -59,11 +61,11 @@ export function TenantUsageCard({ tenantId, tenantName, canManage }: TenantUsage
                 setQuotaOpen(true);
               }}
             >
-              <Gauge className="me-2 h-4 w-4" />
+              <Gauge className="h-4 w-4" />
               {t('quota.editAction')}
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => void handleReset()} disabled={resetMutation.isPending}>
-              <RotateCw className={`me-2 h-4 w-4 ${resetMutation.isPending ? 'animate-spin' : ''}`} />
+              <RotateCw className={`h-4 w-4 ${resetMutation.isPending ? 'animate-spin' : ''}`} />
               {t('usage.resetButton')}
             </Button>
           </div>
@@ -87,8 +89,8 @@ export function TenantUsageCard({ tenantId, tenantName, canManage }: TenantUsage
               <span className="font-medium">{t('usage.quota')}</span>
               <span className="tabular-nums text-muted-foreground">
                 {t('usage.quotaUsed', {
-                  used: (usage.used ?? 0).toLocaleString(),
-                  max: (usage.quotaMax ?? 0).toLocaleString(),
+                  used: fmt.number(usage.used ?? 0),
+                  max: fmt.number(usage.quotaMax ?? 0),
                 })}
               </span>
             </div>

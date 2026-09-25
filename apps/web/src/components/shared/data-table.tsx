@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { flexRender, type Table as ReactTable } from '@tanstack/react-table';
-import { AlertTriangle, LayoutGrid, Table2 } from 'lucide-react';
+import { flexRender, type Row, type Table as ReactTable } from '@tanstack/react-table';
+import { AlertTriangle, Inbox, LayoutGrid, Table2 } from 'lucide-react';
+import { StateMessage } from '@/components/shared/state-card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useMediaQuery } from '@/hooks/use-media-query';
 
 /**
  * FROZEN AT WP17. This is the contract later work packages build on, so what "frozen" means is
@@ -70,7 +73,8 @@ export function useViewMode(storageKey: string): [ViewMode, (mode: ViewMode) => 
 export function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
   const t = useTranslations('dashboard.dataTable');
   return (
-    <div className="inline-flex rounded-md border" role="group" aria-label={t('viewMode')}>
+    // Hidden on phones: every table already renders as cards there, so the switch would do nothing.
+    <div className="hidden rounded-md border sm:inline-flex" role="group" aria-label={t('viewMode')}>
       <Button
         type="button"
         variant={mode === 'table' ? 'secondary' : 'ghost'}
@@ -104,6 +108,8 @@ interface DataTableProps<TData> {
   error?: Error | null;
   onRetry?: () => void;
   emptyMessage: string;
+  /** Next step shown under the empty message — typically the page's (permission-gated) create button. */
+  emptyAction?: ReactNode;
   skeletonRows?: number;
   /** Current view. Omit for table-only, which is what every pre-WP17 caller gets. */
   viewMode?: ViewMode;
@@ -112,9 +118,57 @@ interface DataTableProps<TData> {
 }
 
 /**
+ * Label/value card for one row, built from the table's own column headers — what every table falls
+ * back to on phones when the caller has no `renderCard`, instead of a table wider than the screen.
+ * A header-less column (the row-actions menu) goes to the card's top corner.
+ */
+function AutoCard<TData>({ table, row }: { table: ReactTable<TData>; row: Row<TData> }) {
+  const headers = table.getFlatHeaders();
+  const cells = row.getVisibleCells();
+  const labelled = cells.filter((cell) => cell.column.columnDef.header);
+  const unlabelled = cells.filter((cell) => !cell.column.columnDef.header);
+  const [first, ...rest] = labelled;
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 break-words">
+            {first && flexRender(first.column.columnDef.cell, first.getContext())}
+          </div>
+          {unlabelled.map((cell) => (
+            <div key={cell.id} className="-me-2 -mt-2 shrink-0">
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </div>
+          ))}
+        </div>
+        {rest.length > 0 && (
+          <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+            {rest.map((cell) => {
+              const header = headers.find((h) => h.column.id === cell.column.id);
+              return (
+                <div key={cell.id} className="contents">
+                  <dt className="text-muted-foreground">
+                    {header ? flexRender(cell.column.columnDef.header, header.getContext()) : null}
+                  </dt>
+                  <dd className="min-w-0 break-words text-end">{flexRender(cell.column.columnDef.cell, cell.getContext())}</dd>
+                </div>
+              );
+            })}
+          </dl>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * Shared table chrome for the dashboard's list pages: header + loading/error/empty/data body.
  * Callers own their columns, data and `useReactTable` config — this owns only the rendering that
  * every list page (apis, keys, audit-logs, tenants) previously repeated identically.
+ *
+ * Below `sm` rows always render as cards — the caller's `renderCard` when given, else `AutoCard` —
+ * so no list page needs a horizontally-scrolling table on a phone.
  */
 export function DataTable<TData>({
   table,
@@ -123,6 +177,7 @@ export function DataTable<TData>({
   error,
   onRetry,
   emptyMessage,
+  emptyAction,
   skeletonRows = 5,
   viewMode = 'table',
   renderCard,
@@ -131,6 +186,8 @@ export function DataTable<TData>({
   const rows = table.getRowModel().rows;
   const t = useTranslations('dashboard.dataTable');
   const tCommon = useTranslations('common');
+  // Below Tailwind's `sm` breakpoint.
+  const isNarrow = useMediaQuery('(max-width: 639px)');
 
   let body: ReactNode;
   if (isLoading) {
@@ -145,17 +202,19 @@ export function DataTable<TData>({
     ));
   } else if (isError) {
     body = (
-      <TableRow>
-        <TableCell colSpan={columnCount} className="h-32 text-center">
-          <div className="flex flex-col items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-destructive" />
-            <p className="text-sm text-muted-foreground">{error?.message ?? t('unexpectedError')}</p>
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={columnCount} className="whitespace-normal">
+          <StateMessage
+            role="alert"
+            icon={<AlertTriangle className="text-destructive" aria-hidden="true" />}
+            message={error?.message ?? t('unexpectedError')}
+          >
             {onRetry && (
               <Button type="button" variant="outline" size="sm" onClick={onRetry}>
                 {tCommon('retry')}
               </Button>
             )}
-          </div>
+          </StateMessage>
         </TableCell>
       </TableRow>
     );
@@ -169,9 +228,11 @@ export function DataTable<TData>({
     ));
   } else {
     body = (
-      <TableRow>
-        <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
-          {emptyMessage}
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={columnCount} className="whitespace-normal">
+          <StateMessage icon={<Inbox aria-hidden="true" />} message={emptyMessage}>
+            {emptyAction}
+          </StateMessage>
         </TableCell>
       </TableRow>
     );
@@ -179,18 +240,29 @@ export function DataTable<TData>({
 
   // Card mode only applies to real rows: loading, error and empty are one shared presentation, and
   // duplicating them per view is how the two drift apart.
-  if (viewMode === 'card' && renderCard && !isLoading && !isError && rows.length > 0) {
+  const hasRows = !isLoading && !isError && rows.length > 0;
+  if (isLoading && isNarrow) {
+    // Same shape as the cards that will replace it, so nothing jumps when the data lands.
+    return (
+      <div className="grid gap-4" aria-busy="true">
+        {Array.from({ length: Math.min(skeletonRows, 3) }).map((_, i) => (
+          <Skeleton key={i} className="h-28 w-full rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+  if (hasRows && ((viewMode === 'card' && renderCard) || isNarrow)) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((row) => (
-          <div key={row.id}>{renderCard(row.original)}</div>
+          <div key={row.id}>{renderCard ? renderCard(row.original) : <AutoCard table={table} row={row} />}</div>
         ))}
       </div>
     );
   }
 
   return (
-    <div className="w-0 min-w-full rounded-md border">
+    <div className="w-0 min-w-full rounded-md border bg-card" aria-busy={isLoading || undefined}>
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -229,7 +301,7 @@ export function DataTablePagination({
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground" aria-live="polite">
         {t('pageOf', { page, totalPages })}
         {totalCount !== undefined && <> {t('totalCount', { count: totalCount })}</>}
       </p>

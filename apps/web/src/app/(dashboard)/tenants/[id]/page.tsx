@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Pencil, Play, SearchX, ShieldOff, Trash2, UserPlus } from 'lucide-react';
+import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
+import { AlertTriangle, Pencil, Play, SearchX, ShieldOff, Trash2, UserPlus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DataTable } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { InviteMemberSheet } from '@/components/tenants/invite-member-sheet';
 import { RemoveMemberDialog } from '@/components/tenants/remove-member-dialog';
 import { TenantFormSheet } from '@/components/tenants/tenant-form-sheet';
@@ -21,6 +24,7 @@ import { TenantUsageCard } from '@/components/tenants/tenant-usage-card';
 import { useTenant, useTenantMembers, useUpdateMemberRole, type Tenant, type TenantMember } from '@/hooks/use-tenants';
 import { usePermissions } from '@/hooks/use-permissions';
 import { ApiRequestError } from '@/lib/api-client';
+import { FormattedDate, FormattedDateTime } from '@/components/shared/formatted';
 
 /** Roles an admin can hand out from this page. `super_admin` is a system-wide bypass keyed only on
  * the role name (see keto.ts's relationForRole) — never offered here, so a row that already holds
@@ -29,6 +33,8 @@ const EDITABLE_ROLES = ['admin', 'operator', 'viewer'];
 
 const tenantStatusColor = (status: string) =>
   status === 'ACTIVE' ? 'default' : status === 'SUSPENDED' ? 'destructive' : 'outline';
+
+const NO_MEMBERS: TenantMember[] = [];
 
 const isNotFound = (error: unknown) => error instanceof ApiRequestError && error.status === 404;
 
@@ -59,19 +65,6 @@ function DetailSkeleton() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function StateCard({ icon, title, message, children }: { icon: ReactNode; title: string; message: string; children: ReactNode }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        {icon}
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="max-w-md break-words text-sm text-muted-foreground">{message}</p>
-        <div className="flex flex-wrap justify-center gap-2">{children}</div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -125,83 +118,57 @@ function MemberRoleCell({ tenantId, member }: { tenantId: string; member: Tenant
 
 function MembersCard({ tenantId }: { tenantId: string }) {
   const t = useTranslations('tenants');
-  const tCommon = useTranslations('common');
   const { can } = usePermissions();
   const { data, isLoading, isError, error, refetch } = useTenantMembers(tenantId);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ userId: string; email: string } | null>(null);
 
-  let body: ReactNode;
-  if (isLoading) {
-    body = Array.from({ length: 3 }).map((_, i) => (
-      <TableRow key={i}>
-        {Array.from({ length: 4 }).map((__, j) => (
-          <TableCell key={j}>
-            <Skeleton className="h-5 w-24" />
-          </TableCell>
-        ))}
-      </TableRow>
-    ));
-  } else if (isError) {
-    body = (
-      <TableRow>
-        <TableCell colSpan={4} className="h-24 text-center">
-          <p className="text-sm text-destructive">{error.message}</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => {
-              void refetch();
-            }}
-          >
-            {tCommon('retry')}
-          </Button>
-        </TableCell>
-      </TableRow>
-    );
-  } else if (!data?.length) {
-    body = (
-      <TableRow>
-        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-          {t('members.empty')}
-        </TableCell>
-      </TableRow>
-    );
-  } else {
-    body = data.map((member) => (
-      <TableRow key={member.userId}>
-        <TableCell>
-          <p className="font-medium">{member.name}</p>
-          <p className="text-xs text-muted-foreground">{member.email}</p>
-        </TableCell>
-        <TableCell>
-          <MemberRoleCell tenantId={tenantId} member={member} />
-        </TableCell>
-        <TableCell>{new Date(member.createdAt).toLocaleDateString()}</TableCell>
-        <TableCell>
+  const columns = useMemo<ColumnDef<TenantMember>[]>(
+    () => [
+      {
+        id: 'user',
+        header: t('members.columnUser'),
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <p className="font-medium">{row.original.name}</p>
+            <p className="break-all text-xs text-muted-foreground">
+              <span dir="ltr">{row.original.email}</span>
+            </p>
+          </div>
+        ),
+      },
+      { id: 'role', header: t('fields.role'), cell: ({ row }) => <MemberRoleCell tenantId={tenantId} member={row.original} /> },
+      {
+        accessorKey: 'createdAt',
+        header: t('members.columnJoined'),
+        cell: ({ row }) => <FormattedDate value={row.original.createdAt} />,
+      },
+      {
+        id: 'actions',
+        cell: ({ row }) => (
           <PermissionGate permission="user:delete">
             <Button
               type="button"
               variant="ghost"
               size="icon"
+              aria-label={t('members.removeAriaLabel', { email: row.original.email })}
               onClick={() => {
-                setRemoveTarget({ userId: member.userId, email: member.email });
+                setRemoveTarget({ userId: row.original.userId, email: row.original.email });
               }}
             >
-              <Trash2 className="h-4 w-4" />
-              <span className="sr-only">{t('members.removeAriaLabel', { email: member.email })}</span>
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
             </Button>
           </PermissionGate>
-        </TableCell>
-      </TableRow>
-    ));
-  }
+        ),
+      },
+    ],
+    [t, tenantId],
+  );
+  const table = useReactTable({ data: data ?? NO_MEMBERS, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-lg">{t('members.title')}</CardTitle>
         <PermissionGate permission="user:create">
           <Button
@@ -211,25 +178,21 @@ function MembersCard({ tenantId }: { tenantId: string }) {
               setInviteOpen(true);
             }}
           >
-            <UserPlus className="me-2 h-4 w-4" />
+            <UserPlus className="h-4 w-4" aria-hidden="true" />
             {t('members.invite')}
           </Button>
         </PermissionGate>
       </CardHeader>
       <CardContent>
-        <div className="w-0 min-w-full rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('members.columnUser')}</TableHead>
-                <TableHead>{t('fields.role')}</TableHead>
-                <TableHead>{t('members.columnJoined')}</TableHead>
-                <TableHead className="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>{body}</TableBody>
-          </Table>
-        </div>
+        <DataTable
+          table={table}
+          isLoading={isLoading}
+          isError={isError}
+          error={error}
+          onRetry={() => void refetch()}
+          emptyMessage={t('members.empty')}
+          skeletonRows={3}
+        />
       </CardContent>
       {can('user:create') && (
         <InviteMemberSheet tenantId={tenantId} open={inviteOpen} onOpenChange={setInviteOpen} />
@@ -255,24 +218,19 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <Button asChild variant="ghost" size="sm" className="-ms-3">
-          <Link href="/tenants">
-            <ArrowLeft className="me-2 h-4 w-4" />
-            {t('detail.backToTenants')}
-          </Link>
-        </Button>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="break-words text-3xl font-bold tracking-tight">{tenant.name}</h1>
-              <Badge variant={tenantStatusColor(tenant.status)}>{t(`status.${tenant.status}`)}</Badge>
-              <Badge variant="outline">{t(`plan.${tenant.plan}`)}</Badge>
-            </div>
-            <p className="mt-1 font-mono text-sm text-muted-foreground">{'/'}{tenant.slug}</p>
-          </div>
-          {tenant.status !== 'ARCHIVED' && (
-            <div className="flex flex-wrap gap-2">
+      <PageHeader
+        back={{ href: '/tenants', label: t('detail.backToTenants') }}
+        title={tenant.name}
+        badges={
+          <>
+            <Badge variant={tenantStatusColor(tenant.status)}>{t(`status.${tenant.status}`)}</Badge>
+            <Badge variant="outline">{t(`plan.${tenant.plan}`)}</Badge>
+          </>
+        }
+        description={<span className="font-mono text-sm">{'/'}{tenant.slug}</span>}
+        actions={
+          tenant.status !== 'ARCHIVED' && (
+            <>
               <PermissionGate permission="tenant:update">
                 <Button
                   type="button"
@@ -281,7 +239,7 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
                     setEditOpen(true);
                   }}
                 >
-                  <Pencil className="me-2 h-4 w-4" />
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
                   {tCommon('edit')}
                 </Button>
                 <Button
@@ -292,9 +250,9 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
                   }}
                 >
                   {tenant.status === 'SUSPENDED' ? (
-                    <Play className="me-2 h-4 w-4" />
+                    <Play className="h-4 w-4" aria-hidden="true" />
                   ) : (
-                    <ShieldOff className="me-2 h-4 w-4" />
+                    <ShieldOff className="h-4 w-4" aria-hidden="true" />
                   )}
                   {tenant.status === 'SUSPENDED' ? t('actions.reactivate') : t('actions.suspend')}
                 </Button>
@@ -307,14 +265,14 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
                     setStatusAction('archive');
                   }}
                 >
-                  <Trash2 className="me-2 h-4 w-4" />
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                   {t('actions.archive')}
                 </Button>
               </PermissionGate>
-            </div>
-          )}
-        </div>
-      </div>
+            </>
+          )
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -330,8 +288,12 @@ function TenantDetailView({ tenant }: { tenant: Tenant }) {
             <Field label={tCommon('status')}>
               <Badge variant={tenantStatusColor(tenant.status)}>{t(`status.${tenant.status}`)}</Badge>
             </Field>
-            <Field label={tCommon('createdAt')}>{new Date(tenant.createdAt).toLocaleString()}</Field>
-            <Field label={t('fields.updated')}>{new Date(tenant.updatedAt).toLocaleString()}</Field>
+            <Field label={tCommon('createdAt')}>
+              <FormattedDateTime value={tenant.createdAt} />
+            </Field>
+            <Field label={t('fields.updated')}>
+              <FormattedDateTime value={tenant.updatedAt} />
+            </Field>
           </dl>
         </CardContent>
       </Card>
@@ -369,7 +331,7 @@ function TenantDetailPage() {
     if (isNotFound(error)) {
       return (
         <StateCard
-          icon={<SearchX className="h-10 w-10 text-muted-foreground" />}
+          icon={<SearchX aria-hidden="true" />}
           title={t('detail.notFoundTitle')}
           message={t('detail.notFoundMessage')}
         >
@@ -381,7 +343,8 @@ function TenantDetailPage() {
     }
     return (
       <StateCard
-        icon={<AlertTriangle className="h-10 w-10 text-destructive" />}
+        role="alert"
+        icon={<AlertTriangle className="text-destructive" aria-hidden="true" />}
         title={t('detail.loadErrorTitle')}
         message={error.message}
       >

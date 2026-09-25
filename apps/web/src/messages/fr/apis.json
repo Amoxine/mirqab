@@ -25,7 +25,9 @@
     "retrying": "Nouvelle tentative...",
     "syncedToast": "API synchronisée avec la passerelle",
     "syncFailedToast": "Échec de la synchronisation : {error}",
-    "syncErrorToast": "Échec de la synchronisation de l'API"
+    "syncErrorToast": "Échec de la synchronisation de l'API",
+    "savedButFailed": "{saved}, mais la synchronisation avec la passerelle a échoué : {error}",
+    "savedButPending": "{saved}. La synchronisation avec la passerelle est en attente — son statut se met à jour sur cette page."
   },
   "empty": {
     "filtered": "Aucune API ne correspond à ces filtres.",

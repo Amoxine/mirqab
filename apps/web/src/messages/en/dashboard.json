@@ -66,14 +66,22 @@
     "analytics": "Analytics",
     "auditLogs": "Audit Logs",
     "login": "Login",
-    "details": "Details"
+    "details": "Details",
+    "plans": "Plans",
+    "products": "Products",
+    "settings": "Settings",
+    "roles": "Roles",
+    "certificates": "Certificates"
   },
   "header": {
     "logoutError": "Failed to log out",
     "switchTenant": "Switch tenant",
     "noTenantSelected": "No tenant selected",
     "accountSettings": "Account settings",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "userMenu": "Open user menu",
+    "tenantLabel": "Tenant",
+    "switchTenantCurrent": "Switch tenant (current: {name})"
   },
   "mobileNav": {
     "openMenu": "Open navigation menu",
@@ -88,5 +96,11 @@
     "viewMode": "View mode",
     "tableView": "Table view",
     "cardView": "Card view"
+  },
+  "layout": {
+    "skipToContent": "Skip to main content"
+  },
+  "errorBoundary": {
+    "home": "Go to dashboard"
   }
 }

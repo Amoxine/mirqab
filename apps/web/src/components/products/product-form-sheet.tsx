@@ -191,11 +191,11 @@ function ProductFormBody(props: ProductFormSheetProps) {
               </FormItem>
             )}
           />
-          <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+          <SheetFooter className="mt-auto gap-2 pt-2">
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               {tCommon('cancel')}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" loading={isSubmitting}>
               {product
                 ? t(isSubmitting ? 'form.submitSaving' : 'form.submitSave')
                 : t(isSubmitting ? 'form.submitCreating' : 'form.submitCreate')}

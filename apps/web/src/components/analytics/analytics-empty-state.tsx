@@ -11,6 +11,7 @@ import { dateFnsLocale } from '@/lib/date-fns-locale';
 import { cn } from '@/lib/utils';
 import type { Locale } from '@/i18n/locales';
 import type { AnalyticsHealth, AnalyticsRange } from '@/types';
+import { FormattedNumber } from '@/components/shared/formatted';
 
 /*
  * Shared building blocks for the analytics UI: the empty / error states, the chart card that
@@ -19,33 +20,44 @@ import type { AnalyticsHealth, AnalyticsRange } from '@/types';
 
 // ─── Formatting ─────────────────────────────────────────────────
 
-/** `errorRate` is already a percentage (0-100). */
-export const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
+// Percent and millisecond formatting live in `hooks/use-format.ts` (locale-aware units).
 
-export const formatMs = (value: number): string => `${Math.round(value).toLocaleString()} ms`;
+/** Intl formatters are costly to build and charts format every tick, so one per locale+options. */
+const formatterCache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat>();
+function cached<T extends Intl.NumberFormat | Intl.DateTimeFormat>(key: string, make: () => T): T {
+  let formatter = formatterCache.get(key);
+  if (!formatter) {
+    formatter = make();
+    formatterCache.set(key, formatter);
+  }
+  return formatter as T;
+}
 
-const compactNumber = new Intl.NumberFormat('en', { notation: 'compact' });
-export const formatCount = (value: number): string => compactNumber.format(value);
+/** `locale` is the UI locale (`useLocale()`), so axis labels read in the user's language. */
+export const formatCount = (value: number, locale = 'en'): string =>
+  cached(`n:${locale}`, () => new Intl.NumberFormat(locale, { notation: 'compact' })).format(value);
 
 // The API truncates buckets to UTC instants, so labels are formatted in UTC too: local time would shift day buckets.
-const utcFormat = (options: Intl.DateTimeFormatOptions) =>
-  new Intl.DateTimeFormat('en', { ...options, timeZone: 'UTC' });
 const time = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' } as const;
-const dayFormat = utcFormat({ month: 'short', day: 'numeric' });
-const dayYearFormat = utcFormat({ month: 'short', day: 'numeric', year: 'numeric' });
-const timeFormat = utcFormat(time);
-const dayTimeFormat = utcFormat({ month: 'short', day: 'numeric', ...time });
+const BUCKET_FORMATS = {
+  day: { month: 'short', day: 'numeric' },
+  dayYear: { month: 'short', day: 'numeric', year: 'numeric' },
+  time,
+  dayTime: { month: 'short', day: 'numeric', ...time },
+} as const satisfies Record<string, Intl.DateTimeFormatOptions>;
+const utcFormat = (kind: keyof typeof BUCKET_FORMATS, locale: string) =>
+  cached(`d:${kind}:${locale}`, () => new Intl.DateTimeFormat(locale, { ...BUCKET_FORMATS[kind], timeZone: 'UTC' }));
 
 /**
  * Time-axis label (UTC) for a bucket start. Buckets are minutes (`1h`), hours (`24h`, `7d`) or days (`30d`);
  * `long` is the tooltip variant.
  */
-export function formatBucket(bucket: string, range: AnalyticsRange, long = false): string {
+export function formatBucket(bucket: string, range: AnalyticsRange, long = false, locale = 'en'): string {
   const date = new Date(bucket);
   if (Number.isNaN(date.getTime())) return bucket;
-  if (range === '30d') return (long ? dayYearFormat : dayFormat).format(date);
-  if (range === '7d') return dayTimeFormat.format(date);
-  return (long ? dayTimeFormat : timeFormat).format(date);
+  if (range === '30d') return utcFormat(long ? 'dayYear' : 'day', locale).format(date);
+  if (range === '7d') return utcFormat('dayTime', locale).format(date);
+  return utcFormat(long ? 'dayTime' : 'time', locale).format(date);
 }
 
 // ─── Shared recharts props ──────────────────────────────────────
@@ -54,7 +66,9 @@ export const CHART_HEIGHT_CLASS = 'h-[280px]';
 export const AXIS_TICK = { fontSize: 12, fill: 'var(--color-muted-foreground)' } as const;
 export const GRID_STROKE = 'var(--color-border)';
 export const TOOLTIP_STYLE = {
-  background: 'var(--color-card)',
+  background: 'var(--color-popover)',
+  // recharts' tooltip label otherwise keeps its built-in dark text, unreadable on the dark card.
+  color: 'var(--color-popover-foreground)',
   border: '1px solid var(--color-border)',
   borderRadius: 8,
   fontSize: 12,
@@ -112,7 +126,9 @@ export function AnalyticsEmptyState({ health, description, className }: Analytic
           <dt>{t('emptyState.aggregateTable')}</dt>
           <dd>{health.aggregateTablePresent ? t('emptyState.present') : t('emptyState.missing')}</dd>
           <dt>{t('emptyState.rowsRecorded')}</dt>
-          <dd>{health.rowCount.toLocaleString()}</dd>
+          <dd>
+            <FormattedNumber value={health.rowCount} />
+          </dd>
           <dt>{t('emptyState.lastRecord')}</dt>
           <dd>{lastRecordLabel(t, health, locale)}</dd>
         </dl>
@@ -128,9 +144,9 @@ export function AnalyticsStaleNotice({ health }: { health: AnalyticsHealth }) {
   return (
     <div
       role="status"
-      className="flex items-start gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm"
+      className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" aria-hidden="true" />
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
       <div>
         <p className="font-medium">{t('staleNotice.title')}</p>
         <p className="text-muted-foreground">
@@ -162,7 +178,7 @@ export function AnalyticsErrorState({ message, onRetry, className }: AnalyticsEr
       <p className="text-sm font-medium">{t('errorState.title')}</p>
       <p className="max-w-md text-sm text-muted-foreground">{message}</p>
       <Button variant="outline" size="sm" onClick={onRetry}>
-        <RefreshCw className="me-2 h-4 w-4" />
+        <RefreshCw className="h-4 w-4" aria-hidden="true" />
         {tCommon('retry')}
       </Button>
     </div>
@@ -194,7 +210,12 @@ export function ChartCard({
   emptyMessage,
   children,
 }: ChartCardProps) {
-  let body: ReactNode = children;
+  // The chart is an image to assistive tech; the API/key tables below carry the same data as text.
+  let body: ReactNode = (
+    <div role="img" aria-label={`${title}. ${description}`} className="h-full">
+      {children}
+    </div>
+  );
   if (isLoading) body = <Skeleton className="h-full w-full" />;
   else if (error) body = <AnalyticsErrorState message={error.message} onRetry={onRetry} />;
   else if (isEmpty) body = <AnalyticsEmptyState description={emptyMessage} />;

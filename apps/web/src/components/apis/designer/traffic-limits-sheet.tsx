@@ -12,6 +12,7 @@ import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import { fraction01, optionalWholeNumber, wholeNumber } from './list-codec';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 // The edge's own Coraza body-size limit (infra/edge/Caddyfile, WP26b) — the same constant the
 // backend DTO caps against (`api-config.dto.ts`'s EDGE_BODY_LIMIT_BYTES). Duplicated rather than
@@ -89,7 +90,7 @@ export function TrafficLimitsSheet({ api, open, onOpenChange }: TrafficLimitsShe
 
   const onSubmit = async (values: Values) => {
     try {
-      await updateMutation.mutateAsync({
+      const saved = await updateMutation.mutateAsync({
         config: {
           rateLimit: { rate: values.rateLimitRate, per: values.rateLimitPer },
           throttle: { retryLimit: values.throttleRetryLimit, intervalSeconds: values.throttleIntervalSeconds },
@@ -104,7 +105,7 @@ export function TrafficLimitsSheet({ api, open, onOpenChange }: TrafficLimitsShe
             : null,
         },
       });
-      toast.success(t('designer.savedToast'));
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

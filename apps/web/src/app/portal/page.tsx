@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Package } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePortalProducts } from '@/hooks/use-portal';
@@ -30,10 +32,7 @@ export default function PortalCatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t('catalog.title')}</h1>
-        <p className="mt-1 text-muted-foreground">{t('catalog.subtitle')}</p>
-      </div>
+      <PageHeader title={t('catalog.title')} description={t('catalog.subtitle')} />
 
       {isLoading && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
@@ -44,45 +43,40 @@ export default function PortalCatalogPage() {
       )}
 
       {isError && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{error.message}</p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                void refetch();
-              }}
-            >
-              {tCommon('retry')}
-            </Button>
-          </CardContent>
-        </Card>
+        <StateCard role="alert" icon={<AlertTriangle className="text-destructive" aria-hidden="true" />} message={error.message}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void refetch();
+            }}
+          >
+            {tCommon('retry')}
+          </Button>
+        </StateCard>
       )}
 
       {!isLoading && !isError && products?.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <Package className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{t('catalog.empty')}</p>
-          </CardContent>
-        </Card>
+        <StateCard icon={<Package aria-hidden="true" />} message={t('catalog.empty')} />
       )}
 
       {!isLoading && !isError && products && products.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => (
-            <Link key={product.id} href={`/portal/products/${product.id}`} className="block h-full">
-              <Card className="h-full transition-colors hover:border-primary/50">
+            <Link key={product.id} href={`/portal/products/${product.id}`} className="group block h-full rounded-lg">
+              <Card className="flex h-full flex-col transition-colors duration-200 group-hover:border-primary/50">
                 <CardHeader>
                   <CardTitle className="text-lg">{product.name}</CardTitle>
                   <CardDescription className="line-clamp-2">
                     {product.description ?? t('catalog.noDescription')}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="mt-auto flex items-center justify-between gap-2">
                   <Badge variant="secondary">{t('catalog.apiCount', { count: product.apis.length })}</Badge>
+                  <ChevronRight
+                    className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180"
+                    aria-hidden="true"
+                  />
                 </CardContent>
               </Card>
             </Link>

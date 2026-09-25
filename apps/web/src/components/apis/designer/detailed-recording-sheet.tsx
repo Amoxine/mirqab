@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 const schema = z.object({ detailedRecording: z.boolean() });
 type Values = z.infer<typeof schema>;
@@ -36,8 +37,8 @@ export function DetailedRecordingSheet({ api, open, onOpenChange }: DetailedReco
 
   const onSubmit = async (values: Values) => {
     try {
-      await updateMutation.mutateAsync({ config: { detailedRecording: values.detailedRecording } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { detailedRecording: values.detailedRecording } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

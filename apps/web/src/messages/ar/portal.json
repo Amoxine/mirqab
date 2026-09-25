@@ -3,7 +3,8 @@
   "nav": {
     "catalog": "الكتالوج",
     "applications": "تطبيقاتي",
-    "signOut": "تسجيل الخروج"
+    "signOut": "تسجيل الخروج",
+    "ariaLabel": "تنقل البوابة"
   },
   "catalog": {
     "title": "كتالوج واجهات البرمجة",
@@ -78,7 +79,8 @@
       "PENDING": "قيد الانتظار",
       "APPROVED": "نشط",
       "REVOKED": "ملغى"
-    }
+    },
+    "revokeError": "تعذّر إلغاء الاشتراك"
   },
   "key": {
     "dialogTitle": "انسخ مفتاحك",

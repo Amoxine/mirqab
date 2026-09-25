@@ -66,14 +66,22 @@
     "analytics": "Analytique",
     "auditLogs": "Journaux d'audit",
     "login": "Connexion",
-    "details": "Détails"
+    "details": "Détails",
+    "plans": "Forfaits",
+    "products": "Produits",
+    "settings": "Paramètres",
+    "roles": "Rôles",
+    "certificates": "Certificats"
   },
   "header": {
     "logoutError": "Échec de la déconnexion",
     "switchTenant": "Changer de locataire",
     "noTenantSelected": "Aucun locataire sélectionné",
     "accountSettings": "Paramètres du compte",
-    "logOut": "Se déconnecter"
+    "logOut": "Se déconnecter",
+    "userMenu": "Ouvrir le menu utilisateur",
+    "tenantLabel": "Locataire",
+    "switchTenantCurrent": "Changer de locataire (actuel : {name})"
   },
   "mobileNav": {
     "openMenu": "Ouvrir le menu de navigation",
@@ -88,5 +96,11 @@
     "viewMode": "Mode d'affichage",
     "tableView": "Vue tableau",
     "cardView": "Vue cartes"
+  },
+  "layout": {
+    "skipToContent": "Aller au contenu principal"
+  },
+  "errorBoundary": {
+    "home": "Aller au tableau de bord"
   }
 }

@@ -13,6 +13,7 @@ import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import type { ApiConfig } from '@/types';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 const FORMATS = ['json', 'xml'] as const;
 
@@ -78,8 +79,8 @@ export function BodyTransformSheet({ api, open, onOpenChange }: BodyTransformShe
     transformResponseBody: ApiConfig['transformResponseBody'];
   }) => {
     try {
-      await updateMutation.mutateAsync({ config });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

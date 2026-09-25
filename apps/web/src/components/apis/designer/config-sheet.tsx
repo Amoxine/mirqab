@@ -41,7 +41,7 @@ export function ConfigSheetFooter({ isSubmitting, onCancel, onClear }: ConfigShe
   const t = useTranslations('apis');
   const tCommon = useTranslations('common');
   return (
-    <SheetFooter className="mt-auto flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-between sm:gap-0">
+    <SheetFooter className="mt-auto flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-between">
       {onClear ? (
         <Button type="button" variant="ghost" onClick={onClear} disabled={isSubmitting}>
           {t('designer.clearSection')}
@@ -53,7 +53,7 @@ export function ConfigSheetFooter({ isSubmitting, onCancel, onClear }: ConfigShe
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           {tCommon('cancel')}
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" loading={isSubmitting}>
           {isSubmitting ? t('designer.saving') : tCommon('save')}
         </Button>
       </div>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Ban, Pencil, RotateCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Ban, Pencil, RotateCw, SearchX, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { DeleteKeyDialog } from '@/components/keys/delete-key-dialog';
@@ -17,35 +17,25 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { useKey } from '@/hooks/use-keys';
 import { ApiRequestError } from '@/lib/api-client';
+import { FormattedDateTime, FormattedNumber } from '@/components/shared/formatted';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="break-words text-sm">{children}</dd>
     </div>
   );
 }
 
-function BackLink() {
-  const t = useTranslations('keys');
-  return (
-    <Link
-      href="/keys"
-      className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="me-1 h-4 w-4" />
-      {t('detail.backToKeys')}
-    </Link>
-  );
-}
-
 function DetailSkeleton() {
   return (
-    <div className="space-y-6" data-testid="key-detail-loading">
-      <Skeleton className="h-9 w-64" />
+    <div className="space-y-6" data-testid="key-detail-loading" aria-busy="true">
+      <Skeleton className="h-9 w-64 max-w-full" />
       <Skeleton className="h-40 w-full" />
       <Skeleton className="h-64 w-full" />
     </div>
@@ -73,28 +63,21 @@ function KeyDetailPage() {
   if (isError || !key) {
     const notFound = error instanceof ApiRequestError && error.status === 404;
     return (
-      <div className="space-y-6">
-        <BackLink />
-        <div className="flex flex-col items-center gap-3 rounded-md border p-10 text-center">
-          <h1 className="text-xl font-semibold">
-            {notFound ? t('detail.notFound') : t('detail.loadFailed')}
-          </h1>
-          {!notFound && (
-            <p className="text-sm text-destructive">
-              {error instanceof Error ? error.message : t('detail.unexpectedError')}
-            </p>
-          )}
-          {notFound ? (
-            <Button asChild variant="outline">
-              <Link href="/keys">{t('detail.backToKeys')}</Link>
-            </Button>
-          ) : (
-            <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
-              {tCommon('retry')}
-            </Button>
-          )}
-        </div>
-      </div>
+      <StateCard
+        role={notFound ? undefined : 'alert'}
+        icon={notFound ? <SearchX aria-hidden="true" /> : <AlertTriangle className="text-destructive" aria-hidden="true" />}
+        title={notFound ? t('detail.notFound') : t('detail.loadFailed')}
+        message={notFound ? null : error instanceof Error ? error.message : t('detail.unexpectedError')}
+      >
+        {!notFound && (
+          <Button onClick={() => void refetch()} disabled={isFetching}>
+            {tCommon('retry')}
+          </Button>
+        )}
+        <Button asChild variant="outline">
+          <Link href="/keys">{t('detail.backToKeys')}</Link>
+        </Button>
+      </StateCard>
     );
   }
 
@@ -106,66 +89,68 @@ function KeyDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
-
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="break-words text-3xl font-bold tracking-tight">{key.name}</h1>
-            <Badge variant={keyStatusVariant(key.status)}>{t(`status.${key.status}`)}</Badge>
-          </div>
-          <p className="mt-1 text-muted-foreground">{t('detail.description')}</p>
-        </div>
-        {!isRevoked && (
-          <div className="flex flex-wrap gap-2">
-            <PermissionGate permission="key:update">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEditOpen(true);
-                }}
-                disabled={tyk === null}
-                title={tyk === null ? t('detail.editDisabledHint') : undefined}
-              >
-                <Pencil className="me-2 h-4 w-4" />
-                {tCommon('edit')}
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="key:update">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setRotateTarget({ id: key.id, name: key.name });
-                }}
-              >
-                <RotateCw className="me-2 h-4 w-4" />
-                {t('actions.rotate')}
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="key:revoke">
-              <Button variant="destructive" onClick={() => {
-                  setRevokeTarget({ id: key.id, name: key.name });
-                }}>
-                <Ban className="me-2 h-4 w-4" />
-                {t('actions.revoke')}
-              </Button>
-            </PermissionGate>
-          </div>
-        )}
-        {canDelete && (
-          <PermissionGate permission="key:revoke">
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setDeleteTarget({ id: key.id, name: key.name });
-              }}
-            >
-              <Trash2 className="me-2 h-4 w-4" />
-              {t('actions.delete')}
-            </Button>
-          </PermissionGate>
-        )}
-      </div>
+      <PageHeader
+        back={{ href: '/keys', label: t('detail.backToKeys') }}
+        title={key.name}
+        badges={<Badge variant={keyStatusVariant(key.status)}>{t(`status.${key.status}`)}</Badge>}
+        description={t('detail.description')}
+        actions={
+          <>
+            {!isRevoked && (
+              <>
+                <PermissionGate permission="key:update">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditOpen(true);
+                    }}
+                    disabled={tyk === null}
+                    title={tyk === null ? t('detail.editDisabledHint') : undefined}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                    {tCommon('edit')}
+                  </Button>
+                </PermissionGate>
+                <PermissionGate permission="key:update">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRotateTarget({ id: key.id, name: key.name });
+                    }}
+                  >
+                    <RotateCw className="h-4 w-4" aria-hidden="true" />
+                    {t('actions.rotate')}
+                  </Button>
+                </PermissionGate>
+                <PermissionGate permission="key:revoke">
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setRevokeTarget({ id: key.id, name: key.name });
+                    }}
+                  >
+                    <Ban className="h-4 w-4" aria-hidden="true" />
+                    {t('actions.revoke')}
+                  </Button>
+                </PermissionGate>
+              </>
+            )}
+            {canDelete && (
+              <PermissionGate permission="key:revoke">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setDeleteTarget({ id: key.id, name: key.name });
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  {t('actions.delete')}
+                </Button>
+              </PermissionGate>
+            )}
+          </>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -176,7 +161,7 @@ function KeyDetailPage() {
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label={t('detail.detailsCard.api')}>
                 {key.apiDefId ? (
-                  <Link href={`/apis/${key.apiDefId}`} className="text-primary hover:underline">
+                  <Link href={`/apis/${key.apiDefId}`} className="rounded-sm font-medium text-primary hover:underline">
                     {key.apiDefName ?? key.apiDefId}
                   </Link>
                 ) : (
@@ -185,9 +170,9 @@ function KeyDetailPage() {
               </Field>
               <Field label={tCommon('status')}>{t(`status.${key.status}`)}</Field>
               <Field label={t('form.planLabel')}>{key.planName ?? t('form.noPlan')}</Field>
-              <Field label={t('detail.detailsCard.created')}>{new Date(key.createdAt).toLocaleString()}</Field>
+              <Field label={t('detail.detailsCard.created')}><FormattedDateTime value={key.createdAt} /></Field>
               <Field label={t('detail.detailsCard.expires')}>
-                {key.expiresAt ? new Date(key.expiresAt).toLocaleString() : t('list.never')}
+                {key.expiresAt ? <FormattedDateTime value={key.expiresAt} /> : t('list.never')}
               </Field>
             </dl>
           </CardContent>
@@ -205,18 +190,18 @@ function KeyDetailPage() {
                   {formatRate(tyk.rate, tyk.per, t('form.rateLimitPlaceholder'))}
                 </Field>
                 <Field label={t('detail.limitsCard.quota')}>
-                  {tyk.quotaMax > 0 ? tyk.quotaMax.toLocaleString() : t('detail.limitsCard.noQuota')}
+                  {tyk.quotaMax > 0 ? <FormattedNumber value={tyk.quotaMax} /> : t('detail.limitsCard.noQuota')}
                 </Field>
                 {tyk.quotaMax > 0 && (
                   <>
                     <Field label={t('detail.limitsCard.quotaRemaining')}>
-                      {tyk.quotaRemaining.toLocaleString()}
+                      <FormattedNumber value={tyk.quotaRemaining} />
                     </Field>
                     <Field label={t('detail.limitsCard.quotaPeriod')}>
                       {formatQuotaPeriod(tyk.quotaRenewalRate, periodLabels, t('form.everyNSeconds'))}
                     </Field>
                     <Field label={t('detail.limitsCard.quotaRenews')}>
-                      {renewsAt ? renewsAt.toLocaleString() : '—'}
+                      {renewsAt ? <FormattedDateTime value={renewsAt} /> : '—'}
                     </Field>
                   </>
                 )}

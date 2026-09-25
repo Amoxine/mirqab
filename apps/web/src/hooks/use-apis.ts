@@ -97,7 +97,7 @@ export function useApiDetail(id: string) {
 
 export function useApiKeys(id: string, pageSize = 50) {
   return useQuery({
-    queryKey: queryKeys.apis.keys(id),
+    queryKey: queryKeys.apis.keys(id, pageSize),
     queryFn: () =>
       api
         .get<PaginatedResponse<ApiKeySummary>>(`/keys?apiDefId=${id}&pageSize=${String(pageSize)}`)

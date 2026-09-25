@@ -162,7 +162,7 @@ export default function PortalRegisterPage() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+            <Button type="submit" className="w-full" loading={form.formState.isSubmitting}>
               {form.formState.isSubmitting ? t('auth.register.creating') : t('auth.register.submit')}
             </Button>
           </form>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   AXIS_TICK,
   ChartCard,
@@ -10,11 +10,14 @@ import {
   formatBucket,
   formatCount,
 } from '@/components/analytics/analytics-empty-state';
+import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 import { useAnalyticsTimeSeries } from '@/hooks/use-analytics';
 import type { AnalyticsRange } from '@/types';
 
 export function RequestsChart({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
+  const locale = useLocale();
+  const animate = !usePrefersReducedMotion();
   const { data, isLoading, error, refetch } = useAnalyticsTimeSeries('requests', range);
 
   return (
@@ -36,7 +39,7 @@ export function RequestsChart({ range }: { range: AnalyticsRange }) {
             tickLine={false}
             axisLine={false}
             minTickGap={32}
-            tickFormatter={(value: string) => formatBucket(value, range)}
+            tickFormatter={(value: string) => formatBucket(value, range, false, locale)}
           />
           <YAxis
             tick={AXIS_TICK}
@@ -44,14 +47,15 @@ export function RequestsChart({ range }: { range: AnalyticsRange }) {
             axisLine={false}
             allowDecimals={false}
             width={44}
-            tickFormatter={formatCount}
+            tickFormatter={(value: number) => formatCount(value, locale)}
           />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
-            labelFormatter={(label: unknown) => (typeof label === 'string' ? formatBucket(label, range, true) : '')}
+            labelFormatter={(label: unknown) => (typeof label === 'string' ? formatBucket(label, range, true, locale) : '')}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Area
+            isAnimationActive={animate}
             type="monotone"
             dataKey="requests"
             name={t('charts.requests.requestsSeries')}
@@ -62,6 +66,7 @@ export function RequestsChart({ range }: { range: AnalyticsRange }) {
             dot={false}
           />
           <Area
+            isAnimationActive={animate}
             type="monotone"
             dataKey="errors"
             name={t('charts.requests.errorsSeries')}

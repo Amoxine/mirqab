@@ -3,7 +3,8 @@
   "nav": {
     "catalog": "Catalog",
     "applications": "My Applications",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "ariaLabel": "Portal navigation"
   },
   "catalog": {
     "title": "API Catalog",
@@ -78,7 +79,8 @@
       "PENDING": "Pending",
       "APPROVED": "Active",
       "REVOKED": "Revoked"
-    }
+    },
+    "revokeError": "Could not revoke the subscription"
   },
   "key": {
     "dialogTitle": "Copy your key",

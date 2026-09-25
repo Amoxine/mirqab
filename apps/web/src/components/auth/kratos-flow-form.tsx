@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { UiContainer, UiText } from '@ory/client-fetch';
 import { Button } from '@/components/ui/button';
@@ -118,7 +117,8 @@ export function KratosFlowForm({ ui, onSuccess, onFlowUpdate, onError }: KratosF
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {ui.messages?.map((m) => (
-        <p key={m.id} className={cn('text-sm', messageTextClass(m.type))}>
+        // Errors are announced: they replace nothing visible, so a screen reader would miss them.
+        <p key={m.id} role={m.type === 'error' ? 'alert' : undefined} className={cn('text-sm', messageTextClass(m.type))}>
           {m.text}
         </p>
       ))}
@@ -128,6 +128,8 @@ export function KratosFlowForm({ ui, onSuccess, onFlowUpdate, onError }: KratosF
           const attrs = node.attributes;
           if (isSubmitNode(node)) return null; // rendered separately, below
           const fieldId = `kratos-${attrs.name}`;
+          const messagesId = `${fieldId}-messages`;
+          const hasError = node.messages.some((m) => m.type === 'error');
           const value = nodeValue(attrs, edits) ?? '';
           return (
             <div key={attrs.name} className="space-y-1.5">
@@ -142,9 +144,11 @@ export function KratosFlowForm({ ui, onSuccess, onFlowUpdate, onError }: KratosF
                   disabled={attrs.disabled || submitting}
                   required={attrs.required}
                   autoComplete={attrs.autocomplete}
+                  aria-invalid={hasError || undefined}
+                  aria-describedby={node.messages.length > 0 ? messagesId : undefined}
                   checked={attrs.type === 'checkbox' ? value === 'true' : undefined}
                   value={attrs.type === 'checkbox' ? undefined : value}
-                  className={attrs.type === 'checkbox' ? 'h-4 w-4' : undefined}
+                  className={attrs.type === 'checkbox' ? 'size-5 shrink-0 cursor-pointer accent-primary' : undefined}
                   onChange={(e) => {
                     setEdits((prev) => ({
                       ...prev,
@@ -158,11 +162,15 @@ export function KratosFlowForm({ ui, onSuccess, onFlowUpdate, onError }: KratosF
                   </Label>
                 )}
               </div>
-              {node.messages.map((m) => (
-                <p key={m.id} className={cn('text-sm', messageTextClass(m.type))}>
-                  {m.text}
-                </p>
-              ))}
+              {node.messages.length > 0 && (
+                <div id={messagesId} className="space-y-1">
+                  {node.messages.map((m) => (
+                    <p key={m.id} className={cn('text-sm', messageTextClass(m.type))}>
+                      {m.text}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           );
         }
@@ -195,13 +203,13 @@ export function KratosFlowForm({ ui, onSuccess, onFlowUpdate, onError }: KratosF
             key={node.attributes.name + String(node.attributes.value)}
             type="submit"
             variant={node.attributes.name === 'method' && node.attributes.value === 'password' ? 'default' : 'outline'}
-            disabled={submitting || node.attributes.disabled}
+            loading={submitting}
+            disabled={node.attributes.disabled}
             onClick={(e) => {
               e.preventDefault();
               void submit(node);
             }}
           >
-            {submitting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
             {node.meta.label?.text ?? t('flowForm.submit')}
           </Button>
         ))}

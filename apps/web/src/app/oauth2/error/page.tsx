@@ -27,12 +27,12 @@ function OAuth2ErrorPageContent() {
   return (
     // This route sits outside the `(auth)` group (Hydra dictates its exact path), so it has no
     // shared layout to center it — inline the same wrapper `(auth)/layout.tsx` uses.
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-primary-light/20 p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-primary/10 p-4">
       <Card className="w-full max-w-md border-border/50 shadow-lg">
         <CardHeader className="text-center">
           <AlertTriangle className="mx-auto h-10 w-10 text-destructive" aria-hidden="true" />
           <CardTitle className="text-2xl font-bold">{t('oauth2Error.title')}</CardTitle>
-          <CardDescription>{description ?? error}</CardDescription>
+          <CardDescription className="break-words">{description ?? error}</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
           <Button asChild>
@@ -40,6 +40,6 @@ function OAuth2ErrorPageContent() {
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

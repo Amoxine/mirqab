@@ -1,12 +1,14 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
+import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { Check, Copy, KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { PermissionGate } from '@/components/auth/permission-gate';
+import { DataTable } from '@/components/shared/data-table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,9 +47,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { QUOTA_PERIODS } from '@/components/keys/key-utils';
 import {
   useCreateOAuthClient,
@@ -57,8 +57,9 @@ import {
   type OAuthClient,
   type OAuthClientSecret,
 } from '@/hooks/use-oauth-clients';
+import { FormattedDate } from '@/components/shared/formatted';
 
-const COLUMNS = 4;
+const NO_CLIENTS: OAuthClient[] = [];
 
 /** Schema factory (not a module-level constant) because its error messages need `t`. */
 function makeClientFormSchema(t: ReturnType<typeof useTranslations>) {
@@ -117,7 +118,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
         );
       }}
     >
-      {copied ? <Check className="me-2 h-4 w-4" /> : <Copy className="me-2 h-4 w-4" />}
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
       {copied ? t('clients.copied') : label}
     </Button>
   );
@@ -173,7 +174,7 @@ function ClientSecretDialog({ secret, onClose }: { secret: OAuthClientSecret | n
             </div>
           </div>
         )}
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           {secret && <CopyButton value={secret.clientSecret} label={t('clients.copySecret')} />}
           <Button type="button" onClick={onClose}>
             {tCommon('done')}
@@ -299,7 +300,7 @@ function ClientForm({
           )}
         />
 
-        <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+        <SheetFooter className="mt-auto gap-2 pt-2">
           <Button
             type="button"
             variant="outline"
@@ -310,7 +311,7 @@ function ClientForm({
           >
             {tCommon('cancel')}
           </Button>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
+          <Button type="submit" loading={form.formState.isSubmitting}>
             {form.formState.isSubmitting ? t('clients.creating') : t('clients.createClient')}
           </Button>
         </SheetFooter>
@@ -398,90 +399,62 @@ export function ClientsTab({ apiId }: { apiId: string }) {
     }
   };
 
-  let body: ReactNode;
-  if (isLoading) {
-    body = Array.from({ length: 3 }).map((_, row) => (
-      <TableRow key={row}>
-        {Array.from({ length: COLUMNS }).map((__, cell) => (
-          <TableCell key={cell}>
-            <Skeleton className="h-5 w-24" />
-          </TableCell>
-        ))}
-      </TableRow>
-    ));
-  } else if (isError) {
-    body = (
-      <TableRow>
-        <TableCell colSpan={COLUMNS} className="h-24 text-center">
-          <p className="text-sm text-destructive">{error.message}</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => {
-              void refetch();
-            }}
-          >
-            {tCommon('retry')}
-          </Button>
-        </TableCell>
-      </TableRow>
-    );
-  } else if (!data?.length) {
-    body = (
-      <TableRow>
-        <TableCell colSpan={COLUMNS} className="h-24 text-center text-muted-foreground">
-          {t('clients.empty')}
-        </TableCell>
-      </TableRow>
-    );
-  } else {
-    body = data.map((client) => (
-      <TableRow key={client.clientId}>
-        <TableCell className="font-medium">{client.name}</TableCell>
-        <TableCell className="break-all font-mono text-xs">{client.clientId}</TableCell>
-        <TableCell>{client.createdAt ? new Date(client.createdAt).toLocaleDateString() : '—'}</TableCell>
-        <TableCell className="text-end">
-          <div className="flex justify-end gap-2">
-            <PermissionGate permission="key:update">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={rotateMutation.isPending}
-                onClick={() => {
-                  void handleRotate(client);
-                }}
-              >
-                <RefreshCw className="me-2 h-4 w-4" />
-                {t('clients.rotate')}
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="key:revoke">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setRevokeTarget(client);
-                }}
-              >
-                <Trash2 className="me-2 h-4 w-4" />
-                {t('clients.revoke')}
-              </Button>
-            </PermissionGate>
-          </div>
-        </TableCell>
-      </TableRow>
-    ));
-  }
+  // Rebuilt per render: the rotate button reads `rotateMutation.isPending`.
+  const columns: ColumnDef<OAuthClient>[] = [
+    { accessorKey: 'name', header: tCommon('name'), cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
+    {
+      accessorKey: 'clientId',
+      header: t('clients.clientId'),
+      cell: ({ row }) => <span className="break-all font-mono text-xs">{row.original.clientId}</span>,
+    },
+    {
+      accessorKey: 'createdAt',
+      header: tCommon('createdAt'),
+      cell: ({ row }) => (row.original.createdAt ? <FormattedDate value={row.original.createdAt} /> : '—'),
+    },
+    {
+      id: 'actions',
+      header: tCommon('actions'),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap justify-end gap-2">
+          <PermissionGate permission="key:update">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={rotateMutation.isPending}
+              onClick={() => {
+                void handleRotate(row.original);
+              }}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              {t('clients.rotate')}
+            </Button>
+          </PermissionGate>
+          <PermissionGate permission="key:revoke">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setRevokeTarget(row.original);
+              }}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {t('clients.revoke')}
+            </Button>
+          </PermissionGate>
+        </div>
+      ),
+    },
+  ];
+  const table = useReactTable({ data: data ?? NO_CLIENTS, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <KeyRound className="h-4 w-4" />
+          <KeyRound className="h-4 w-4 shrink-0" aria-hidden="true" />
           {t('clients.description')}
         </p>
         <PermissionGate permission="key:create">
@@ -491,26 +464,21 @@ export function ClientsTab({ apiId }: { apiId: string }) {
               setCreateOpen(true);
             }}
           >
-            <Plus className="me-2 h-4 w-4" />
+            <Plus className="h-4 w-4" aria-hidden="true" />
             {t('clients.createClient')}
           </Button>
         </PermissionGate>
       </div>
 
-      {/* w-0 + min-w-full keeps the table's width out of the page layout, so it scrolls inside its own box. */}
-      <div className="w-0 min-w-full rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{tCommon('name')}</TableHead>
-              <TableHead>{t('clients.clientId')}</TableHead>
-              <TableHead>{tCommon('createdAt')}</TableHead>
-              <TableHead className="text-end">{tCommon('actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>{body}</TableBody>
-        </Table>
-      </div>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => void refetch()}
+        emptyMessage={t('clients.empty')}
+        skeletonRows={3}
+      />
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
         <SheetContent className="w-full sm:max-w-md">

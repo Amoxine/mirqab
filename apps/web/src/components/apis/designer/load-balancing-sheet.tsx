@@ -12,6 +12,7 @@ import { toast } from '@/components/ui/sonner';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import type { ApiConfig } from '@/types';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
@@ -82,8 +83,8 @@ export function LoadBalancingSheet({ api, open, onOpenChange }: LoadBalancingShe
 
   const save = async (loadBalancing: ApiConfig['loadBalancing']) => {
     try {
-      await updateMutation.mutateAsync({ config: { loadBalancing } });
-      toast.success(t('designer.savedToast'));
+      const saved = await updateMutation.mutateAsync({ config: { loadBalancing } });
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));

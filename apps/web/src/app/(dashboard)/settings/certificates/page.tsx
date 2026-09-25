@@ -1,17 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
-import { ArrowLeft, KeyRound, Plus, Trash2 } from 'lucide-react';
+import { KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { CertificateUploadSheet } from '@/components/certificates/certificate-upload-sheet';
 import { DeleteCertificateDialog } from '@/components/certificates/delete-certificate-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/shared/page-header';
 import { DataTable } from '@/components/shared/data-table';
 import { useCertificates, type Certificate } from '@/hooks/use-certificates';
+import { FormattedDate } from '@/components/shared/formatted';
 
 const NO_ROWS: Certificate[] = [];
 
@@ -40,7 +41,7 @@ function getColumns(
         <Badge variant={row.original.hasPrivate ? 'default' : 'outline'}>
           {row.original.hasPrivate ? (
             <>
-              <KeyRound className="me-1 h-3 w-3" />
+              <KeyRound className="h-3 w-3" />
               {t('list.clientCert')}
             </>
           ) : (
@@ -52,8 +53,13 @@ function getColumns(
     {
       id: 'validity',
       header: t('list.columns.validity'),
-      cell: ({ row }) =>
-        `${new Date(row.original.notBefore).toLocaleDateString()} – ${new Date(row.original.notAfter).toLocaleDateString()}`,
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap">
+          <FormattedDate value={row.original.notBefore} />
+          {' – '}
+          <FormattedDate value={row.original.notAfter} />
+        </span>
+      ),
     },
     {
       id: 'actions',
@@ -101,32 +107,27 @@ function CertificatesView() {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const createButton = (
+    <PermissionGate permission="cert:create">
+      <Button
+        onClick={() => {
+          setUploadOpen(true);
+        }}
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t('list.uploadButton')}
+      </Button>
+    </PermissionGate>
+  );
+
   return (
     <div className="space-y-6">
-      <div>
-        <Button asChild variant="ghost" size="sm" className="-ms-3">
-          <Link href="/settings">
-            <ArrowLeft className="me-2 h-4 w-4" />
-            {t('backToSettings')}
-          </Link>
-        </Button>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
-            <p className="mt-1 text-muted-foreground">{t('list.description')}</p>
-          </div>
-          <PermissionGate permission="cert:create">
-            <Button
-              onClick={() => {
-                setUploadOpen(true);
-              }}
-            >
-              <Plus className="me-2 h-4 w-4" />
-              {t('list.uploadButton')}
-            </Button>
-          </PermissionGate>
-        </div>
-      </div>
+      <PageHeader
+        back={{ href: '/settings', label: t('backToSettings') }}
+        title={t('list.title')}
+        description={t('list.description')}
+        actions={createButton}
+      />
 
       <CertificateUploadSheet open={uploadOpen} onOpenChange={setUploadOpen} />
       <DeleteCertificateDialog
@@ -143,6 +144,7 @@ function CertificatesView() {
         error={error}
         onRetry={() => void refetch()}
         emptyMessage={t('list.empty')}
+        emptyAction={createButton}
       />
     </div>
   );

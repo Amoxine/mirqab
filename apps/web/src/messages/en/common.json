@@ -11,5 +11,11 @@
   "status": "Status",
   "name": "Name",
   "email": "Email",
-  "createdAt": "Created"
+  "createdAt": "Created",
+  "errorBoundary": {
+    "title": "This page failed to load",
+    "message": "Something went wrong while displaying it. Try again — if it keeps happening, reload the page."
+  },
+  "clearFilters": "Clear filters",
+  "editItem": "Edit {name}"
 }

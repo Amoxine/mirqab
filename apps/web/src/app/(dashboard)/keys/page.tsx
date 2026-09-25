@@ -28,9 +28,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
 import { useApis } from '@/hooks/use-apis';
 import { useKeys, type ApiKey } from '@/hooks/use-keys';
 import { usePlans } from '@/hooks/use-plans';
+import { FormattedDate } from '@/components/shared/formatted';
 
 const PAGE_SIZE = 20;
 /** Radix Select forbids empty-string item values, so "no filter" is a sentinel. */
@@ -61,7 +63,7 @@ function KeyRowActions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon">
-          <MoreHorizontal className="h-4 w-4" />
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only">{t('list.openMenu')}</span>
         </Button>
       </DropdownMenuTrigger>
@@ -127,7 +129,7 @@ function getColumns(
       accessorKey: 'name',
       header: tCommon('name'),
       cell: ({ row }) => (
-        <Link href={`/keys/${row.original.id}`} className="font-medium hover:underline">
+        <Link href={`/keys/${row.original.id}`} className="rounded-sm font-medium hover:underline">
           {row.original.name}
         </Link>
       ),
@@ -155,7 +157,7 @@ function getColumns(
       accessorKey: 'expiresAt',
       header: t('list.columns.expires'),
       cell: ({ row }) =>
-        row.original.expiresAt ? new Date(row.original.expiresAt).toLocaleDateString() : t('list.never'),
+        row.original.expiresAt ? <FormattedDate value={row.original.expiresAt} /> : t('list.never'),
     },
     {
       id: 'actions',
@@ -222,24 +224,22 @@ function KeysPage() {
   const totalPages = Math.max(1, data?.meta.totalPages ?? 1);
   const filtered = statusFilter !== ALL || apiFilter !== ALL;
 
+  const createButton = (
+    <PermissionGate permission="key:create">
+      <Button
+        onClick={() => {
+          setCreateOpen(true);
+        }}
+      >
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t('list.createButton')}
+      </Button>
+    </PermissionGate>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
-          <p className="mt-1 text-muted-foreground">{t('list.description')}</p>
-        </div>
-        <PermissionGate permission="key:create">
-          <Button
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="me-2 h-4 w-4" />
-            {t('list.createButton')}
-          </Button>
-        </PermissionGate>
-      </div>
+      <PageHeader title={t('list.title')} description={t('list.description')} actions={createButton} />
 
       <KeyFormSheet
         mode="create"
@@ -324,6 +324,23 @@ function KeysPage() {
         error={error}
         onRetry={() => void refetch()}
         emptyMessage={filtered ? t('list.emptyFiltered') : t('list.empty')}
+        emptyAction={
+          filtered ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setStatusFilter(ALL);
+                setApiFilter(ALL);
+                setPage(1);
+              }}
+            >
+              {tCommon('clearFilters')}
+            </Button>
+          ) : (
+            createButton
+          )
+        }
       />
 
       <DataTablePagination

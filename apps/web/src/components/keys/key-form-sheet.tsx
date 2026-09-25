@@ -311,18 +311,18 @@ function KeyForm({
         {mode === 'edit' && (
           <div
             role="note"
-            className="flex items-start gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm"
+            className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"
           >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <p>{t('form.editQuotaWarning')}</p>
           </div>
         )}
 
-        <SheetFooter className="mt-auto gap-2 pt-2 sm:gap-0">
+        <SheetFooter className="mt-auto gap-2 pt-2">
           <Button type="button" variant="outline" onClick={handleCancel}>
             {tCommon('cancel')}
           </Button>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
+          <Button type="submit" loading={form.formState.isSubmitting}>
             {mode === 'create'
               ? t(form.formState.isSubmitting ? 'form.submitCreating' : 'form.submitCreate')
               : t(form.formState.isSubmitting ? 'form.submitSaving' : 'form.submitSave')}

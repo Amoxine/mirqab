@@ -25,7 +25,9 @@
     "retrying": "Retrying...",
     "syncedToast": "API synced to the gateway",
     "syncFailedToast": "Sync failed: {error}",
-    "syncErrorToast": "Failed to sync API"
+    "syncErrorToast": "Failed to sync API",
+    "savedButFailed": "{saved}, but the gateway sync failed: {error}",
+    "savedButPending": "{saved}. The gateway sync is still pending — its status updates on this page."
   },
   "empty": {
     "filtered": "No APIs match these filters.",

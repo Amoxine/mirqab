@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   LayoutDashboard,
   KeyRound,
@@ -20,7 +20,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TenantSwitcher } from '@/components/layout/tenant-switcher';
 import { usePermissions } from '@/hooks/use-permissions';
+import { RTL_LOCALES } from '@/i18n/locales';
 
 interface NavItem {
   /** Key into the `nav` message namespace. */
@@ -60,7 +62,7 @@ export function useNavItems() {
 
 export const navLinkClass = (active: boolean) =>
   cn(
-    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+    'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-200 pointer-coarse:min-h-11',
     active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
   );
 
@@ -72,6 +74,9 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const items = useNavItems();
   const t = useTranslations('nav');
+  const tDashboard = useTranslations('dashboard');
+  // Radix tooltip sides are physical; in RTL the sidebar sits on the right, so they open leftwards.
+  const tooltipSide = (RTL_LOCALES as readonly string[]).includes(useLocale()) ? 'left' : 'right';
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -101,31 +106,43 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 className="h-8 w-8 shrink-0"
                 onClick={onToggle}
               >
+                {/* Panel icons are drawn for a left-hand sidebar; mirror them when it sits on the right. */}
                 {collapsed ? (
-                  <PanelLeft className="h-4 w-4" />
+                  <PanelLeft className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
                 ) : (
-                  <PanelLeftClose className="h-4 w-4" />
+                  <PanelLeftClose className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
                 )}
                 <span className="sr-only">
                   {collapsed ? t('expandSidebar') : t('collapseSidebar')}
                 </span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">
+            <TooltipContent side={tooltipSide}>
               {collapsed ? t('expandSidebar') : t('collapseSidebar')}
             </TooltipContent>
           </Tooltip>
         </div>
 
+        {/* Tenant context for everything below it (guidelines §8) — not in the top bar. */}
+        <div className="border-b p-2">
+          <TenantSwitcher collapsed={collapsed} />
+        </div>
+
         {/* Navigation */}
         <ScrollArea className="flex-1 py-4">
-          <nav className="flex flex-col gap-1 px-2">
+          <nav className="flex flex-col gap-1 px-2" aria-label={tDashboard('mobileNav.description')}>
             {items.map((item) => {
               const Icon = item.icon;
 
               const linkElement = (
-                <Link href={item.href} className={navLinkClass(item.active)}>
-                  <Icon className="h-5 w-5 shrink-0" />
+                <Link
+                  href={item.href}
+                  className={cn(navLinkClass(item.active), collapsed && 'justify-center px-0')}
+                  aria-current={item.active ? 'page' : undefined}
+                  // Collapsed, the icon is all that shows: the name still has to reach a screen reader.
+                  aria-label={collapsed ? item.label : undefined}
+                >
+                  <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
                   {!collapsed && <span>{item.label}</span>}
                 </Link>
               );
@@ -134,7 +151,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 return (
                   <Tooltip key={item.href}>
                     <TooltipTrigger asChild>{linkElement}</TooltipTrigger>
-                    <TooltipContent side="right">{item.label}</TooltipContent>
+                    <TooltipContent side={tooltipSide}>{item.label}</TooltipContent>
                   </Tooltip>
                 );
               }

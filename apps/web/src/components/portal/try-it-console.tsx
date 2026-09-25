@@ -150,12 +150,12 @@ export function TryItConsole({ api }: { api: PortalApiDoc }) {
 
         {requestError && (
           <div role="alert" className="flex gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
             <p className="min-w-0 break-words">{requestError}</p>
           </div>
         )}
         {result && (
-          <div className="space-y-2 rounded-md border p-3">
+          <div className="space-y-2 rounded-md border p-3" role="status">
             <p className="text-sm font-medium">
               {t('tryIt.responseStatus')}
               {': '}
@@ -165,8 +165,8 @@ export function TryItConsole({ api }: { api: PortalApiDoc }) {
           </div>
         )}
 
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          <Send className="me-2 h-4 w-4" />
+        <Button type="submit" loading={form.formState.isSubmitting}>
+          {!form.formState.isSubmitting && <Send className="h-4 w-4" aria-hidden="true" />}
           {form.formState.isSubmitting ? t('tryIt.sending') : t('tryIt.send')}
         </Button>
       </form>

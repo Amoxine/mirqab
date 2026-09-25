@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, ArrowLeft, Pencil, Power, SearchX, Trash2 } from 'lucide-react';
+import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
+import { AlertTriangle, Pencil, Power, SearchX, Trash2 } from 'lucide-react';
 import { ApiConfigCard } from '@/components/apis/api-config-card';
 import { ApiFormSheet } from '@/components/apis/api-form-sheet';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
@@ -17,13 +18,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DataTable } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
+import { StateCard } from '@/components/shared/state-card';
 import { toast } from '@/components/ui/sonner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useApiDetail, useApiKeys, useSetApiStatus, type ApiDetail } from '@/hooks/use-apis';
+import { useApiDetail, useApiKeys, useSetApiStatus, type ApiDetail, type ApiKeySummary } from '@/hooks/use-apis';
 import { usePermissions } from '@/hooks/use-permissions';
 import { ApiRequestError } from '@/lib/api-client';
 import type { ApiKeyStatus } from '@/types';
+import { FormattedDate, FormattedDateTime } from '@/components/shared/formatted';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 const KEY_VARIANT: Record<ApiKeyStatus, 'default' | 'secondary' | 'destructive'> = {
   ACTIVE: 'default',
@@ -31,7 +36,7 @@ const KEY_VARIANT: Record<ApiKeyStatus, 'default' | 'secondary' | 'destructive'>
   EXPIRED: 'secondary',
 };
 
-const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : '—');
+const formatDate = (value: string | null) => (value ? <FormattedDateTime value={value} /> : '—');
 
 const isNotFound = (error: unknown) => error instanceof ApiRequestError && error.status === 404;
 
@@ -66,100 +71,61 @@ function DetailSkeleton() {
   );
 }
 
-function StateCard({ icon, title, message, children }: { icon: ReactNode; title: string; message: string; children: ReactNode }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        {icon}
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="max-w-md break-words text-sm text-muted-foreground">{message}</p>
-        <div className="flex flex-wrap justify-center gap-2">{children}</div>
-      </CardContent>
-    </Card>
-  );
-}
+const NO_KEYS: ApiKeySummary[] = [];
 
 function KeysTab({ apiId }: { apiId: string }) {
   const t = useTranslations('apis');
   const tCommon = useTranslations('common');
   const { data, isLoading, isError, error, refetch } = useApiKeys(apiId);
-  const keyStatusLabel: Record<ApiKeyStatus, string> = {
-    ACTIVE: t('keyStatus.active'),
-    REVOKED: t('keyStatus.revoked'),
-    EXPIRED: t('keyStatus.expired'),
-  };
 
-  let body: ReactNode;
-  if (isLoading) {
-    body = Array.from({ length: 3 }).map((_, i) => (
-      <TableRow key={i}>
-        {Array.from({ length: 4 }).map((__, j) => (
-          <TableCell key={j}>
-            <Skeleton className="h-5 w-24" />
-          </TableCell>
-        ))}
-      </TableRow>
-    ));
-  } else if (isError) {
-    body = (
-      <TableRow>
-        <TableCell colSpan={4} className="h-24 text-center">
-          <p className="text-sm text-destructive">{error.message}</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => {
-              void refetch();
-            }}
-          >
-            {tCommon('retry')}
-          </Button>
-        </TableCell>
-      </TableRow>
-    );
-  } else if (!data?.data.length) {
-    body = (
-      <TableRow>
-        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-          {t('keysTab.empty')}
-        </TableCell>
-      </TableRow>
-    );
-  } else {
-    body = data.data.map((key) => (
-      <TableRow key={key.id}>
-        <TableCell>
-          <Link href={`/keys/${key.id}`} className="font-medium hover:underline">
-            {key.name}
+  const columns = useMemo<ColumnDef<ApiKeySummary>[]>(() => {
+    const keyStatusLabel: Record<ApiKeyStatus, string> = {
+      ACTIVE: t('keyStatus.active'),
+      REVOKED: t('keyStatus.revoked'),
+      EXPIRED: t('keyStatus.expired'),
+    };
+    return [
+      {
+        accessorKey: 'name',
+        header: tCommon('name'),
+        cell: ({ row }) => (
+          <Link href={`/keys/${row.original.id}`} className="rounded-sm font-medium hover:underline">
+            {row.original.name}
           </Link>
-        </TableCell>
-        <TableCell>
-          <Badge variant={KEY_VARIANT[key.status]}>{keyStatusLabel[key.status]}</Badge>
-        </TableCell>
-        <TableCell>{key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : t('keysTab.never')}</TableCell>
-        <TableCell>{new Date(key.createdAt).toLocaleDateString()}</TableCell>
-      </TableRow>
-    ));
-  }
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: tCommon('status'),
+        cell: ({ row }) => <Badge variant={KEY_VARIANT[row.original.status]}>{keyStatusLabel[row.original.status]}</Badge>,
+      },
+      {
+        accessorKey: 'expiresAt',
+        header: t('keysTab.expires'),
+        cell: ({ row }) =>
+          row.original.expiresAt ? <FormattedDate value={row.original.expiresAt} /> : t('keysTab.never'),
+      },
+      {
+        accessorKey: 'createdAt',
+        header: tCommon('createdAt'),
+        cell: ({ row }) => <FormattedDate value={row.original.createdAt} />,
+      },
+    ];
+  }, [t, tCommon]);
+
+  const table = useReactTable({ data: data?.data ?? NO_KEYS, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
     <div className="space-y-2">
-      {/* w-0 + min-w-full keeps the table's width out of the page layout, so it scrolls inside its own box. */}
-      <div className="w-0 min-w-full rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{tCommon('name')}</TableHead>
-              <TableHead>{tCommon('status')}</TableHead>
-              <TableHead>{t('keysTab.expires')}</TableHead>
-              <TableHead>{tCommon('createdAt')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>{body}</TableBody>
-        </Table>
-      </div>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => void refetch()}
+        emptyMessage={t('keysTab.empty')}
+        skeletonRows={3}
+      />
       {data && data.meta.totalCount > data.data.length && (
         <p className="text-sm text-muted-foreground">
           {t('keysTab.showingCount', { shown: data.data.length, total: data.meta.totalCount })}
@@ -182,8 +148,8 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
   const handleToggleStatus = async () => {
     const next = apiDef.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
     try {
-      await statusMutation.mutateAsync({ id: apiDef.id, status: next });
-      toast.success(next === 'ACTIVE' ? t('actions.activatedToast') : t('actions.disabledToast'));
+      const saved = await statusMutation.mutateAsync({ id: apiDef.id, status: next });
+      toastSyncOutcome(t, saved, next === 'ACTIVE' ? t('actions.activatedToast') : t('actions.disabledToast'));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('actions.statusErrorToast'));
     }
@@ -191,22 +157,13 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <Button asChild variant="ghost" size="sm" className="-ms-3">
-          <Link href="/apis">
-            <ArrowLeft className="me-2 h-4 w-4" />
-            {t('backToList')}
-          </Link>
-        </Button>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="break-words text-3xl font-bold tracking-tight">{apiDef.name}</h1>
-              <ApiStatusBadge status={apiDef.status} />
-            </div>
-            <p className="mt-1 break-all font-mono text-sm text-muted-foreground">{apiDef.listenPath}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <PageHeader
+        back={{ href: '/apis', label: t('backToList') }}
+        title={apiDef.name}
+        badges={<ApiStatusBadge status={apiDef.status} />}
+        description={<span className="break-all font-mono text-sm">{apiDef.listenPath}</span>}
+        actions={
+          <>
             <PermissionGate permission="api:update">
               <Button
                 type="button"
@@ -215,18 +172,18 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
                   setEditOpen(true);
                 }}
               >
-                <Pencil className="me-2 h-4 w-4" />
+                <Pencil className="h-4 w-4" aria-hidden="true" />
                 {tCommon('edit')}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                disabled={statusMutation.isPending}
+                loading={statusMutation.isPending}
                 onClick={() => {
                   void handleToggleStatus();
                 }}
               >
-                <Power className="me-2 h-4 w-4" />
+                <Power className="h-4 w-4" aria-hidden="true" />
                 {apiDef.status === 'ACTIVE' ? t('actions.disable') : t('actions.activate')}
               </Button>
             </PermissionGate>
@@ -238,13 +195,13 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
                   setDeleteTarget(apiDef);
                 }}
               >
-                <Trash2 className="me-2 h-4 w-4" />
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
                 {tCommon('delete')}
               </Button>
             </PermissionGate>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Tabs defaultValue="overview">
         <TabsList>
@@ -267,7 +224,7 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
                   role="alert"
                   className="flex gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm"
                 >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
                   <p className="min-w-0 break-words">
                     {t('overview.syncAlert', { error: apiDef.syncError ?? t('unknownGatewayError') })}
                   </p>
@@ -363,7 +320,7 @@ function ApiDetailPage() {
     if (isNotFound(error)) {
       return (
         <StateCard
-          icon={<SearchX className="h-10 w-10 text-muted-foreground" />}
+          icon={<SearchX aria-hidden="true" />}
           title={t('notFound.title')}
           message={t('notFound.message')}
         >
@@ -375,7 +332,8 @@ function ApiDetailPage() {
     }
     return (
       <StateCard
-        icon={<AlertTriangle className="h-10 w-10 text-destructive" />}
+        role="alert"
+        icon={<AlertTriangle className="text-destructive" aria-hidden="true" />}
         title={t('loadError.title')}
         message={error.message}
       >

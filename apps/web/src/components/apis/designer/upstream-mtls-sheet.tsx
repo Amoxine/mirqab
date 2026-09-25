@@ -18,6 +18,7 @@ import { toast } from '@/components/ui/sonner';
 import { useCertificates } from '@/hooks/use-certificates';
 import { useUpdateApi, type ApiDefinition } from '@/hooks/use-apis';
 import { ConfigSheet, ConfigSheetFooter } from './config-sheet';
+import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 
 /** Radix Select forbids an empty-string item value, so "no certificate" needs a sentinel. */
 const NONE = 'NONE';
@@ -51,10 +52,10 @@ export function UpstreamMtlsSheet({ api, open, onOpenChange }: UpstreamMtlsSheet
 
   const onSubmit = async (values: Values) => {
     try {
-      await updateMutation.mutateAsync({
+      const saved = await updateMutation.mutateAsync({
         config: { upstreamMutualTls: values.certificateId ? { certificateId: values.certificateId } : null },
       });
-      toast.success(t('designer.savedToast'));
+      toastSyncOutcome(t, saved, t('designer.savedToast'));
       handleClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('designer.saveError'));
