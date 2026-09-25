@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { Spectral, Document } from '@stoplight/spectral-core';
 import * as Parsers from '@stoplight/spectral-parsers';
 import { openGatewayOasRuleset } from '../oas-ruleset';
+import { findExternalRefs, MAX_ALIAS_DOCUMENT_BYTES, MAX_YAML_ALIASES, yamlAliasHazard } from './oas-safety';
 
 /** Spectral's DiagnosticSeverity, which is numeric and easy to invert by accident. */
 const SEVERITY_NAME = ['error', 'warning', 'info', 'hint'] as const;
@@ -51,7 +52,37 @@ export class SpectralLintService {
   }
 
   async lint(source: string): Promise<LintOutcome> {
+    // Before the parser: YAML aliases expand exponentially while parsing (see oas-safety.ts).
+    const hazard = yamlAliasHazard(source);
+    if (hazard) {
+      const why =
+        hazard.reason === 'too-many-aliases'
+          ? `${String(hazard.aliases)} YAML aliases found; at most ${String(MAX_YAML_ALIASES)} are accepted`
+          : `a YAML document that uses aliases may be at most ${String(MAX_ALIAS_DOCUMENT_BYTES / 1024)} KB`;
+      throw new UnprocessableEntityException({
+        message: 'The document uses YAML aliases beyond what an import accepts',
+        error: 'OAS_IMPORT_UNSAFE_YAML',
+        details: { 'og-yaml-alias-limit': [`line ${String(hazard.line)}: ${why}. Expand the aliases or upload JSON.`] },
+      });
+    }
+
     const document = new Document(source, Parsers.Yaml);
+
+    // Before the linter: Spectral's default resolver would FOLLOW an http(s) or file `$ref`, so the
+    // uploaded document could make this process fetch a URL or read a file. A document with any
+    // external reference is rejected here and `Spectral.run` is never called on it.
+    const external = findExternalRefs(document.data);
+    if (external.length > 0) {
+      const findings: LintFinding[] = external.map(({ path, ref }) => ({
+        code: 'og-no-external-ref',
+        message: `External $ref "${ref.slice(0, 200)}" is not allowed: only local references (#/…) are resolved. Inline the referenced document.`,
+        severity: 'error',
+        path: [...path, '$ref'].join('.'),
+        line: (document.getRangeForJsonPath([...path, '$ref'], true)?.start.line ?? 0) + 1,
+      }));
+      return { findings, hasErrors: true, parsed: document.data };
+    }
+
     const results = await this.spectral.run(document);
 
     const findings: LintFinding[] = results.map((result) => ({

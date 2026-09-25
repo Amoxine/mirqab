@@ -25,10 +25,37 @@ described were cut; this is pass/fail.
 | **201** | no `error`-severity finding | API created; every finding (the warnings) returned in `data.findings` |
 | **422** | ≥ 1 `error`-severity finding | nothing created; findings returned in `error.details`, keyed by rule id |
 | **413** | body larger than 5 MB | nothing created |
+| **422** `OAS_IMPORT_UNSAFE_YAML` | more than 5 YAML aliases, or any alias in a YAML document over 64 KB | rejected **before parsing**; nothing created |
 
 A warning never blocks an import. That is the point: rejecting a real-world specification because
 an operation lacks a description would make the feature unusable, while a document that cannot
 yield a working route has to be refused.
+
+## The document is data: what it may not do
+
+Two properties of the linting stack would otherwise let an uploaded document act on the API
+process, so both are refused **before** the linter runs (`services/oas-safety.ts`, called from
+`SpectralLintService.lint`):
+
+- **No external `$ref`.** Spectral resolves `$ref` while it lints, and `new Spectral()` defaults to a
+  resolver that follows `http(s)://` and `file:` references. A document containing one would make the
+  API process fetch that URL or read that file (a blind SSRF / local-file read reachable with
+  `api:create`; reproduced against a loopback listener in `oas-import-safety.spec.ts` before the
+  fix). Only local references (`#/…`) are accepted. Any other `$ref` string, anywhere in the document
+  (paths, `x-` extensions, examples), returns **422** with the rule id `og-no-external-ref` and the
+  line, and `Spectral.run` is never called. Inline the referenced document instead. The
+  `IsAllowedProxyUrl` denylist does not apply to `$ref`s, so this is a separate control.
+- **No alias bombs.** YAML aliases expand while parsing: a 272-byte document with seven nested alias
+  levels took about 3.8 s to parse and the eighth level did not finish in 25 s, which blocks the
+  API's event loop. A YAML document may use at most **5** aliases, and only if it is at most
+  **64 KB**; anything else returns **422** `OAS_IMPORT_UNSAFE_YAML` without being parsed. A document
+  that parses as JSON has no aliases and is exempt, so **upload JSON if a large specification
+  legitimately relies on YAML anchors**. Aliases are recognised by position (after `:`, `-`, `,`, `[`,
+  `{` or at the start of a line), so `*emphasis*` in a description is not counted.
+
+Neither control resolves anything over the network, and neither adds a dependency.
+`@stoplight/spectral-ref-resolver` is not a direct dependency of this package, so passing Spectral a
+restricted resolver would have meant adding one.
 
 ## The ruleset
 
