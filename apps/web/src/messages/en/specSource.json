@@ -1,0 +1,135 @@
+{
+  "card": {
+    "title": "Specification source URL",
+    "gatewayNote": "Checking the URL never changes the gateway. Only \"Use this version\" does, and then the API resyncs.",
+    "notConfigured": "This API does not watch a URL. Watch one to be told when its OpenAPI document changes.",
+    "setUp": "Watch a URL",
+    "url": "URL",
+    "interval": "Checked",
+    "state": "State",
+    "enabled": "Watching",
+    "paused": "Paused",
+    "lastChecked": "Last checked",
+    "nextCheck": "Next check",
+    "lastResult": "Last result",
+    "never": "Not yet",
+    "failures": "{count, plural, one {# failed check in a row} other {# failed checks in a row}}",
+    "checkNow": "Check now",
+    "edit": "Edit source",
+    "remove": "Remove",
+    "loadError": "The source could not be loaded",
+    "result": {
+      "UNCHANGED": "Unchanged",
+      "CHANGED": "New version detected",
+      "ERROR": "Failed: {reason}"
+    }
+  },
+  "intervals": {
+    "15": "Every 15 minutes",
+    "60": "Every hour",
+    "360": "Every 6 hours",
+    "1440": "Every 24 hours"
+  },
+  "sheet": {
+    "createTitle": "Watch a specification URL",
+    "editTitle": "Edit the specification source",
+    "description": "The server downloads the document on a schedule and tells you when it changes. Nothing is applied until you review it.",
+    "urlLabel": "Document URL",
+    "urlHelp": "http or https. For a protected document, put the access token in the query string: user name and password in the URL (Basic auth) are not supported.",
+    "urlKeepHelp": "Stored URL: {url}. Leave empty to keep it.",
+    "intervalLabel": "Check",
+    "enabledLabel": "Check on the schedule",
+    "enabledHelp": "Off: only \"Check now\" downloads the document.",
+    "save": "Save",
+    "savedToast": "Specification source saved"
+  },
+  "remove": {
+    "confirmTitle": "Stop watching this URL?",
+    "confirmBody": "The URL is deleted and a version waiting for review is no longer proposed. The stored specification and the gateway do not change.",
+    "confirm": "Remove",
+    "removedToast": "Specification source removed"
+  },
+  "check": {
+    "unchangedToast": "The document has not changed",
+    "changedToast": "A new version was detected. Review it before it is used.",
+    "errorToast": "The check failed: {reason}"
+  },
+  "url": {
+    "required": "Enter the document URL",
+    "tooLong": "The URL can have at most 2048 characters",
+    "invalid": "This is not a valid URL",
+    "scheme": "Use an http or https URL",
+    "userinfo": "User name and password in the URL are not supported. Put the access token in the query string instead."
+  },
+  "errors": {
+    "BAD_URL": "The URL is not valid or not allowed (http or https only, no user name or password, at most 2048 characters).",
+    "BLOCKED_TARGET": "This address cannot be reached from the server, or it is not allowed. Internal addresses need the operator's allow-list.",
+    "UNREACHABLE": "The server could not connect to this address.",
+    "TIMEOUT": "The document did not arrive within 10 seconds.",
+    "TOO_LARGE": "The document is larger than 5 MB.",
+    "TOO_MANY_REDIRECTS": "The URL redirects more than 3 times.",
+    "HTTP": "The URL answered with HTTP status {status}.",
+    "NOT_A_SPEC": "The URL did not serve a valid OpenAPI 3 document.",
+    "unknown": "The document could not be downloaded.",
+    "SPEC_CHECK_COOLDOWN": "This URL was checked less than 30 seconds ago. Wait a moment and try again.",
+    "SPEC_VERSION_STALE": "The specification changed since you opened this review. The comparison has been recomputed: review it again.",
+    "SPEC_REMOVES_GOVERNED_ENDPOINTS": "This version removes endpoints that have settings, and that changed since you reviewed. The comparison has been recomputed: review it again.",
+    "SPEC_GOVERNANCE_CHANGED": "Endpoint settings changed since you reviewed. The comparison has been recomputed: review it again.",
+    "CANDIDATE_STALE": "This version is no longer proposed: it was used, dismissed or replaced. Check the URL again for the latest one.",
+    "forbidden": "You do not have permission to do this.",
+    "notFound": "This API or this version no longer exists.",
+    "saveFailed": "The source could not be saved",
+    "removeFailed": "The source could not be removed",
+    "checkFailed": "The URL could not be checked",
+    "applyFailed": "The version could not be used",
+    "dismissFailed": "The version could not be dismissed",
+    "diffFailed": "The comparison could not be loaded",
+    "SPEC_SOURCE_LIMIT": "This workspace already watches the maximum of 50 specification URLs. Remove one before adding another.",
+    "SPEC_SOURCE_URL_REQUIRED": "Enter the document URL: no URL is stored for this API yet.",
+    "OAS_LINT_FAILED": "The document the URL serves has errors, so it cannot be used. Fix the document at its source.",
+    "OAS_IMPORT_TOO_MANY_ENDPOINTS": "The document the URL serves declares more endpoints than the gateway can manage.",
+    "OAS_IMPORT_UNPARSEABLE": "The URL did not serve readable JSON or YAML.",
+    "OAS_IMPORT_UNSAFE_YAML": "The document the URL serves uses YAML features that are refused for safety (such as too many aliases).",
+    "OAS_IMPORT_UNSUPPORTED_VERSION": "The document the URL serves is not OpenAPI 3.x.",
+    "OAS_IMPORT_UNUSABLE": "The document the URL serves cannot be used to create or update an API."
+  },
+  "banner": {
+    "title": "A new version of the specification is available",
+    "counts": "{added} added, {removed} removed, {changed} changed",
+    "governed": "{removed, plural, =0 {} one {# endpoint with settings removed. } other {# endpoints with settings removed. }}{changed, plural, =0 {} one {# endpoint with settings changed.} other {# endpoints with settings changed.}}",
+    "detected": "Detected {date}. These counts are from detection; the review compares with the current specification.",
+    "review": "Review",
+    "view": "View changes"
+  },
+  "review": {
+    "title": "Review the new version",
+    "description": "Compared with the current specification (version {version}). Using it creates the next version and resyncs the API with the gateway.",
+    "gone": "This version is no longer proposed: it was used, dismissed or replaced.",
+    "apply": "Use this version",
+    "dismiss": "Dismiss",
+    "dismissHelp": "Dismissed content is not proposed again; a different change is.",
+    "appliedToast": "Specification version {version} saved",
+    "dismissedToast": "Version dismissed",
+    "readOnly": "Using or dismissing a version needs the api:update permission.",
+    "alreadyCurrent": "This content is already the current specification. Nothing changed and the API does not resync."
+  },
+  "badge": {
+    "updateAvailable": "Update available"
+  },
+  "dashboard": {
+    "title": "Specs with updates",
+    "empty": "Every watched specification is up to date.",
+    "loadError": "Updates could not be loaded",
+    "counts": "{added} added, {removed} removed, {changed} changed",
+    "governed": "{count, plural, one {# endpoint with settings affected} other {# endpoints with settings affected}}"
+  },
+  "import": {
+    "tabsLabel": "Where the document comes from",
+    "tabDocument": "File or text",
+    "tabUrl": "From URL",
+    "urlHelp": "The server downloads the document (http or https, up to 5 MB) and checks it. User name and password in the URL are not supported; put an access token in the query string.",
+    "watch": "Keep checking this URL",
+    "watchHelp": "You are told when the document changes. Nothing changes on the gateway until you review and use a new version.",
+    "refetchNote": "The URL is fetched again when you import, and the same checks run on what it serves then."
+  }
+}

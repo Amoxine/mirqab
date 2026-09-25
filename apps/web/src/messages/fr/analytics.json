@@ -118,7 +118,8 @@
       "PERMISSION_REVOKED": "Permission révoquée",
       "QUOTA_EXCEEDED": "Quota dépassé",
       "SYNC_SUCCEEDED": "Synchronisation réussie",
-      "SYNC_FAILED": "Synchronisation échouée"
+      "SYNC_FAILED": "Synchronisation échouée",
+      "SPEC_UPDATE_DETECTED": "Mise à jour de spécification détectée"
     }
   }
 }

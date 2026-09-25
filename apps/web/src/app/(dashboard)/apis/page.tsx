@@ -9,6 +9,7 @@ import { ApiFormSheet } from '@/components/apis/api-form-sheet';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
 import { DeleteApiDialog } from '@/components/apis/delete-api-dialog';
 import { ImportWizardSheet } from '@/components/apis/import/import-wizard-sheet';
+import { SpecUpdateBadge } from '@/components/apis/spec-source/spec-update-banner';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Button } from '@/components/ui/button';
@@ -133,6 +134,7 @@ function ApisPage() {
               {row.original.name}
             </Link>
             <p className="font-mono text-xs text-muted-foreground">{'/'}{row.original.slug}</p>
+            {row.original.specUpdateAvailable && <SpecUpdateBadge />}
           </div>
         ),
       },

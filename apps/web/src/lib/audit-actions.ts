@@ -16,6 +16,8 @@ export const AUDIT_ACTION_VALUES = [
   'QUOTA_EXCEEDED',
   'SYNC_SUCCEEDED',
   'SYNC_FAILED',
+  // OAS-08: a watched spec URL served a new version (system event: no user).
+  'SPEC_UPDATE_DETECTED',
 ] as const;
 
 // ponytail: `AuditLogEntry.action` is typed wider than this list (see use-audit.ts) since the API's

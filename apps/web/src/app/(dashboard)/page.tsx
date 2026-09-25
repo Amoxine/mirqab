@@ -13,6 +13,7 @@ import { PermissionGate } from '@/components/auth/permission-gate';
 import { GatewayHealthCard } from '@/components/dashboard/gateway-health-card';
 import { RecentActivityCard } from '@/components/dashboard/recent-activity-card';
 import { StatCard, StatCardSkeleton } from '@/components/dashboard/stat-card';
+import { SpecUpdatesCard } from '@/components/dashboard/spec-updates-card';
 import { SyncSummaryCard } from '@/components/dashboard/sync-summary-card';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,6 +125,10 @@ export default function DashboardPage() {
           </div>
         </div>
         <AnalyticsSection />
+      </PermissionGate>
+
+      <PermissionGate permission="api:read">
+        <SpecUpdatesCard />
       </PermissionGate>
 
       <div className="grid gap-4 lg:grid-cols-7">

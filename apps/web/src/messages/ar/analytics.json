@@ -118,7 +118,8 @@
       "PERMISSION_REVOKED": "سحب صلاحية",
       "QUOTA_EXCEEDED": "تجاوز الحصة",
       "SYNC_SUCCEEDED": "نجحت المزامنة",
-      "SYNC_FAILED": "فشلت المزامنة"
+      "SYNC_FAILED": "فشلت المزامنة",
+      "SPEC_UPDATE_DETECTED": "اكتُشف تحديث للمواصفة"
     }
   }
 }

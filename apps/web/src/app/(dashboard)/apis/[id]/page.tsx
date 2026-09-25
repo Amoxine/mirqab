@@ -13,6 +13,7 @@ import { ClientsTab } from '@/components/apis/clients-tab';
 import { DeleteApiDialog } from '@/components/apis/delete-api-dialog';
 import { DesignerTab } from '@/components/apis/designer/designer-tab';
 import { EndpointsTab } from '@/components/apis/endpoints/endpoints-tab';
+import { SpecUpdateBanner } from '@/components/apis/spec-source/spec-update-banner';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
@@ -149,6 +150,7 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
   const statusMutation = useSetApiStatus();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApiDetail | null>(null);
+  const [tab, setTab] = useState(LINKABLE_TABS.includes(requestedTab) ? requestedTab : 'overview');
   const isOAuth = apiDef.authType === 'OAUTH';
 
   const handleToggleStatus = async () => {
@@ -209,7 +211,10 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
         }
       />
 
-      <Tabs defaultValue={LINKABLE_TABS.includes(requestedTab) ? requestedTab : 'overview'}>
+      {/* The Endpoints tab shows the same banner with the source card; not twice. */}
+      {tab !== 'endpoints' && <SpecUpdateBanner apiId={apiDef.id} />}
+
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
           <TabsTrigger value="configuration">{t('tabs.configuration')}</TabsTrigger>

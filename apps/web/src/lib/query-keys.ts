@@ -25,6 +25,15 @@ export const queryKeys = {
     clients: (id: string) => [...queryKeys.apis.all, 'detail', id, 'clients'] as const,
     /** OAS-05: stored spec index + endpoint governance (`GET /apis/:id/endpoints`). */
     endpoints: (id: string) => [...queryKeys.apis.all, 'detail', id, 'endpoints'] as const,
+    /** OAS-08: the watched URL's status, detected candidates and a candidate's recomputed diff. */
+    specSource: (id: string) => [...queryKeys.apis.all, 'detail', id, 'spec-source'] as const,
+    specCandidates: (id: string) => [...queryKeys.apis.all, 'detail', id, 'spec-candidates'] as const,
+    candidateDiff: (id: string, candidateId: string) =>
+      [...queryKeys.apis.all, 'detail', id, 'spec-candidates', candidateId, 'diff'] as const,
+    /** Pending updates of every API of the tenant (`GET /spec-updates`). */
+    get specUpdates() {
+      return [...queryKeys.apis.all, 'spec-updates'] as const;
+    },
   },
   keys: {
     get all() {

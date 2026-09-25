@@ -6,6 +6,8 @@ import { getCoreRowModel, useReactTable, type ColumnDef, type RowSelectionState 
 import { AlertTriangle, ChevronDown, FileUp, FileX, Pencil, Eye } from 'lucide-react';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
+import { SpecSourceCard } from '@/components/apis/spec-source/spec-source-card';
+import { SpecUpdateBanner } from '@/components/apis/spec-source/spec-update-banner';
 import { SpecUpdateSheet } from '@/components/apis/spec-update/spec-update-sheet';
 import { DataTable, DataTablePagination, useViewMode, ViewModeToggle } from '@/components/shared/data-table';
 import { StateCard } from '@/components/shared/state-card';
@@ -120,6 +122,21 @@ function TabSkeleton() {
 }
 
 export function EndpointsTab({ api }: { api: ApiDetail }) {
+  const { can } = usePermissions();
+  return (
+    <>
+      {/* The watched URL applies with or without a stored spec: an API created by hand can watch one
+          too (its first detected version is applied as version 1), so this sits above every state. */}
+      <div className="mb-4 space-y-4">
+        <SpecUpdateBanner apiId={api.id} />
+        <SpecSourceCard apiId={api.id} canUpdate={can('api:update')} />
+      </div>
+      <EndpointsBody api={api} />
+    </>
+  );
+}
+
+function EndpointsBody({ api }: { api: ApiDetail }) {
   const t = useTranslations('openapi');
   const tCommon = useTranslations('common');
   const { data, isPending, isError, error, refetch } = useEndpointGovernance(api.id);

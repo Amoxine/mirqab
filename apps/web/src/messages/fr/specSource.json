@@ -1,0 +1,135 @@
+{
+  "card": {
+    "title": "URL source de la spécification",
+    "gatewayNote": "Vérifier l'URL ne modifie jamais la passerelle. Seul « Utiliser cette version » le fait, puis l'API se resynchronise.",
+    "notConfigured": "Cette API ne surveille aucune URL. Surveillez-en une pour être averti quand son document OpenAPI change.",
+    "setUp": "Surveiller une URL",
+    "url": "URL",
+    "interval": "Vérification",
+    "state": "État",
+    "enabled": "Surveillée",
+    "paused": "En pause",
+    "lastChecked": "Dernière vérification",
+    "nextCheck": "Prochaine vérification",
+    "lastResult": "Dernier résultat",
+    "never": "Pas encore",
+    "failures": "{count, plural, one {# vérification échouée d'affilée} other {# vérifications échouées d'affilée}}",
+    "checkNow": "Vérifier maintenant",
+    "edit": "Modifier la source",
+    "remove": "Supprimer",
+    "loadError": "La source n'a pas pu être chargée",
+    "result": {
+      "UNCHANGED": "Inchangé",
+      "CHANGED": "Nouvelle version détectée",
+      "ERROR": "Échec : {reason}"
+    }
+  },
+  "intervals": {
+    "15": "Toutes les 15 minutes",
+    "60": "Toutes les heures",
+    "360": "Toutes les 6 heures",
+    "1440": "Toutes les 24 heures"
+  },
+  "sheet": {
+    "createTitle": "Surveiller l'URL d'une spécification",
+    "editTitle": "Modifier la source de la spécification",
+    "description": "Le serveur télécharge le document selon un calendrier et vous avertit quand il change. Rien n'est appliqué avant votre revue.",
+    "urlLabel": "URL du document",
+    "urlHelp": "http ou https. Pour un document protégé, placez le jeton d'accès dans la chaîne de requête : un nom d'utilisateur et un mot de passe dans l'URL (authentification Basic) ne sont pas pris en charge.",
+    "urlKeepHelp": "URL enregistrée : {url}. Laissez vide pour la conserver.",
+    "intervalLabel": "Vérifier",
+    "enabledLabel": "Vérifier selon le calendrier",
+    "enabledHelp": "Désactivé : seul « Vérifier maintenant » télécharge le document.",
+    "save": "Enregistrer",
+    "savedToast": "Source de la spécification enregistrée"
+  },
+  "remove": {
+    "confirmTitle": "Ne plus surveiller cette URL ?",
+    "confirmBody": "L'URL est supprimée et une version en attente de revue n'est plus proposée. La spécification enregistrée et la passerelle ne changent pas.",
+    "confirm": "Supprimer",
+    "removedToast": "Source de la spécification supprimée"
+  },
+  "check": {
+    "unchangedToast": "Le document n'a pas changé",
+    "changedToast": "Une nouvelle version a été détectée. Examinez-la avant qu'elle ne soit utilisée.",
+    "errorToast": "La vérification a échoué : {reason}"
+  },
+  "url": {
+    "required": "Saisissez l'URL du document",
+    "tooLong": "L'URL peut contenir au plus 2048 caractères",
+    "invalid": "Ce n'est pas une URL valide",
+    "scheme": "Utilisez une URL http ou https",
+    "userinfo": "Un nom d'utilisateur et un mot de passe dans l'URL ne sont pas pris en charge. Placez plutôt le jeton d'accès dans la chaîne de requête."
+  },
+  "errors": {
+    "BAD_URL": "L'URL n'est pas valide ou pas autorisée (http ou https uniquement, sans nom d'utilisateur ni mot de passe, 2048 caractères au plus).",
+    "BLOCKED_TARGET": "Cette adresse n'est pas joignable depuis le serveur, ou elle n'est pas autorisée. Les adresses internes nécessitent la liste d'autorisation de l'opérateur.",
+    "UNREACHABLE": "Le serveur n'a pas pu se connecter à cette adresse.",
+    "TIMEOUT": "Le document n'est pas arrivé en 10 secondes.",
+    "TOO_LARGE": "Le document dépasse 5 Mo.",
+    "TOO_MANY_REDIRECTS": "L'URL redirige plus de 3 fois.",
+    "HTTP": "L'URL a répondu avec le statut HTTP {status}.",
+    "NOT_A_SPEC": "L'URL n'a pas servi un document OpenAPI 3 valide.",
+    "unknown": "Le document n'a pas pu être téléchargé.",
+    "SPEC_CHECK_COOLDOWN": "Cette URL a été vérifiée il y a moins de 30 secondes. Patientez un instant et réessayez.",
+    "SPEC_VERSION_STALE": "La spécification a changé depuis l'ouverture de cette revue. La comparaison a été recalculée : examinez-la de nouveau.",
+    "SPEC_REMOVES_GOVERNED_ENDPOINTS": "Cette version supprime des points de terminaison qui ont des réglages, et cela a changé depuis votre revue. La comparaison a été recalculée : examinez-la de nouveau.",
+    "SPEC_GOVERNANCE_CHANGED": "Les réglages des points de terminaison ont changé depuis votre revue. La comparaison a été recalculée : examinez-la de nouveau.",
+    "CANDIDATE_STALE": "Cette version n'est plus proposée : elle a été utilisée, ignorée ou remplacée. Vérifiez de nouveau l'URL pour obtenir la plus récente.",
+    "forbidden": "Vous n'avez pas l'autorisation de faire cela.",
+    "notFound": "Cette API ou cette version n'existe plus.",
+    "saveFailed": "La source n'a pas pu être enregistrée",
+    "removeFailed": "La source n'a pas pu être supprimée",
+    "checkFailed": "L'URL n'a pas pu être vérifiée",
+    "applyFailed": "La version n'a pas pu être utilisée",
+    "dismissFailed": "La version n'a pas pu être ignorée",
+    "diffFailed": "La comparaison n'a pas pu être chargée",
+    "SPEC_SOURCE_LIMIT": "Cet espace surveille déjà le maximum de 50 URL de spécification. Supprimez-en une avant d'en ajouter une autre.",
+    "SPEC_SOURCE_URL_REQUIRED": "Saisissez l'URL du document : aucune URL n'est encore enregistrée pour cette API.",
+    "OAS_LINT_FAILED": "Le document servi par l'URL contient des erreurs et ne peut pas être utilisé. Corrigez-le à sa source.",
+    "OAS_IMPORT_TOO_MANY_ENDPOINTS": "Le document servi par l'URL déclare plus de points de terminaison que la passerelle ne peut en gérer.",
+    "OAS_IMPORT_UNPARSEABLE": "L'URL n'a pas servi de JSON ou de YAML lisible.",
+    "OAS_IMPORT_UNSAFE_YAML": "Le document servi par l'URL utilise des fonctions YAML refusées par sécurité (par exemple trop d'alias).",
+    "OAS_IMPORT_UNSUPPORTED_VERSION": "Le document servi par l'URL n'est pas en OpenAPI 3.x.",
+    "OAS_IMPORT_UNUSABLE": "Le document servi par l'URL ne peut pas servir à créer ou mettre à jour une API."
+  },
+  "banner": {
+    "title": "Une nouvelle version de la spécification est disponible",
+    "counts": "{added} ajoutés, {removed} supprimés, {changed} modifiés",
+    "governed": "{removed, plural, =0 {} one {# point de terminaison avec réglages supprimé. } other {# points de terminaison avec réglages supprimés. }}{changed, plural, =0 {} one {# point de terminaison avec réglages modifié.} other {# points de terminaison avec réglages modifiés.}}",
+    "detected": "Détectée le {date}. Ces nombres datent de la détection ; la revue compare avec la spécification actuelle.",
+    "review": "Examiner",
+    "view": "Voir les changements"
+  },
+  "review": {
+    "title": "Examiner la nouvelle version",
+    "description": "Comparée à la spécification actuelle (version {version}). L'utiliser crée la version suivante et resynchronise l'API avec la passerelle.",
+    "gone": "Cette version n'est plus proposée : elle a été utilisée, ignorée ou remplacée.",
+    "apply": "Utiliser cette version",
+    "dismiss": "Ignorer",
+    "dismissHelp": "Un contenu ignoré n'est plus proposé ; un changement différent l'est.",
+    "appliedToast": "Version {version} de la spécification enregistrée",
+    "dismissedToast": "Version ignorée",
+    "readOnly": "Utiliser ou ignorer une version nécessite l'autorisation api:update.",
+    "alreadyCurrent": "Ce contenu est déjà la spécification actuelle. Rien n'a changé et l'API ne se resynchronise pas."
+  },
+  "badge": {
+    "updateAvailable": "Mise à jour disponible"
+  },
+  "dashboard": {
+    "title": "Spécifications à mettre à jour",
+    "empty": "Toutes les spécifications surveillées sont à jour.",
+    "loadError": "Les mises à jour n'ont pas pu être chargées",
+    "counts": "{added} ajoutés, {removed} supprimés, {changed} modifiés",
+    "governed": "{count, plural, one {# point de terminaison avec réglages concerné} other {# points de terminaison avec réglages concernés}}"
+  },
+  "import": {
+    "tabsLabel": "Provenance du document",
+    "tabDocument": "Fichier ou texte",
+    "tabUrl": "Depuis une URL",
+    "urlHelp": "Le serveur télécharge le document (http ou https, 5 Mo au plus) et le vérifie. Un nom d'utilisateur et un mot de passe dans l'URL ne sont pas pris en charge ; placez un jeton d'accès dans la chaîne de requête.",
+    "watch": "Continuer à vérifier cette URL",
+    "watchHelp": "Vous êtes averti quand le document change. Rien ne change sur la passerelle avant que vous examiniez et utilisiez une nouvelle version.",
+    "refetchNote": "L'URL est de nouveau téléchargée lors de l'import, et les mêmes vérifications s'appliquent à ce qu'elle sert à ce moment-là."
+  }
+}

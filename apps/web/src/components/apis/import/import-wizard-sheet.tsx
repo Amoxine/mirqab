@@ -14,7 +14,19 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { toast } from '@/components/ui/sonner';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { previewImport, useImportApi, type ImportOptions, type ImportPreview } from '@/lib/api/openapi';
+import {
+  DEFAULT_INTERVAL,
+  knownSpecError,
+  previewImportUrl,
+  SPEC_INTERVALS,
+  specUrlProblem,
+  useImportUrl,
+  type SpecInterval,
+} from '@/lib/api/spec-source';
 import { ApiErrorText, describeApiError, toastApiError } from '@/components/apis/endpoints/api-error';
 import { WarningNotice } from '@/components/apis/endpoints/method-badge';
 import { FindingsList } from './findings-list';
@@ -22,25 +34,56 @@ import { SpecSourceField, specSourceSchema } from './spec-source-field';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
-const makeSchema = (t: Translate) =>
-  z.object({
-    source: specSourceSchema(t),
-    // Blank = the slug derived from info.title. Same shape rule as the create form (api-form-schema.ts).
-    slug: z.string().trim().regex(/^([a-z0-9]+(-[a-z0-9]+)*)?$/, t('import.slugInvalid')).max(100, t('import.slugTooLong')),
-    // '' until the user picks a server: then the API chooses (a document with no `servers` gets no index).
-    serverIndex: z.string(),
-  });
+const INTERVAL_VALUES = SPEC_INTERVALS.map(String) as [string, ...string[]];
+
+/** `t` = `openapi`, `tSpec` = `specSource`. Only the active source (document or URL) is validated. */
+const makeSchema = (t: Translate, tSpec: Translate) =>
+  z
+    .object({
+      mode: z.enum(['document', 'url']),
+      source: z.string(),
+      // OAS-08: the server fetches it; it is only ever sent in a JSON body.
+      url: z.string(),
+      watch: z.boolean(),
+      intervalMinutes: z.enum(INTERVAL_VALUES),
+      // Blank = the slug derived from info.title. Same shape rule as the create form (api-form-schema.ts).
+      slug: z.string().trim().regex(/^([a-z0-9]+(-[a-z0-9]+)*)?$/, t('import.slugInvalid')).max(100, t('import.slugTooLong')),
+      // '' until the user picks a server: then the API chooses (a document with no `servers` gets no index).
+      serverIndex: z.string(),
+    })
+    .superRefine((v, ctx) => {
+      if (v.mode === 'document') {
+        for (const issue of specSourceSchema(t).safeParse(v.source).error?.issues ?? []) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message, path: ['source'] });
+        }
+        return;
+      }
+      const problem = specUrlProblem(v.url);
+      if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: tSpec(problem), path: ['url'] });
+    });
 type Values = z.infer<ReturnType<typeof makeSchema>>;
-const DEFAULTS: Values = { source: '', slug: '', serverIndex: '' };
+const DEFAULTS: Values = {
+  mode: 'document',
+  source: '',
+  url: '',
+  watch: true,
+  intervalMinutes: String(DEFAULT_INTERVAL),
+  slug: '',
+  serverIndex: '',
+};
 
 const optionsOf = (v: Values): ImportOptions => ({
   slug: v.slug.trim() || undefined,
   serverIndex: v.serverIndex === '' ? undefined : Number(v.serverIndex),
 });
 /** What a preview was computed for; the import runs only on a preview of exactly these values. */
-const sameInputs = (a: Values, b: Values) =>
+type PreviewInputs = Pick<Values, 'mode' | 'source' | 'url' | 'slug' | 'serverIndex'>;
+const sameInputs = (a: PreviewInputs, b: PreviewInputs) =>
   // String `===` fails fast on length or the first differing character: no 5 MB copy per keystroke.
-  a.source === b.source && a.slug.trim() === b.slug.trim() && a.serverIndex === b.serverIndex;
+  a.mode === b.mode &&
+  (a.mode === 'url' ? a.url.trim() === b.url.trim() : a.source === b.source) &&
+  a.slug.trim() === b.slug.trim() &&
+  a.serverIndex === b.serverIndex;
 
 /** Endpoint count per tag; untagged endpoints under their own bucket. */
 function countByTag(preview: ImportPreview, untagged: string): [string, number][] {
@@ -73,15 +116,20 @@ function WizardBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
   const tApis = useTranslations('apis');
   const tCommon = useTranslations('common');
   const router = useRouter();
+  const tSpec = useTranslations('specSource');
   const importMutation = useImportApi();
-  const schema = useMemo(() => makeSchema(t), [t]);
+  const importUrlMutation = useImportUrl();
+  const schema = useMemo(() => makeSchema(t, tSpec), [t, tSpec]);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: DEFAULTS });
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [previewed, setPreviewed] = useState<Values | null>(null);
   const [previewError, setPreviewError] = useState<{ message: string; detail?: string } | null>(null);
 
-  const [source, slug, serverIndex] = useWatch({ control: form.control, name: ['source', 'slug', 'serverIndex'] });
-  const current = preview !== null && previewed !== null && sameInputs(previewed, { source, slug, serverIndex });
+  const [mode, source, url, slug, serverIndex, watch] = useWatch({
+    control: form.control,
+    name: ['mode', 'source', 'url', 'slug', 'serverIndex', 'watch'],
+  });
+  const current = preview !== null && previewed !== null && sameInputs(previewed, { mode, source, url, slug, serverIndex });
   const readyToImport = current && preview.canImport;
 
   const close = () => {
@@ -95,24 +143,36 @@ function WizardBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
   const onSubmit = async (v: Values) => {
     if (readyToImport) {
       try {
-        const result = await importMutation.mutateAsync({ source: v.source, options: optionsOf(v) });
+        const result =
+          v.mode === 'url'
+            ? await importUrlMutation.mutateAsync({
+                url: v.url.trim(),
+                options: { ...optionsOf(v), watch: v.watch, intervalMinutes: Number(v.intervalMinutes) as SpecInterval },
+              })
+            : await importMutation.mutateAsync({ source: v.source, options: optionsOf(v) });
         toastSyncOutcome(tApis, result.api, t('import.createdToast', { name: result.api.name }));
         close();
         router.push(`/apis/${result.api.id}?tab=endpoints`);
       } catch (error) {
-        toastApiError(t, error, 'import.error');
+        // From a URL: translated text only, never the server's message (it could echo the URL).
+        if (v.mode === 'url') toast.error(knownSpecError(tSpec, error) ?? describeApiError(t, error, 'import.error').message);
+        else toastApiError(t, error, 'import.error');
       }
       return;
     }
     setPreviewError(null);
     try {
-      const next = await previewImport(v.source, optionsOf(v));
+      const next = v.mode === 'url' ? await previewImportUrl(v.url.trim(), optionsOf(v)) : await previewImport(v.source, optionsOf(v));
       setPreview(next);
       setPreviewed(v);
       if (next.conflicts.slug || next.conflicts.listenPath) form.setFocus('slug');
     } catch (error) {
       setPreview(null);
-      setPreviewError(describeApiError(t, error, 'import.previewError'));
+      setPreviewError(
+        v.mode === 'url'
+          ? { message: knownSpecError(tSpec, error) ?? describeApiError(t, error, 'import.previewError').message }
+          : describeApiError(t, error, 'import.previewError'),
+      );
     }
   };
 
@@ -137,14 +197,101 @@ function WizardBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
       </ol>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-          <SpecSourceField
-            control={form.control}
-            name="source"
-            disabled={isSubmitting}
-            onFileError={(message) => {
-              form.setError('source', { message });
+          <Tabs
+            value={mode}
+            onValueChange={(next) => {
+              form.setValue('mode', next === 'url' ? 'url' : 'document');
+              form.clearErrors();
+              setPreview(null);
+              setPreviewed(null);
+              setPreviewError(null);
             }}
-          />
+          >
+            <TabsList aria-label={tSpec('import.tabsLabel')}>
+              <TabsTrigger value="document" disabled={isSubmitting}>{tSpec('import.tabDocument')}</TabsTrigger>
+              <TabsTrigger value="url" disabled={isSubmitting}>{tSpec('import.tabUrl')}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="document" className="mt-4">
+              <SpecSourceField
+                control={form.control}
+                name="source"
+                disabled={isSubmitting}
+                onFileError={(message) => {
+                  form.setError('source', { message });
+                }}
+              />
+            </TabsContent>
+            <TabsContent value="url" className="mt-4 space-y-4">
+              <FormField
+                control={form.control}
+                name="url"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{tSpec('sheet.urlLabel')}</FormLabel>
+                    <FormControl>
+                      {/* The URL may carry an access token: never offered to autofill, history or spell check. */}
+                      <Input
+                        {...field}
+                        dir="ltr"
+                        inputMode="url"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        placeholder="https://"
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormDescription>{tSpec('import.urlHelp')}</FormDescription>
+                    <FormDescription>{tSpec('import.refetchNote')}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="watch"
+                render={({ field }) => (
+                  <FormItem className="flex items-start justify-between gap-4 space-y-0">
+                    <div className="min-w-0 space-y-0.5">
+                      <FormLabel>{tSpec('import.watch')}</FormLabel>
+                      <FormDescription>{tSpec('import.watchHelp')}</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {watch && (
+                <FormField
+                  control={form.control}
+                  name="intervalMinutes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{tSpec('sheet.intervalLabel')}</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange} disabled={isSubmitting}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SPEC_INTERVALS.map((m) => (
+                            <SelectItem key={m} value={String(m)}>
+                              {tSpec(`intervals.${String(m)}`)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
 
           {previewError && (
             <div role="alert" className="flex gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">

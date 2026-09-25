@@ -34,7 +34,8 @@ describe('EndpointsTab', () => {
     const calls = mockFetch(() => fail(404, 'No specification'));
     renderUi(<EndpointsTab api={api} />);
     expect(await screen.findByText(M.noSpec.title)).toBeDefined();
-    expect(calls).toHaveLength(1);
+    // Once: a 404 is an answer, not retried. (The OAS-08 source card above it reads its own route.)
+    expect(calls.filter((c) => c.path === '/apis/api-1/endpoints')).toHaveLength(1);
   });
 
   it('with no stored spec, offers api:update users to upload one (the same sheet, version 0)', async () => {
@@ -58,7 +59,10 @@ describe('EndpointsTab', () => {
     // A 5xx is retried twice by the query (a 404 never is) before the error shows.
     expect(await screen.findByText(M.loadError, undefined, { timeout: 10_000 })).toBeDefined();
     expect(calls.filter((c) => c.path === '/apis/api-1/endpoints')).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: C.retry }));
+    // The endpoints' own retry (the OAS-08 source card above has one too).
+    const alert = screen.getByText(M.loadError).closest('[role="alert"]');
+    if (!(alert instanceof HTMLElement)) throw new Error('no alert');
+    fireEvent.click(within(alert).getByRole('button', { name: C.retry }));
     await waitFor(() => {
       expect(calls.filter((c) => c.path === '/apis/api-1/endpoints').length).toBeGreaterThan(3);
     });

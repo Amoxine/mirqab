@@ -7,42 +7,19 @@ import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 import { toastApiError } from '@/components/apis/endpoints/api-error';
-import { MethodBadge, WarningNotice } from '@/components/apis/endpoints/method-badge';
-import { FindingsList } from '@/components/apis/import/findings-list';
 import { SpecSourceField, specSourceSchema } from '@/components/apis/import/spec-source-field';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { isStale, useSpecUpdate, type EndpointRow, type SpecUpdateResult } from '@/lib/api/openapi';
+import { isStale, useSpecUpdate, type SpecUpdateResult } from '@/lib/api/openapi';
+import { SpecDiffView } from './spec-diff-view';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
 const makeSchema = (t: Translate) => z.object({ source: specSourceSchema(t), acknowledge: z.boolean() });
 type Values = z.infer<ReturnType<typeof makeSchema>>;
 const DEFAULTS: Values = { source: '', acknowledge: false };
-const SHOWN = 50;
-
-function RowList({ title, rows, extra }: { title: string; rows: EndpointRow[]; extra?: (row: EndpointRow) => string }) {
-  const t = useTranslations('openapi');
-  if (rows.length === 0) return null;
-  return (
-    <div className="space-y-2">
-      <h4 className="text-sm font-medium">{title}</h4>
-      <ul className="max-h-56 space-y-1 overflow-y-auto">
-        {rows.slice(0, SHOWN).map((r) => (
-          <li key={r.key} className="flex flex-wrap items-center gap-2 text-sm">
-            <MethodBadge method={r.method} />
-            <span dir="ltr" className="break-all font-mono text-xs">{r.path}</span>
-            {extra && <span className="text-xs text-muted-foreground">{extra(r)}</span>}
-          </li>
-        ))}
-      </ul>
-      {rows.length > SHOWN && <p className="text-sm text-muted-foreground">{t('findings.more', { count: rows.length - SHOWN })}</p>}
-    </div>
-  );
-}
 
 interface SpecUpdateSheetProps {
   apiId: string;
@@ -139,61 +116,24 @@ function SpecUpdateBody({ apiId, versionNo, onOpenChange }: Omit<SpecUpdateSheet
           {diff && !current && <p className="text-sm text-muted-foreground">{t('specUpdate.recompare')}</p>}
 
           {r && (
-            <section aria-labelledby="spec-diff" className="space-y-4">
-              <h3 id="spec-diff" className="text-sm font-medium" role="status">
-                {r.unchanged
-                  ? t('specUpdate.unchanged')
-                  : t('specUpdate.summary', { added: r.diff.added.length, removed: r.diff.removed.length, changed: r.diff.changed.length })}
-              </h3>
-              <FindingsList findings={r.findings} />
-              <RowList title={t('specUpdate.added')} rows={r.diff.added} />
-              <RowList title={t('specUpdate.removed')} rows={r.diff.removed} />
-              <RowList
-                title={t('specUpdate.changed')}
-                rows={r.diff.changed.map((c) => c.after)}
-                extra={(row) => {
-                  const fields = r.diff.changed.find((c) => c.key === row.key)?.fields ?? [];
-                  return t('specUpdate.changedFields', { fields: fields.join(', ') });
-                }}
-              />
-              {r.governanceImpact.changedGoverned.length > 0 && (
-                <div className="space-y-1">
-                  <h4 className="text-sm font-medium">{t('specUpdate.changedGoverned')}</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {r.governanceImpact.changedGoverned.map((key) => (
-                      <Badge key={key} variant="outline" dir="ltr" className="font-mono font-normal">
-                        {key}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {removedGoverned.length > 0 && (
-                <WarningNotice>
-                  <p>{t('specUpdate.removedGoverned', { count: removedGoverned.length })}</p>
-                  <ul className="space-y-0.5">
-                    {removedGoverned.map((g) => (
-                      <li key={g.key} dir="ltr" className="break-all font-mono text-xs">
-                        {g.key}
-                      </li>
-                    ))}
-                  </ul>
-                  <FormField
-                    control={form.control}
-                    name="acknowledge"
-                    render={({ field }) => (
-                      <FormItem className="flex items-start gap-2 space-y-0 pt-2">
-                        <FormControl>
-                          <Checkbox checked={field.value} onCheckedChange={(v) => { field.onChange(v === true); }} />
-                        </FormControl>
-                        <FormLabel className="font-normal">{t('specUpdate.acknowledge')}</FormLabel>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </WarningNotice>
-              )}
-            </section>
+            <SpecDiffView
+              result={r}
+              acknowledge={
+                <FormField
+                  control={form.control}
+                  name="acknowledge"
+                  render={({ field }) => (
+                    <FormItem className="flex items-start gap-2 space-y-0 pt-2">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={(v) => { field.onChange(v === true); }} />
+                      </FormControl>
+                      <FormLabel className="font-normal">{t('specUpdate.acknowledge')}</FormLabel>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              }
+            />
           )}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

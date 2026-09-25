@@ -118,7 +118,8 @@
       "PERMISSION_REVOKED": "Permission Revoked",
       "QUOTA_EXCEEDED": "Quota Exceeded",
       "SYNC_SUCCEEDED": "Sync Succeeded",
-      "SYNC_FAILED": "Sync Failed"
+      "SYNC_FAILED": "Sync Failed",
+      "SPEC_UPDATE_DETECTED": "Spec Update Detected"
     }
   }
 }

@@ -22,6 +22,8 @@ export interface ApiDefinition {
   authType: string;
   /** Not part of the `ApiDetail` contract (spec §5.2); present on list rows. */
   healthStatus?: ApiHealthStatus;
+  /** OAS-08: list rows only — a watched spec URL proposes a version nobody reviewed yet. */
+  specUpdateAvailable?: boolean;
   proxyUrl: string;
   listenPath: string;
   tykApiId: string | null;
