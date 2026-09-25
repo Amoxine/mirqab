@@ -9,13 +9,13 @@ import type { AuditEntry, AuditService } from '../services/audit.service';
 
 const flushSetImmediate = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-function contextFor(method: string, params: Record<string, string> = {}, path = '/api/keys') {
+function contextFor(method: string, params: Record<string, string> = {}, path = '/api/keys', body: unknown = {}) {
   const request = {
     method,
     path,
     ip: '10.0.0.1',
     headers: {},
-    body: {},
+    body,
     params,
     user: { sub: 'user-1' },
     tenantId: 'tenant-1',
@@ -133,6 +133,25 @@ describe('AuditLogInterceptor', () => {
       await run(interceptor, contextFor('PATCH', { id: 'key-7' }), of({}));
 
       expect(recorded(record).details).toMatchObject({ requestBody: {} });
+    });
+
+    it('L8: survives a deeply nested body (no stack overflow) and cuts it at the depth guard', async () => {
+      let deep: Record<string, unknown> = { password: 'hunter2' };
+      for (let i = 0; i < 20_000; i += 1) deep = { not: deep };
+      await run(interceptor, contextFor('PATCH', { id: 'api-1' }, '/api/apis', deep), of({}));
+      const stored = JSON.stringify(recorded(record).details);
+      expect(stored).toContain('[TRUNCATED]');
+      expect(stored).not.toContain('hunter2');
+    });
+
+    it('L8: truncates a large body and marks it', async () => {
+      const big = { set: { mock: { code: 200, body: 'x'.repeat(100_000) } }, apiKey: 'k' };
+      await run(interceptor, contextFor('PATCH', { id: 'api-1' }, '/api/apis', big), of({}));
+      const { requestBody } = recorded(record).details as { requestBody: { truncated: boolean; bytes: number; preview: string } };
+      expect(requestBody.truncated).toBe(true);
+      expect(requestBody.bytes).toBeGreaterThan(100_000);
+      expect(requestBody.preview.length).toBeLessThanOrEqual(16_384);
+      expect(requestBody.preview).not.toContain('"k"');
     });
   });
 });

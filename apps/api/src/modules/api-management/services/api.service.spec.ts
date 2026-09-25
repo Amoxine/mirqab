@@ -28,6 +28,8 @@ jest.mock('@open-gateway/database', () => ({
       count: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      // OAS-03: update() writes `config` with a compare-and-set.
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     // OAS-01: create() with a spec writes the API and its first spec row in one transaction.
@@ -37,7 +39,7 @@ jest.mock('@open-gateway/database', () => ({
 
 type Fn = jest.Mock;
 const db = prisma.apiDefinition as unknown as Record<
-  'findFirst' | 'findUnique' | 'findMany' | 'count' | 'create' | 'update' | 'delete',
+  'findFirst' | 'findUnique' | 'findMany' | 'count' | 'create' | 'update' | 'updateMany' | 'delete',
   Fn
 >;
 
@@ -227,12 +229,13 @@ describe('ApiService', () => {
         row({ config: { rateLimit: { rate: 5, per: 1 }, doNotTrack: true } }),
       );
       db.update.mockResolvedValue(row({ syncStatus: 'PENDING' }));
+      db.updateMany.mockResolvedValue({ count: 1 });
       const dto = plainToInstance(UpdateApiDto, { config: { cors: null } });
 
       await service.update(ID, dto, TENANT);
       await flush();
 
-      const data = firstArg(db.update).data;
+      const data = firstArg(db.updateMany).data;
       expect(data.config).toEqual({ rateLimit: { rate: 5, per: 1 }, doNotTrack: true, cors: null });
       expect(data.syncStatus).toBe('PENDING');
       expect(data).not.toHaveProperty('authType');

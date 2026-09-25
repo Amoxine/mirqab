@@ -84,6 +84,12 @@ are measured in the OAS-03 governance e2e. Only the OAS definition format (this 
 three; a keyless API for every control except `ignoreAuthentication` and the rate-limit scope test;
 behaviour under load; `rateLimit` windows other than `60s`; and the 14 unverified controls.
 
+## Where these controls are offered
+
+OAS-03 exposes exactly the enforced controls through `PATCH /apis/:id/endpoints`; the control-to-field map is
+`CONTROL_TYK_FIELD` in `endpoint-capabilities.ts`, and a unit test fails if the mapper emits a field that is
+not offerable here. See [OAS-ENDPOINT-GOVERNANCE.md](OAS-ENDPOINT-GOVERNANCE.md).
+
 ## How it was run
 
 Inside the api container (like the other `.mjs` e2e scripts), through the repo's own `TykClientService` and

@@ -41,6 +41,8 @@ import {
 import type { NodeOutcome, TykDebugResult } from '../../tyk-integration/services/tyk-client.service';
 import type { DebugRequestDto } from '../dto/debug-request.dto';
 import { ReconcileService, type SyncState } from './reconcile.service';
+import { MAX_MANAGED_ENDPOINTS, readGovernanceState } from './endpoint-governance';
+import { EndpointRenderError, hasRealOperations, readBackMismatches, type EndpointRef } from './endpoint-operations';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -145,6 +147,10 @@ export const DEFAULT_VERSION_NAME = 'v1';
 
 
 
+/** A `config` filter matching exactly the value that was read (jsonb equality; NULL via AnyNull). */
+const configIs = (value: Prisma.JsonValue | null): Prisma.JsonNullableFilter<'ApiDefinition'> =>
+  value === null ? { equals: Prisma.AnyNull } : { equals: value as Prisma.InputJsonValue };
+
 /** DTO instance -> plain JSON. Class fields are own `undefined` properties (ES2022 define semantics); dropping them keeps a merge from wiping stored values. */
 function toJsonObject(config: ApiConfigDto): Prisma.InputJsonObject {
   return JSON.parse(JSON.stringify(config)) as Prisma.InputJsonObject;
@@ -178,6 +184,9 @@ export function toSyncError(err: unknown): string {
     message = err.message;
   } else if (err instanceof CircuitBreakerOpenError) {
     message = 'Gateway temporarily unavailable, retry shortly';
+  } else if (err instanceof EndpointRenderError) {
+    // Our own refusal to render (e.g. two endpoints that route the same): no host or port in it.
+    message = err.message;
   }
   return message.slice(0, SYNC_ERROR_MAX);
 }
@@ -207,6 +216,16 @@ function asConflict(err: unknown, slug: string | undefined, listenPath: string |
   return fields.includes('listen_path')
     ? new ConflictException(listenPathTaken(listenPath ?? ''))
     : new ConflictException(slugTaken(slug ?? ''));
+}
+
+/**
+ * OAS-03: an API-wide cache and a per-endpoint cache would fight over `middleware.global.cache`; the
+ * endpoint write path refuses the one, `update()` refuses the other.
+ */
+function assertNoCacheConflict(config: ApiConfigDto | undefined, stored: Prisma.JsonValue | null): void {
+  if (config?.cache && Object.values(readGovernanceState(readConfig(stored)).endpoints).some((g) => g.cache)) {
+    throw new BadRequestException('An API-wide cache is refused while endpoints have their own cache; clear those first.');
+  }
 }
 
 function toApiDetail(row: ApiRow): ApiDetail {
@@ -251,6 +270,14 @@ export interface NewApiSpec {
 @Injectable()
 export class ApiService {
   private readonly logger = new Logger(ApiService.name);
+
+  /**
+   * M3: the tail of each API's sync chain. Syncs of ONE API run one after another, each re-reading the row
+   * inside the chain, so two quick PATCHes can never leave the gateway on the older config while the row
+   * says SYNCED. ponytail: per PROCESS — two API replicas can still interleave; a DB advisory lock or an
+   * outbox worker is the upgrade when the API runs more than one replica.
+   */
+  private readonly syncChains = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly tykClient: TykClientService,
@@ -491,6 +518,18 @@ export class ApiService {
       throw new BadRequestException('authType "JWT" requires config.jwt: { jwksUrl, issuer }');
     }
 
+    assertNoCacheConflict(config, existing.config);
+
+    // OAS-03: governance needs an HTTP API; a protocol switch would render (or refuse) it silently.
+    const governance = readGovernanceState(readConfig(existing.config));
+    if (
+      dto.protocol !== undefined &&
+      dto.protocol !== existing.protocol &&
+      (governance.restrictToSpec || Object.keys(governance.endpoints).length > 0)
+    ) {
+      throw new BadRequestException('The protocol of an API that governs endpoints cannot change; clear its endpoint governance first.');
+    }
+
     // WP26a, same rule as `create`: check the EFFECTIVE (merged) config so a PATCH that leaves
     // `upstreamMutualTls` untouched from an earlier, still-valid write is not re-validated away,
     // while a PATCH that sets or changes it is.
@@ -521,11 +560,9 @@ export class ApiService {
 
     let updated: ApiRow;
     try {
-      updated = await prisma.apiDefinition.update({
-        where: { id },
-        data,
-        include: withActiveKeyCount,
-      });
+      updated = config
+        ? await this.writeConfigGuarded(id, tenantId, existing.config, data, config)
+        : await prisma.apiDefinition.update({ where: { id }, data, include: withActiveKeyCount });
     } catch (err) {
       throw asConflict(err, dto.slug, dto.listenPath);
     }
@@ -540,6 +577,40 @@ export class ApiService {
     }
 
     return toApiDetail(updated);
+  }
+
+  /**
+   * `update()` with a `config` section: the merged config is written ONLY if the stored config is still
+   * the one it was merged from, so a concurrent `PATCH /apis/:id/endpoints` (which writes the same JSON
+   * column) is never silently overwritten. On a lost race: re-read, re-merge the same sections, retry
+   * once; then 409. The other checks in `update()` ran against the first read — only governance keys
+   * can differ in between unless two config PATCHes race, and the retry then re-applies this one's sections.
+   */
+  private async writeConfigGuarded(
+    id: string,
+    tenantId: string,
+    readConfigValue: Prisma.JsonValue | null,
+    data: Prisma.ApiDefinitionUpdateInput,
+    config: ApiConfigDto,
+  ): Promise<ApiRow> {
+    let base = readConfigValue;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (attempt > 0) {
+        base = (await this.findRow(id, tenantId)).config;
+        assertNoCacheConflict(config, base);
+      }
+      const merged = { ...readConfig(base), ...toJsonObject(config) } as Prisma.InputJsonObject;
+      const { count } = await prisma.apiDefinition.updateMany({
+        where: { id, tenantId, config: configIs(base) },
+        // `data` holds only scalar columns (DTO fields, syncStatus, retiredAt), which updateMany accepts.
+        data: { ...(data as Prisma.ApiDefinitionUpdateManyMutationInput), config: merged },
+      });
+      if (count === 1) return this.findRow(id, tenantId);
+    }
+    throw new ConflictException({
+      message: 'The API configuration changed while it was being saved; reload and retry',
+      error: 'API_CONFIG_CHANGED',
+    });
   }
 
   /** Hard delete (D16): refused while ACTIVE keys reference the API; removes the gateway definition first. */
@@ -605,6 +676,30 @@ export class ApiService {
     }
 
     return { message: 'API deleted' };
+  }
+
+  /**
+   * OAS-03: write `next` as the API's whole `config` ONLY if it still equals `expected` (the value the
+   * caller read), in one statement — never a read-then-write. Marks the row PENDING and starts the normal
+   * background sync. `false` means someone else changed `config` first (the caller answers 409).
+   */
+  async compareAndSetConfig(
+    id: string,
+    tenantId: string,
+    expected: Prisma.JsonValue | null,
+    next: Prisma.InputJsonObject,
+  ): Promise<boolean> {
+    const { count } = await prisma.apiDefinition.updateMany({
+      where: {
+        id,
+        tenantId,
+        config: configIs(expected),
+      },
+      data: { config: next, syncStatus: ApiSyncStatus.PENDING },
+    });
+    if (count === 0) return false;
+    this.syncInBackground(await this.findRow(id, tenantId));
+    return true;
   }
 
   /**
@@ -677,6 +772,60 @@ export class ApiService {
     }
   }
 
+  /**
+   * OAS-03: the stored spec index as the mapper needs it, loaded ONLY when the API governs endpoints (an
+   * ungoverned API renders exactly as before and costs no query). Tenant-scoped, `endpointIndex` only.
+   * Throws a 400 (-> FAILED with that message) for allow-list states the gateway cannot express safely.
+   */
+  private async endpointRefsFor(apiDef: ApiDefinition): Promise<EndpointRef[]> {
+    const governance = readGovernanceState(readConfig(apiDef.config));
+    if (!governance.restrictToSpec && Object.keys(governance.endpoints).length === 0) return [];
+
+    const spec = await prisma.apiSpec.findFirst({
+      where: { tenantId: apiDef.tenantId, apiDefId: apiDef.id },
+      orderBy: { versionNo: 'desc' },
+      select: { endpointIndex: true },
+    });
+    const rows: unknown[] = Array.isArray(spec?.endpointIndex) ? spec.endpointIndex : [];
+    const refs = rows.flatMap((row): EndpointRef[] => {
+      if (typeof row !== 'object' || row === null) return [];
+      const { key, method, path } = row as Record<string, unknown>;
+      return typeof key === 'string' && typeof method === 'string' && typeof path === 'string' ? [{ key, method, path }] : [];
+    });
+
+    if (governance.restrictToSpec && refs.length === 0) {
+      // Fail closed: without endpoints nothing would carry `allow` and every path would be proxied.
+      throw new BadRequestException('Allow-list mode is on but the stored specification has no endpoints');
+    }
+    if (governance.restrictToSpec && refs.length > MAX_MANAGED_ENDPOINTS) {
+      throw new BadRequestException(
+        `Allow-list mode is limited to ${String(MAX_MANAGED_ENDPOINTS)} endpoints; the specification has ${String(refs.length)}`,
+      );
+    }
+    return refs;
+  }
+
+  /**
+   * OAS-03 (intent vs effect): a node that accepted the push must also REPORT the governed operations as
+   * sent. Only managed fields are compared, with subset semantics (Tyk may add defaults). A node that
+   * does not becomes `ok: false`, so the row is FAILED rather than SYNCED from the write alone.
+   */
+  private async readBack(tykApiId: string, sent: Record<string, unknown>, nodes: NodeOutcome[]): Promise<NodeOutcome[]> {
+    return Promise.all(
+      nodes.map(async (node): Promise<NodeOutcome> => {
+        if (!node.ok) return node;
+        try {
+          const mismatched = readBackMismatches(sent, await this.tykClient.getOasApiFromNode(tykApiId, node.nodeUrl));
+          return mismatched.length === 0
+            ? node
+            : { ...node, ok: false, error: `read-back: ${String(mismatched.length)} governed operation(s) differ from what was sent` };
+        } catch (err) {
+          return { ...node, ok: false, error: `read-back failed: ${toSyncError(err)}` };
+        }
+      }),
+    );
+  }
+
   /** Push the definition to Tyk and persist the outcome: SYNCED + `lastSyncedAt`, or FAILED + `syncError`. */
   private async syncToTyk(apiDef: ApiDefinition): Promise<ApiRow> {
     return (await this.syncToTykWithNodes(apiDef)).row;
@@ -686,7 +835,22 @@ export class ApiService {
    * As `syncToTyk`, but also hands back which nodes accepted the write — what `POST /apis/:id/sync`
    * needs to answer 207 rather than a 200 that hides a node having refused it.
    */
-  private async syncToTykWithNodes(apiDef: ApiDefinition): Promise<{ row: ApiRow; nodes: NodeOutcome[] }> {
+  private syncToTykWithNodes(apiDef: ApiDefinition): Promise<{ row: ApiRow; nodes: NodeOutcome[] }> {
+    const previous = this.syncChains.get(apiDef.id) ?? Promise.resolve();
+    const run = previous.then(async () => {
+      // The caller's row may be a snapshot from before a later write: push what is stored NOW.
+      const fresh = await prisma.apiDefinition.findUnique({ where: { id: apiDef.id } });
+      return this.syncToTykWithNodesNow(fresh?.id === apiDef.id ? fresh : apiDef);
+    });
+    const tail = run.catch(() => undefined);
+    this.syncChains.set(apiDef.id, tail);
+    void tail.then(() => {
+      if (this.syncChains.get(apiDef.id) === tail) this.syncChains.delete(apiDef.id);
+    });
+    return run;
+  }
+
+  private async syncToTykWithNodesNow(apiDef: ApiDefinition): Promise<{ row: ApiRow; nodes: NodeOutcome[] }> {
     let tykApiId: string;
     let nodes: NodeOutcome[] = [];
 
@@ -718,9 +882,10 @@ export class ApiService {
 
         // `/tyk/apis/oas` POST is an upsert keyed by the document's own `info.id`, so create and
         // update are the same call — unlike the classic pair, which needs POST then PUT-by-id.
-        const oasDef = mapToTykOas(apiDef, tenant, signingKey, versions);
+        const oasDef = mapToTykOas(apiDef, tenant, signingKey, versions, await this.endpointRefsFor(apiDef));
         tykApiId = apiDef.tykApiId ?? `og-${apiDef.id}`;
         nodes = await this.tykClient.upsertOasApi(oasDef);
+        if (hasRealOperations(oasDef)) nodes = await this.readBack(tykApiId, oasDef, nodes);
         // Stored so drift and the UI can show what was actually sent, rather than re-deriving it
         // from a row that may have changed since.
         oasDocument = oasDef as Prisma.InputJsonValue;
@@ -769,7 +934,9 @@ export class ApiService {
           syncStatus: failed.length > 0 ? ApiSyncStatus.FAILED : ApiSyncStatus.SYNCED,
           syncError:
             failed.length > 0
-              ? `${String(failed.length)} of ${String(nodes.length)} gateway nodes did not accept the definition`
+              ? `${String(failed.length)} of ${String(nodes.length)} gateway nodes ${
+                  failed.some((n) => n.error?.startsWith('read-back')) ? 'did not accept the definition or do not report it as sent' : 'did not accept the definition'
+                }`
               : null,
           lastSyncedAt: new Date(),
           healthStatus: 'UNKNOWN' as const,
@@ -806,10 +973,20 @@ export class ApiService {
     // The override only changes where THIS test points; the stored row is untouched.
     const effective = dto.targetUrl ? { ...apiDef, proxyUrl: dto.targetUrl } : apiDef;
 
-    const payload =
-      apiDef.defFormat === ApiDefFormat.OAS
-        ? { request: buildDebugRequest(dto), oas: mapToTykOas(effective, tenant, signingKey) }
-        : { request: buildDebugRequest(dto), spec: mapToTykFormat(effective, tenant, signingKey) };
+    let payload: Record<string, unknown>;
+    try {
+      payload =
+        apiDef.defFormat === ApiDefFormat.OAS
+          ? {
+              request: buildDebugRequest(dto),
+              oas: mapToTykOas(effective, tenant, signingKey, [], await this.endpointRefsFor(apiDef)),
+            }
+          : { request: buildDebugRequest(dto), spec: mapToTykFormat(effective, tenant, signingKey) };
+    } catch (err) {
+      // A governed definition the mapper refuses to render is the caller's configuration, not a 500.
+      if (err instanceof EndpointRenderError) throw new BadRequestException(err.message);
+      throw err;
+    }
 
     return this.tykClient.debug(payload);
   }

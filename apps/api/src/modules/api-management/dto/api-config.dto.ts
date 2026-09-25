@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsAllowedProxyUrl } from './proxy-url.validator';
+import type { EndpointGovernance } from '../services/endpoint-governance';
 
 // main.ts runs ValidationPipe with forbidNonWhitelisted: every accepted field must be decorated here.
 
@@ -28,7 +29,7 @@ const ITEM_MAX = 255;
  * The global ValidationPipe uses enableImplicitConversion, which would turn "false" into true and
  * "" into 0 before validation. Keep the raw JSON value so the type validators see what the client sent.
  */
-const Raw = (): PropertyDecorator =>
+export const Raw = (): PropertyDecorator =>
   Transform(({ obj, key }: TransformFnParams) => (obj as Record<string, unknown>)[key]);
 
 export class ApiRateLimitDto {
@@ -230,15 +231,21 @@ export class ApiUptimeTestDto {
 }
 
 
+/**
+ * A header the gateway adds (transforms, mocks). The name must be an RFC 7230 token and the value may
+ * not carry CR, LF or NUL: otherwise a tenant could inject extra headers (or a whole response split).
+ */
 export class ApiHeaderDto {
   @ApiProperty({ example: 'X-Request-Source' })
   @IsString()
   @MaxLength(ITEM_MAX)
+  @Matches(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, { message: 'header name must be an RFC 7230 token' })
   name!: string;
 
   @ApiProperty({ example: 'open-gateway' })
   @IsString()
   @MaxLength(ITEM_MAX)
+  @Matches(/^[^\r\n\0]*$/, { message: 'header value must not contain CR, LF or NUL' })
   value!: string;
 }
 
@@ -558,5 +565,14 @@ export class ApiConfigDto {
 
 
 
-/** Data-only view of `ApiConfigDto` (no class identity): the shape stored in `ApiDefinition.config`. */
-export type ApiConfig = Pick<ApiConfigDto, keyof ApiConfigDto>;
+/**
+ * Data-only view of `ApiConfigDto` (no class identity): the shape stored in `ApiDefinition.config`.
+ *
+ * `endpoints` / `restrictToSpec` (OAS-03) are stored in the same JSON but are NOT fields of the DTO:
+ * `forbidNonWhitelisted` makes `PATCH /apis/:id` refuse them, so only `PATCH /apis/:id/endpoints`
+ * (spec check + revision compare-and-set) writes them, and the section-wise merge in `update()` keeps them.
+ */
+export type ApiConfig = Pick<ApiConfigDto, keyof ApiConfigDto> & {
+  endpoints?: Record<string, EndpointGovernance>;
+  restrictToSpec?: boolean;
+};

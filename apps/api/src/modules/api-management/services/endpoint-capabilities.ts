@@ -87,3 +87,48 @@ export const OFFERABLE_ENDPOINT_FIELDS: readonly string[] = ENDPOINT_CAPABILITIE
 export function capabilityFor(tykField: string): EndpointCapability | undefined {
   return ENDPOINT_CAPABILITIES.find((capability) => capability.tykField === tykField);
 }
+
+/**
+ * OAS-03: the governance control (as stored in `config.endpoints[key]`, plus the API-level
+ * `restrictToSpec`) and the ONE Tyk operation field it is rendered to. Every value must be offerable:
+ * `endpoint-capabilities.spec.ts` fails if a capability is flipped back to `unverified` while a
+ * control still maps to it, and the mapper spec fails if the mapper emits a field outside this map.
+ */
+export const CONTROL_TYK_FIELD = {
+  enabled: 'block',
+  restrictToSpec: 'allow',
+  auth: 'ignoreAuthentication',
+  rateLimit: 'rateLimit',
+  cache: 'cache',
+  timeoutSeconds: 'enforceTimeout',
+  requestSizeLimitBytes: 'requestSizeLimit',
+  mock: 'mockResponse',
+  validateRequestSchema: 'validateRequest',
+} as const satisfies Record<string, EndpointControl>;
+
+export type GovernanceControl = keyof typeof CONTROL_TYK_FIELD;
+
+/**
+ * Controls that only mean something on some methods. `cache`: Tyk caches safe requests and this
+ * product offers it on GET only. `validateRequestSchema`: validates a request BODY.
+ */
+export const CONTROL_METHODS: Partial<Record<GovernanceControl, readonly string[]>> = {
+  cache: ['GET'],
+  validateRequestSchema: ['POST', 'PUT', 'PATCH'],
+};
+
+/** The capability table in the terms of the governance API: `control` is the stored name when one maps to the field. */
+export function governanceCapabilities(): {
+  control: string;
+  status: CapabilityStatus;
+  prerequisite?: string;
+  behaviour: string;
+}[] {
+  const controlOf = new Map<string, string>(Object.entries(CONTROL_TYK_FIELD).map(([control, field]) => [field, control]));
+  return ENDPOINT_CAPABILITIES.map(({ tykField, status, prerequisite, behaviour }) => ({
+    control: controlOf.get(tykField) ?? tykField,
+    status,
+    ...(prerequisite ? { prerequisite } : {}),
+    behaviour,
+  }));
+}

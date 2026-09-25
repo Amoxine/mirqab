@@ -17,9 +17,11 @@ const IMPORT_ROUTES: Record<string, { permissions: string[]; audited: boolean }>
   // The preview changes nothing, so it is not audited — but it needs the same permission as the real import.
   preview: { permissions: ['api:create'], audited: false },
 };
-const SPEC_ROUTES: Record<string, { permissions: string[] }> = {
-  spec: { permissions: ['api:read'] },
-  endpoints: { permissions: ['api:read'] },
+const SPEC_ROUTES: Record<string, { permissions: string[]; audited: boolean }> = {
+  spec: { permissions: ['api:read'], audited: false },
+  endpoints: { permissions: ['api:read'], audited: false },
+  // OAS-03: the governance write changes the API, so it is audited like any other API update.
+  updateEndpoints: { permissions: ['api:update'], audited: true },
 };
 
 const handlersOf = (controller: { prototype: object }): string[] =>
@@ -49,8 +51,13 @@ describe('ApiSpecController wiring', () => {
     expect(handlersOf(ApiSpecController).sort()).toEqual(Object.keys(SPEC_ROUTES).sort());
   });
 
-  it.each(Object.entries(SPEC_ROUTES))('%s requires its permissions', (name, expected) => {
+  it.each(Object.entries(SPEC_ROUTES))('%s requires its permissions and audit decision', (name, expected) => {
     expect(Reflect.getMetadata(PERMISSIONS_KEY, handler(ApiSpecController, name))).toEqual(expected.permissions);
+    expect(Reflect.getMetadata(AUDIT_KEY, handler(ApiSpecController, name)) !== undefined).toBe(expected.audited);
+  });
+
+  it('audits the governance write as an API update', () => {
+    expect(Reflect.getMetadata(AUDIT_KEY, handler(ApiSpecController, 'updateEndpoints'))).toMatchObject({ action: 'api:updated' });
   });
 
   it('is guarded by tenant isolation and permissions on the whole controller', () => {

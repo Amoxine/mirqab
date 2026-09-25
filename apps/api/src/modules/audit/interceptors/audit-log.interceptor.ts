@@ -37,15 +37,30 @@ interface MutationResponse {
 const routeId = (request: AuditRequest): string | undefined =>
   (request.params as Record<string, string | undefined>).id;
 
+/** Nesting kept in an audit row; anything deeper is replaced, so a hostile body cannot overflow the stack. */
+const REDACT_MAX_DEPTH = 32;
+/** Largest request body stored in an audit row; a longer one is kept as a marked, truncated preview. */
+const AUDIT_BODY_MAX_BYTES = 16_384;
+
 /** Audit rows are permanent and exportable: never store credentials from request bodies. */
-function redact(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redact);
+function redact(value: unknown, depth = 0): unknown {
+  if (depth >= REDACT_MAX_DEPTH && value !== null && typeof value === 'object') return '[TRUNCATED]';
+  if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1));
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, SENSITIVE_KEY.test(k) ? '[REDACTED]' : redact(v)]),
+      Object.entries(value).map(([k, v]) => [k, SENSITIVE_KEY.test(k) ? '[REDACTED]' : redact(v, depth + 1)]),
     );
   }
   return value;
+}
+
+/** The redacted body, or — past the size cap — a marked preview of it (still redacted). */
+function auditBody(body: unknown): unknown {
+  const redacted = redact(body);
+  const json = redacted === undefined ? 'null' : JSON.stringify(redacted);
+  const bytes = Buffer.byteLength(json, 'utf8');
+  if (bytes <= AUDIT_BODY_MAX_BYTES) return redacted;
+  return { truncated: true, bytes, preview: json.slice(0, AUDIT_BODY_MAX_BYTES) };
 }
 
 @Injectable()
@@ -81,7 +96,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const details: Record<string, unknown> = {};
     if (method === 'PATCH' || method === 'PUT') {
-      details.requestBody = redact(request.body);
+      details.requestBody = auditBody(request.body);
     }
 
     return next.handle().pipe(

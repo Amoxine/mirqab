@@ -2,7 +2,8 @@ import { ApiStatus, type ApiDefinition, type Prisma } from '@prisma/client';
 import type { ApiConfig } from '../dto/api-config.dto';
 import type { TenantGatewayScope } from '../../tyk-integration/services/tenant-scope';
 import { buildTykEventHandlers } from '../../webhooks/webhook-relay.constants';
-import { CATCH_ALL_METHODS, buildCatchAllOperations } from './endpoint-operations';
+import { CATCH_ALL_METHODS, buildGovernedOperations, type EndpointRef } from './endpoint-operations';
+import { readGovernanceState } from './endpoint-governance';
 
 /**
  * Both Tyk definition formats — classic and Tyk-OAS — in one place.
@@ -415,13 +416,15 @@ export function mapToTykOas(
   tenant: TenantGatewayScope,
   jwtSource = '',
   versions: readonly ApiVersionChild[] = [],
+  endpointRefs: readonly EndpointRef[] = [],
 ): Record<string, unknown> {
+  const config = readConfig(apiDef.config);
   const {
     rateLimit, cors, doNotTrack, jwt, timeoutSeconds, requestSizeLimitBytes, loadBalancing, uptimeTests,
     circuitBreaker, transformRequestHeaders, transformResponseHeaders, urlRewrite, mock,
     transformRequestBody, transformResponseBody, cache, detailedRecording,
     ipAccessControl, validateRequestSchema, authHeaderName, hmac, upstreamMutualTls,
-  } = readConfig(apiDef.config);
+  } = config;
   // One place decides which header carries the key, so every scheme below agrees (WP15c).
   const authHeader = authHeaderName ?? 'Authorization';
   const isHmac = apiDef.authType === 'HMAC';
@@ -594,15 +597,26 @@ export function mapToTykOas(
   }
 
   // API-wide settings above live on a family of synthetic catch-all operations; see endpoint-operations.ts
-  // for why one `/{wildcard}` was not enough (it matches a single path segment only).
-  const { paths: catchAllPaths, operations } = buildCatchAllOperations(perOperation, validateRequestSchema);
+  // for why one `/{wildcard}` was not enough (it matches a single path segment only). OAS-03: governed
+  // endpoints (`endpointRefs` = the stored spec index, passed only when the API has governance) become
+  // real operations carrying the API-wide middleware too, and the family is merged in around them.
+  const governance = readGovernanceState(config);
+  const { paths: operationPaths, operations, global: governedGlobal } = buildGovernedOperations({
+    refs: endpointRefs,
+    endpoints: governance.endpoints,
+    restrictToSpec: governance.restrictToSpec,
+    perOperation,
+    validateRequestSchema,
+    apiWideCache: Boolean(cache),
+  });
+  Object.assign(globalMiddleware, governedGlobal);
 
   return {
     openapi: '3.0.3',
     info: { title: apiDef.name, version: '1.0.0' },
-    // Empty unless an API-wide middleware needs a catch-all operation to hang off: this product
-    // proxies whole upstreams rather than describing per-endpoint contracts.
-    paths: catchAllPaths,
+    // Empty unless an API-wide middleware needs a catch-all operation to hang off, or endpoints are
+    // governed (OAS-03): otherwise this product proxies whole upstreams.
+    paths: operationPaths,
     ...(authenticated ? { components: { securitySchemes: componentSchemes }, security } : {}),
     'x-tyk-api-gateway': {
       info: {

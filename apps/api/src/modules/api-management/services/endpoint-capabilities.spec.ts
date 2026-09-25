@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import fixture from './__fixtures__/tyk-oas-operation-fields.v5.15.0.json';
-import { capabilityFor, ENDPOINT_CAPABILITIES, OFFERABLE_ENDPOINT_FIELDS } from './endpoint-capabilities';
+import {
+  CONTROL_TYK_FIELD,
+  capabilityFor,
+  ENDPOINT_CAPABILITIES,
+  governanceCapabilities,
+  OFFERABLE_ENDPOINT_FIELDS,
+} from './endpoint-capabilities';
+import { ENDPOINT_CONTROL_NAMES } from './endpoint-governance';
 
 /**
  * The capability table is only worth anything if it stays complete and stays tied to evidence.
@@ -46,6 +53,22 @@ describe('ENDPOINT_CAPABILITIES', () => {
   it('looks a capability up by gateway field', () => {
     expect(capabilityFor('cache')?.prerequisite).toMatch(/global\.cache/);
     expect(capabilityFor('nope')).toBeUndefined();
+  });
+
+  it('maps every governance control onto an offerable field, one field each', () => {
+    const fields = Object.values(CONTROL_TYK_FIELD);
+    for (const field of fields) expect(OFFERABLE_ENDPOINT_FIELDS).toContain(field);
+    expect(new Set(fields).size).toBe(fields.length);
+    // Every stored control has a field; `restrictToSpec` is the API-level one.
+    expect(Object.keys(CONTROL_TYK_FIELD).sort()).toEqual([...ENDPOINT_CONTROL_NAMES, 'restrictToSpec'].sort());
+  });
+
+  it('describes the capabilities in governance terms, unverified ones included (the UI shows why)', () => {
+    const table = governanceCapabilities();
+    expect(table).toHaveLength(ENDPOINT_CAPABILITIES.length);
+    expect(table.find((c) => c.control === 'enabled')?.status).toBe('enforced');
+    expect(table.find((c) => c.control === 'cache')?.prerequisite).toMatch(/global\.cache/);
+    expect(table.find((c) => c.control === 'circuitBreaker')?.status).toBe('unverified');
   });
 
   it('records the pinned gateway image it was read from', () => {
