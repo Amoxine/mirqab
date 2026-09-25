@@ -28,6 +28,7 @@
     "test:e2e:oas-spec-update": "docker cp test/e2e/oas-spec-update.e2e.mjs open-gateway-api:/tmp/oas-spec-update.e2e.mjs && docker exec open-gateway-api node /tmp/oas-spec-update.e2e.mjs",
     "test:e2e:oas-portal": "docker cp test/e2e/oas-portal.e2e.mjs open-gateway-api:/tmp/oas-portal.e2e.mjs && docker exec open-gateway-api node /tmp/oas-portal.e2e.mjs",
     "test:e2e:oas-spec-fetch": "docker cp test/e2e/oas-spec-fetch.e2e.mjs open-gateway-api:/tmp/oas-spec-fetch.e2e.mjs && docker exec open-gateway-api node /tmp/oas-spec-fetch.e2e.mjs",
+    "test:e2e:oas-spec-source": "docker cp test/e2e/oas-spec-source.e2e.mjs open-gateway-api:/tmp/oas-spec-source.e2e.mjs && docker exec open-gateway-api node /tmp/oas-spec-source.e2e.mjs",
     "test:e2e:governance": "docker cp test/e2e/governance.e2e.mjs open-gateway-api:/tmp/governance.e2e.mjs && docker exec open-gateway-api node /tmp/governance.e2e.mjs",
     "test:e2e:mcp": "docker cp test/e2e/mcp-gateway.e2e.mjs open-gateway-api:/tmp/mcp-gateway.e2e.mjs && docker exec open-gateway-api node /tmp/mcp-gateway.e2e.mjs",
     "test:e2e:webhooks": "docker cp test/e2e/webhooks-protocols.e2e.mjs open-gateway-api:/tmp/webhooks-protocols.e2e.mjs && docker exec open-gateway-api node /tmp/webhooks-protocols.e2e.mjs",

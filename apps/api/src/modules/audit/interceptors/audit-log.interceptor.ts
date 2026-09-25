@@ -42,21 +42,73 @@ const REDACT_MAX_DEPTH = 32;
 /** Largest request body stored in an audit row; a longer one is kept as a marked, truncated preview. */
 const AUDIT_BODY_MAX_BYTES = 16_384;
 
+/** Longest string treated as one URL (the spec fetcher's own limit). */
+const MAX_URL_LENGTH = 2048;
+const URL_IN_TEXT = /https?:[^\s"'<>]+/gi;
+const HAS_URL = /https?:[^\s"'<>]+/i;
+/** The WHATWG parser deletes these anywhere in its input, so `ht\ttps://…` is a URL to it. */
+const TAB_OR_NEWLINE = /[\t\n\r]/g;
+
+/**
+ * How a URL found in audited data is kept: `strip` = without userinfo, query and fragment (OAS-08 C1);
+ * `origin` = `https://host/…` only, for routes whose URL is a spec URL (its path can carry the secret);
+ * `drop` = `[URL]`, for error text.
+ */
+type UrlMode = 'strip' | 'origin' | 'drop';
+
+/** The parser's own reading of `value` when it is an http(s) URL — the same `new URL()` the fetcher uses. */
+function asHttpUrl(value: string): URL | null {
+  if (value.length > MAX_URL_LENGTH) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function keep(url: URL | null, mode: UrlMode): string {
+  if (url === null || mode === 'drop') return '[URL]';
+  if (mode === 'origin') return `${url.protocol}//${url.host}/…`;
+  url.username = '';
+  url.password = '';
+  url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
+/**
+ * A string that parses as an http(s) URL (in any spelling the parser accepts: leading blanks,
+ * `https:host`, backslashes, upper case), or that contains one, loses what `mode` removes. A secret can
+ * sit under a key no name pattern would catch (`url`, `proxyUrl`, a free-text note).
+ */
+function redactUrls(value: string, mode: UrlMode): string {
+  const whole = asHttpUrl(value);
+  if (whole) return keep(whole, mode);
+  const flat = value.replace(TAB_OR_NEWLINE, '');
+  if (!HAS_URL.test(flat)) return value;
+  return flat.replace(URL_IN_TEXT, (match) => keep(asHttpUrl(match), mode));
+}
+
 /** Audit rows are permanent and exportable: never store credentials from request bodies. */
-function redact(value: unknown, depth = 0): unknown {
+function redact(value: unknown, mode: UrlMode, depth = 0): unknown {
+  if (typeof value === 'string') return redactUrls(value, mode);
   if (depth >= REDACT_MAX_DEPTH && value !== null && typeof value === 'object') return '[TRUNCATED]';
-  if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1));
+  if (Array.isArray(value)) return value.map((item) => redact(item, mode, depth + 1));
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, SENSITIVE_KEY.test(k) ? '[REDACTED]' : redact(v, depth + 1)]),
+      Object.entries(value).map(([k, v]) => [k, SENSITIVE_KEY.test(k) ? '[REDACTED]' : redact(v, mode, depth + 1)]),
     );
   }
   return value;
 }
 
+/** OAS-08: the routes whose body carries a spec URL. Only its origin is kept. */
+const SPEC_URL_ROUTE = /\/spec-source$|\/import\/url(\/preview)?$/;
+
 /** The redacted body, or — past the size cap — a marked preview of it (still redacted). */
-function auditBody(body: unknown): unknown {
-  const redacted = redact(body);
+function auditBody(body: unknown, mode: UrlMode): unknown {
+  const redacted = redact(body, mode);
   const json = redacted === undefined ? 'null' : JSON.stringify(redacted);
   const bytes = Buffer.byteLength(json, 'utf8');
   if (bytes <= AUDIT_BODY_MAX_BYTES) return redacted;
@@ -96,7 +148,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const details: Record<string, unknown> = {};
     if (method === 'PATCH' || method === 'PUT') {
-      details.requestBody = auditBody(request.body);
+      details.requestBody = auditBody(request.body, SPEC_URL_ROUTE.test(request.path) ? 'origin' : 'strip');
     }
 
     return next.handle().pipe(
@@ -150,7 +202,8 @@ export class AuditLogInterceptor implements NestInterceptor {
                 action: 'SYNC_FAILED',
                 resource,
                 details: {
-                  error: error.message,
+                  // A 5xx message may quote a URL (and its secret): never stored, whatever its shape.
+                  error: redactUrls(error.message, 'drop'),
                   action: auditAction,
                   ...(routeId(request) === undefined ? {} : { resourceId: routeId(request) }),
                 },

@@ -2,11 +2,18 @@ import { Module, type MiddlewareConsumer, type NestModule, RequestMethod } from 
 import { ApiImportController } from './controllers/api-import.controller';
 import { ApiSpecController } from './controllers/api-spec.controller';
 import { ApiSpecUpdateController } from './controllers/api-spec-update.controller';
+import { SpecSourceController, SpecUpdatesController } from './controllers/spec-source.controller';
 import { ApiImportService } from './services/api-import.service';
 import { ApiSpecService } from './services/api-spec.service';
 import { SpecUpdateService } from './services/spec-update.service';
 import { SpectralLintService } from './services/spectral-lint.service';
+import { SpecCandidateService } from './services/spec-candidate.service';
+import { SpecSourceService } from './services/spec-source.service';
+import { SpecSourceScheduler } from './services/spec-source.scheduler';
 import { ApiManagementModule } from '../api-management/api-management.module';
+import { AuditModule } from '../audit/audit.module';
+import { ObservabilityModule } from '../observability/observability.module';
+import { SpecFetchModule } from '../spec-fetch/spec-fetch.module';
 import { specBodyMiddleware } from './spec-body.middleware';
 
 /**
@@ -18,9 +25,19 @@ import { specBodyMiddleware } from './spec-body.middleware';
  * a spec ends by calling the same `create()` a hand-written API uses, so there is one creation path.
  */
 @Module({
-  imports: [ApiManagementModule],
-  controllers: [ApiImportController, ApiSpecController, ApiSpecUpdateController],
-  providers: [ApiImportService, SpectralLintService, ApiSpecService, SpecUpdateService],
+  // OAS-08: the guarded fetcher (the only path to a tenant spec URL), AuditService for the
+  // SPEC_UPDATE_DETECTED row, MetricsService's registry for the overdue gauge.
+  imports: [ApiManagementModule, SpecFetchModule, AuditModule, ObservabilityModule],
+  controllers: [ApiImportController, ApiSpecController, ApiSpecUpdateController, SpecSourceController, SpecUpdatesController],
+  providers: [
+    ApiImportService,
+    SpectralLintService,
+    ApiSpecService,
+    SpecUpdateService,
+    SpecCandidateService,
+    SpecSourceService,
+    SpecSourceScheduler,
+  ],
 })
 export class ApiImportModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

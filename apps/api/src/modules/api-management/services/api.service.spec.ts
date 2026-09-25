@@ -34,8 +34,11 @@ jest.mock('@open-gateway/database', () => ({
     },
     // OAS-01: create() with a spec writes the API and its first spec row in one transaction.
     $transaction: jest.fn(),
+    // OAS-08: findAll() reads the page's pending spec candidates in one query.
+    $queryRaw: jest.fn().mockResolvedValue([]),
   },
 }));
+const queryRaw = (prisma as unknown as { $queryRaw: jest.Mock<Promise<unknown>, [{ values: unknown[] }]> }).$queryRaw;
 
 type Fn = jest.Mock;
 const db = prisma.apiDefinition as unknown as Record<
@@ -135,6 +138,7 @@ describe('ApiService', () => {
     // Re-armed here because `resetAllMocks` clears return values: every gateway write resolves
     // the tenant's org through `loadTenantScope` (WP12c).
     (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({ tykOrgId: 'og-tenant-1', slug: 'tenant-1' });
+    queryRaw.mockResolvedValue([]);
   });
 
   describe('findOne', () => {
@@ -219,6 +223,31 @@ describe('ApiService', () => {
       await service.findAll(TENANT);
 
       expect(firstArg(db.findMany).where).toEqual({ tenantId: TENANT });
+    });
+
+    it('OAS-08: flags the rows with a pending spec update from ONE query scoped to the tenant and the page', async () => {
+      const { service } = setup();
+      queryRaw.mockClear();
+      db.findMany.mockResolvedValue([row({ id: 'a' }), row({ id: 'b' })]);
+      db.count.mockResolvedValue(2);
+      queryRaw.mockResolvedValueOnce([{ id: 'cand-1', apiDefId: 'b' }]);
+
+      const result = await service.findAll(TENANT);
+
+      expect(result.data.map((r) => [r.id, r.specUpdateAvailable])).toEqual([['a', false], ['b', true]]);
+      expect(queryRaw).toHaveBeenCalledTimes(1);
+      expect(queryRaw.mock.calls[0][0].values).toEqual([TENANT, 'a', 'b']);
+    });
+
+    it('OAS-08: an empty page issues no candidate query', async () => {
+      const { service } = setup();
+      queryRaw.mockClear();
+      db.findMany.mockResolvedValue([]);
+      db.count.mockResolvedValue(0);
+
+      await service.findAll(TENANT);
+
+      expect(queryRaw).not.toHaveBeenCalled();
     });
   });
 

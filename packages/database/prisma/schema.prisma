@@ -145,6 +145,17 @@ enum AuditAction {
   ORG_RESET
   /// WP18's `POST /quotas/keys/:id/reset`.
   KEY_RESET
+  /// OAS-08: a watched spec URL serves a new document (system event: no user, no correlation id).
+  SPEC_UPDATE_DETECTED
+}
+
+/// OAS-08: a document fetched from an API's spec URL, proposed as its next spec version.
+/// Only PENDING rows keep their text; a human applies (OAS-04) or dismisses them.
+enum SpecCandidateState {
+  PENDING
+  APPLIED
+  DISMISSED
+  SUPERSEDED
 }
 
 // ─── MODELS ─────────────────────────────────────────────────────────────────
@@ -202,6 +213,8 @@ model Tenant {
   /// WP28.
   mcpServers     McpServer[]
   apiSpecs       ApiSpec[]
+  specSources    ApiSpecSource[]
+  specCandidates SpecCandidate[]
 
   @@map("tenants")
 }
@@ -353,6 +366,8 @@ model ApiDefinition {
   /// WP28: the MCP proxies paired to this API. `Restrict` on the far side — see McpServer.
   mcpServers           McpServer[]
   specs                ApiSpec[]
+  specSource           ApiSpecSource?
+  specCandidates       SpecCandidate[]
 
   @@unique([tenantId, slug])
   // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
@@ -501,6 +516,74 @@ model ApiSpec {
   @@unique([apiDefId, versionNo])
   @@index([tenantId, apiDefId])
   @@map("api_specs")
+}
+
+/// OAS-08: the URL an API's OpenAPI document is watched at (at most one per API). `url` may carry a
+/// secret in its query string: it is returned redacted, never logged, and redacted in audit details.
+/// Stored plain, like webhook receiver URLs (there is no secret store).
+model ApiSpecSource {
+  id                  String    @id @default(uuid())
+  tenantId            String    @map("tenant_id")
+  apiDefId            String    @unique @map("api_def_id")
+  url                 String
+  enabled             Boolean   @default(true)
+  /// 15, 60, 360 or 1440 (the PUT DTO enforces the set).
+  intervalMinutes     Int       @map("interval_minutes")
+  /// Advanced BEFORE each network call (the claim), so a crash mid-check retries next interval.
+  nextCheckAt         DateTime  @map("next_check_at")
+  /// Set when a check is claimed; also the 30 s "check now" cooldown.
+  lastCheckedAt       DateTime? @map("last_checked_at")
+  lastSuccessAt       DateTime? @map("last_success_at")
+  /// 'UNCHANGED' | 'CHANGED' | 'ERROR'
+  lastResult          String?   @map("last_result")
+  /// A fixed code (SPEC_FETCH_* / NOT_A_SPEC), never remote text.
+  lastErrorCode       String?   @map("last_error_code")
+  /// Stored only after the gates passed, so an ERROR is not masked by a later 304.
+  etag                String?
+  lastModified        String?   @map("last_modified")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiDef ApiDefinition @relation(fields: [apiDefId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, nextCheckAt])
+  @@index([tenantId])
+  @@map("api_spec_sources")
+}
+
+/// OAS-08: a document a spec URL served that differs from the API's applied version. Shown as
+/// "update available" only while PENDING and different from the latest `api_specs` hash (read-time
+/// rule). No unique (api_def_id, content_hash): content A can come back after B and be proposed again.
+/// The last 20 per API are kept.
+model SpecCandidate {
+  id             String             @id @default(uuid())
+  tenantId       String             @map("tenant_id")
+  apiDefId       String             @map("api_def_id")
+  contentHash    String             @map("content_hash")
+  format         String
+  openapiVersion String             @map("openapi_version")
+  /// Kept only while PENDING; NULL once applied, dismissed or superseded.
+  sourceText     String?            @map("source_text")
+  endpointCount  Int                @map("endpoint_count")
+  /// The applied versionNo the diff was computed against. Display only: apply re-diffs.
+  baseVersionNo  Int                @map("base_version_no")
+  /// { added, removed, changed, governedRemoved, governedChanged } counts at detection time.
+  diffSummary    Json               @map("diff_summary")
+  /// Lint warnings at detection time (a document with errors never becomes a candidate).
+  findings       Json
+  state          SpecCandidateState @default(PENDING)
+  detectedAt     DateTime           @default(now()) @map("detected_at")
+  decidedAt      DateTime?          @map("decided_at")
+  decidedBy      String?            @map("decided_by")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiDef ApiDefinition @relation(fields: [apiDefId], references: [id], onDelete: Cascade)
+
+  @@index([apiDefId, contentHash])
+  @@index([tenantId, state])
+  @@map("spec_candidates")
 }
 
 /// A commercial plan (WP18): one Tyk policy, shared by every key assigned to it.

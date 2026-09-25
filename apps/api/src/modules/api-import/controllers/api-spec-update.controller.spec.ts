@@ -17,6 +17,7 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
 import { ApiImportModule } from '../api-import.module';
 import { ApiImportService } from '../services/api-import.service';
+import { SpecSourceService } from '../services/spec-source.service';
 import { SpecUpdateService } from '../services/spec-update.service';
 import { ApiImportController } from './api-import.controller';
 import { ApiSpecUpdateController } from './api-spec-update.controller';
@@ -72,6 +73,7 @@ class JsonEchoController {
   providers: [
     { provide: SpecUpdateService, useValue: { update: jest.fn() } },
     { provide: ApiImportService, useValue: { import: jest.fn(), preview: jest.fn() } },
+    { provide: SpecSourceService, useValue: { fetchDocument: jest.fn(), assertCapacity: jest.fn(), createWatched: jest.fn() } },
   ],
 })
 class HarnessModule implements NestModule {
@@ -85,6 +87,7 @@ describe('POST /apis/:id/spec over HTTP (body scoping and query parsing)', () =>
   let base: string;
   let update: jest.Mock;
   let importer: { import: jest.Mock; preview: jest.Mock };
+  let sources: { fetchDocument: jest.Mock };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [HarnessModule] })
@@ -103,6 +106,7 @@ describe('POST /apis/:id/spec over HTTP (body scoping and query parsing)', () =>
     base = `${await app.getUrl()}/api`;
     update = moduleRef.get<{ update: jest.Mock }>(SpecUpdateService).update;
     importer = moduleRef.get<{ import: jest.Mock; preview: jest.Mock }>(ApiImportService);
+    sources = moduleRef.get<{ fetchDocument: jest.Mock }>(SpecSourceService);
   });
 
   const firstCall = (): unknown[] => (update.mock.calls as unknown[][])[0] ?? [];
@@ -115,6 +119,7 @@ describe('POST /apis/:id/spec over HTTP (body scoping and query parsing)', () =>
     update.mockReset().mockResolvedValue({ applied: false });
     importer.import.mockReset().mockResolvedValue({});
     importer.preview.mockReset().mockResolvedValue({});
+    sources.fetchDocument.mockReset().mockResolvedValue({ kind: 'OK', text: 'openapi: 3.0.3\n', etag: null, lastModified: null });
   });
 
   const post = (query: string, body: string, type = 'application/yaml', route = 'spec'): Promise<Response> =>
@@ -207,6 +212,34 @@ describe('POST /apis/:id/spec over HTTP (body scoping and query parsing)', () =>
     const res = await fetch(`${base}/apis/not-a-uuid/spec?expectedVersion=1`, { method: 'POST', body: 'x' });
 
     expect(res.status).toBe(400);
+  });
+
+  // OAS-08: the URL routes take a JSON body; the raw-document middleware scoped to `apis/import` must not swallow it.
+  it.each([
+    ['POST /apis/import/url/preview', '/apis/import/url/preview', 200],
+    ['POST /apis/import/url', '/apis/import/url', 201],
+  ])('%s parses its JSON body and fetches through the spec source service', async (_label, path, status) => {
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://specs.example.com/openapi.json?token=t', serverIndex: 0 }),
+    });
+
+    expect(res.status).toBe(status);
+    expect(sources.fetchDocument).toHaveBeenCalledWith('https://specs.example.com/openapi.json?token=t');
+    const call = ((status === 200 ? importer.preview : importer.import).mock.calls as unknown[][])[0];
+    expect(call).toEqual(['openapi: 3.0.3\n', undefined, { slug: undefined, serverIndex: 0 }]);
+  });
+
+  it.each([
+    ['no url', {}],
+    ['an unknown field', { url: 'https://h/x', force: true }],
+    ['a bad interval', { url: 'https://h/x', watch: true, intervalMinutes: 5 }],
+  ])('POST /apis/import/url answers 400 for %s', async (_label, body) => {
+    const res = await fetch(`${base}/apis/import/url`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    expect(res.status).toBe(400);
+    expect(sources.fetchDocument).not.toHaveBeenCalled();
   });
 
   it.each([

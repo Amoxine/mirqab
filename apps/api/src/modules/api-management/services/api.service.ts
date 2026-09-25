@@ -228,6 +228,34 @@ function assertNoCacheConflict(config: ApiConfigDto | undefined, stored: Prisma.
   }
 }
 
+/** A `GET /apis` row: OAS-08 adds whether a watched spec URL proposes a new version. */
+export type ApiListItem = ApiDetail & { specUpdateAvailable: boolean };
+
+/**
+ * OAS-08: the PENDING spec candidates worth showing — only those whose content still differs from the
+ * API's latest stored version (a manual upload of the same bytes makes a candidate moot without
+ * touching its row). One query for any number of APIs, newest first, at most 100.
+ */
+export async function pendingSpecCandidates(
+  tenantId: string,
+  apiDefIds?: readonly string[],
+): Promise<{ id: string; apiDefId: string }[]> {
+  if (apiDefIds?.length === 0) return [];
+  return prisma.$queryRaw<{ id: string; apiDefId: string }[]>(Prisma.sql`
+    SELECT c.id, c.api_def_id AS "apiDefId"
+    FROM spec_candidates c
+    WHERE c.tenant_id = ${tenantId}
+      AND c.state = 'PENDING'
+      ${apiDefIds ? Prisma.sql`AND c.api_def_id IN (${Prisma.join(apiDefIds)})` : Prisma.empty}
+      AND c.content_hash IS DISTINCT FROM (
+        SELECT s.content_hash FROM api_specs s
+        WHERE s.api_def_id = c.api_def_id AND s.tenant_id = c.tenant_id
+        ORDER BY s.version_no DESC LIMIT 1
+      )
+    ORDER BY c.detected_at DESC
+    LIMIT 100`);
+}
+
 function toApiDetail(row: ApiRow): ApiDetail {
   return {
     id: row.id,
@@ -431,7 +459,7 @@ export class ApiService {
     status?: ApiStatus,
     syncStatus?: ApiSyncStatus,
     q?: string,
-  ): Promise<PaginatedResult<ApiDetail>> {
+  ): Promise<PaginatedResult<ApiListItem>> {
     const safePage = Math.max(1, page);
     const take = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
     const where: Prisma.ApiDefinitionWhereInput = { tenantId };
@@ -462,8 +490,9 @@ export class ApiService {
       prisma.apiDefinition.count({ where }),
     ]);
 
+    const pending = new Set((await pendingSpecCandidates(tenantId, rows.map((row) => row.id))).map((c) => c.apiDefId));
     return {
-      data: rows.map(toApiDetail),
+      data: rows.map((row) => ({ ...toApiDetail(row), specUpdateAvailable: pending.has(row.id) })),
       meta: {
         page: safePage,
         pageSize: take,

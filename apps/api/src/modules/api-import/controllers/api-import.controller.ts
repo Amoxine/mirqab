@@ -2,6 +2,8 @@ import { Body, Controller, HttpCode, HttpStatus, Post, Query, UnsupportedMediaTy
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiImportService, type ImportPreview, type ImportResult } from '../services/api-import.service';
 import { ImportQueryDto } from '../dto/import-query.dto';
+import { ImportUrlDto, ImportUrlPreviewDto } from '../dto/spec-source.dto';
+import { SpecSourceService, type SpecSourceView } from '../services/spec-source.service';
 import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
@@ -30,7 +32,10 @@ export function rawDocument(body: unknown): string {
 @UseGuards(TenantIsolationGuard, PermissionsGuard)
 @Controller('apis')
 export class ApiImportController {
-  constructor(private readonly importService: ApiImportService) {}
+  constructor(
+    private readonly importService: ApiImportService,
+    private readonly sources: SpecSourceService,
+  ) {}
 
   /**
    * Gated on `api:create`, not a new permission: importing a spec creates an `ApiDefinition`, so it
@@ -93,5 +98,45 @@ export class ApiImportController {
       success: true,
       data: await this.importService.preview(rawDocument(source), tenantId, query),
     };
+  }
+  /**
+   * OAS-08: the same preview, for a document fetched server-side through the guarded fetcher (JSON
+   * body, not the raw-document middleware). A fetch refusal is 422 `SPEC_FETCH_<CODE>`.
+   */
+  @Post('import/url/preview')
+  @Permissions('api:create')
+  @ApiOperation({ summary: 'Preview an OpenAPI import from a URL without creating anything' })
+  @ApiResponse({ status: 422, description: 'SPEC_FETCH_<CODE>, or the same document errors as the import preview' })
+  @HttpCode(HttpStatus.OK)
+  async previewUrl(
+    @Body() dto: ImportUrlPreviewDto,
+    @CurrentTenant() tenantId: string,
+  ): Promise<{ success: true; data: ImportPreview }> {
+    const { text } = await this.sources.fetchDocument(dto.url);
+    return { success: true, data: await this.importService.preview(text, tenantId, { slug: dto.slug, serverIndex: dto.serverIndex }) };
+  }
+
+  /**
+   * OAS-08: import from a URL. `watch: true` also creates the spec source, seeded with the fetch's
+   * ETag / Last-Modified. The body is a POST, so the audit row stores none of it (no URL).
+   */
+  @Post('import/url')
+  @Permissions('api:create')
+  @ApiOperation({ summary: 'Import an OpenAPI 3.x document from a URL, optionally watching it for changes' })
+  @ApiResponse({ status: 201, description: 'API created; `data.source` is the watched source when `watch: true`' })
+  @ApiResponse({ status: 422, description: 'SPEC_FETCH_<CODE>, or the same document errors as the import' })
+  @Audit('api:created', 'ApiDefinition')
+  @HttpCode(HttpStatus.CREATED)
+  async importUrl(
+    @Body() dto: ImportUrlDto,
+    @CurrentTenant() tenantId: string,
+  ): Promise<{ success: true; data: ImportResult & { source: SpecSourceView | null } }> {
+    if (dto.watch) await this.sources.assertCapacity(tenantId);
+    const fetched = await this.sources.fetchDocument(dto.url);
+    const result = await this.importService.import(fetched.text, tenantId, { slug: dto.slug, serverIndex: dto.serverIndex });
+    const source = dto.watch
+      ? await this.sources.createWatched(tenantId, result.api.id, dto.url, dto.intervalMinutes ?? 60, fetched)
+      : null;
+    return { success: true, data: { ...result, source } };
   }
 }

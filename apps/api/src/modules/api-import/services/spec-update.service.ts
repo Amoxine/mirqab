@@ -14,6 +14,11 @@ export interface SpecUpdateOptions {
   expectedVersion: number;
   /** Required to apply a document that drops governed endpoints. */
   acknowledgeRemoved: boolean;
+  /**
+   * OAS-08: runs INSIDE the apply transaction, after the new version and the config guard. Throwing
+   * rolls the new version back (a candidate that is no longer PENDING must not be applied).
+   */
+  onApplied?: (tx: Prisma.TransactionClient) => Promise<void>;
 }
 
 export interface SpecUpdateResult {
@@ -26,6 +31,8 @@ export interface SpecUpdateResult {
   findings: LintFinding[];
   diff: SpecDiff;
   governanceImpact: GovernanceImpact<EndpointGovernance>;
+  /** OAS-08: what the submitted document is, so a caller storing a candidate need not lint it twice. */
+  document: { contentHash: string; format: 'json' | 'yaml'; openapiVersion: string; endpointCount: number };
 }
 
 const EMPTY_DIFF: SpecDiff = { added: [], removed: [], changed: [] };
@@ -75,7 +82,13 @@ export class SpecUpdateService {
     }
 
     const governance = readGovernanceState(config(api.config)).endpoints;
-    const nothing = { findings: analysis.findings, diff: EMPTY_DIFF, governanceImpact: { removedGoverned: [], changedGoverned: [] } };
+    const document = {
+      contentHash: analysis.contentHash,
+      format: analysis.format,
+      openapiVersion: analysis.openapiVersion,
+      endpointCount: analysis.endpoints.length,
+    };
+    const nothing = { findings: analysis.findings, diff: EMPTY_DIFF, governanceImpact: { removedGoverned: [], changedGoverned: [] }, document };
 
     // Checked before the version: re-sending the bytes that are already stored (a retry after a lost
     // response) is answered `unchanged`, not 409, so the upload is idempotent.
@@ -89,7 +102,7 @@ export class SpecUpdateService {
     const before = Array.isArray(latest?.endpointIndex) ? (latest.endpointIndex as unknown as EndpointRow[]) : [];
     const diff = diffEndpoints(before, analysis.endpoints);
     const impact = governanceImpact(diff, governance);
-    const result = { findings: analysis.findings, diff, governanceImpact: impact };
+    const result = { findings: analysis.findings, diff, governanceImpact: impact, document };
 
     if (options.dryRun) {
       return { dryRun: true, applied: false, unchanged: false, versionNo: latestVersion, ...result };
@@ -150,6 +163,7 @@ export class SpecUpdateService {
             error: 'SPEC_GOVERNANCE_CHANGED',
           });
         }
+        await options.onApplied?.(tx);
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {

@@ -16,6 +16,9 @@ const IMPORT_ROUTES: Record<string, { permissions: string[]; audited: boolean }>
   import: { permissions: ['api:create'], audited: true },
   // The preview changes nothing, so it is not audited — but it needs the same permission as the real import.
   preview: { permissions: ['api:create'], audited: false },
+  // OAS-08: the same pair from a URL; the import creates an API (audited), the preview writes nothing.
+  importUrl: { permissions: ['api:create'], audited: true },
+  previewUrl: { permissions: ['api:create'], audited: false },
 };
 const SPEC_ROUTES: Record<string, { permissions: string[]; audited: boolean }> = {
   spec: { permissions: ['api:read'], audited: false },

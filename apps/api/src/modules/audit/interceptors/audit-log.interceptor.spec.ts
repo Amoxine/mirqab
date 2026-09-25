@@ -153,6 +153,84 @@ describe('AuditLogInterceptor', () => {
       expect(requestBody.preview.length).toBeLessThanOrEqual(16_384);
       expect(requestBody.preview).not.toContain('"k"');
     });
+
+    // OAS-08 C1: `redact()` matched key names only, so a spec URL's secret was stored in clear.
+    it('strips userinfo, query and fragment from any http(s) URL value in a PUT body', async () => {
+      const body = {
+        url: 'https://user:pw@specs.example.com:8443/v1/openapi.json?token=s3cr3t-tok&x=1#frag',
+        intervalMinutes: 60,
+        nested: [{ proxyUrl: 'http://backend.example.com/base?apiKey=nested-secret' }],
+        note: 'not a url ?token=kept-because-not-a-url',
+      };
+      await run(interceptor, contextFor('PUT', { id: 'api-1' }, '/api/apis/api-1', body), of({}));
+
+      const stored = JSON.stringify(recorded(record).details);
+      expect(stored).not.toContain('s3cr3t-tok');
+      expect(stored).not.toContain('nested-secret');
+      expect(stored).not.toContain('user:pw');
+      expect(stored).not.toContain('frag');
+      expect(recorded(record).details).toMatchObject({
+        requestBody: {
+          url: 'https://specs.example.com:8443/v1/openapi.json',
+          intervalMinutes: 60,
+          nested: [{ proxyUrl: 'http://backend.example.com/base' }],
+          note: 'not a url ?token=kept-because-not-a-url',
+        },
+      });
+    });
+
+    // Review H1: `new URL()` (and so the fetcher) accepts these spellings; a `^https?://` test did not.
+    const SPELLINGS: [string, string][] = [
+      ['leading space', ' https://h.example/x?token=S1'],
+      ['leading tab', '\thttps://h.example/x?token=S2'],
+      ['no slashes', 'https:h.example/x?token=S3'],
+      ['backslashes', 'https:\\\\h.example\\x?token=S4'],
+      ['upper-case scheme', 'HTTPS://h.example/x?token=S5'],
+      ['tab inside the scheme', 'ht\ttps://h.example/x?token=S6'],
+    ];
+
+    it.each(SPELLINGS)('redacts a URL spelt with a %s (not the spec-source route: path kept)', async (_label, url) => {
+      await run(interceptor, contextFor('PATCH', { id: 'api-1' }, '/api/apis/api-1', { proxyUrl: url }), of({}));
+
+      const stored = JSON.stringify(recorded(record).details);
+      expect(stored).not.toMatch(/token|S[1-6]/);
+      expect(recorded(record).details).toMatchObject({ requestBody: { proxyUrl: 'https://h.example/x' } });
+    });
+
+    it.each(SPELLINGS)('redacts a %s URL embedded in a longer string', async (_label, url) => {
+      await run(interceptor, contextFor('PATCH', { id: 'api-1' }, '/api/apis/api-1', { note: `see ${url} for details` }), of({}));
+
+      expect(JSON.stringify(recorded(record).details)).not.toMatch(/token|S[1-6]/);
+    });
+
+    it.each(SPELLINGS)('PUT spec-source stores only the origin of a %s URL (a path can carry the secret)', async (_label, url) => {
+      await run(interceptor, contextFor('PUT', { id: 'api-1' }, '/api/apis/api-1/spec-source', { url, intervalMinutes: 60 }), of({}));
+
+      expect(recorded(record).details).toMatchObject({ requestBody: { url: 'https://h.example/…', intervalMinutes: 60 } });
+    });
+
+    it('PUT spec-source: a secret in the PATH is not stored', async () => {
+      await run(interceptor, contextFor('PUT', { id: 'api-1' }, '/api/apis/api-1/spec-source', { url: 'https://h.example/t0ken-in-path/spec.json' }), of({}));
+
+      expect(JSON.stringify(recorded(record).details)).not.toContain('t0ken-in-path');
+    });
+
+    it.each(SPELLINGS)('never stores a %s URL from a 5xx error message', async (_label, url) => {
+      await run(interceptor, contextFor('PUT', { id: 'api-1' }, '/api/apis/api-1', {}), throwError(() => new BadGatewayException(`fetch of ${url} failed`)));
+
+      const stored = JSON.stringify(recorded(record).details);
+      expect(stored).not.toMatch(/token|S[1-6]|h\.example/);
+    });
+
+    it('never stores a URL from a 5xx error message', async () => {
+      const error = new BadGatewayException('fetch of https://specs.example.com/openapi.json?token=err-secret failed');
+      await run(interceptor, contextFor('PUT', { id: 'api-1' }, '/api/apis/api-1/spec-source', {}), throwError(() => error));
+
+      const stored = JSON.stringify(recorded(record).details);
+      expect(stored).not.toContain('err-secret');
+      expect(stored).not.toContain('specs.example.com');
+      expect(stored).toContain('[URL]');
+    });
   });
 });
 
