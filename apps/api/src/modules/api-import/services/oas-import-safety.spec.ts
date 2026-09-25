@@ -197,4 +197,38 @@ describe('OAS import safety (OAS-00)', () => {
       expect(result.api).toBeDefined();
     });
   });
+
+  describe('YAML tags the parser cannot turn into JSON', () => {
+    const head = "openapi: 3.0.3\ninfo: {title: t, version: '1'}\nservers: [{url: 'https://b.example.com'}]\npaths: {}\n";
+    const EXOTIC: [string, string][] = [
+      ['!!binary', 'x-blob: !!binary aGVsbG8=\n'],
+      ['!!timestamp', 'x-at: !!timestamp 2001-12-14t21:59:43.10-05:00\n'],
+      ['!!set', 'x-set: !!set {a, b}\n'],
+      ['!!omap', 'x-omap: !!omap [a: 1, b: 2]\n'],
+      ['an unknown local tag', 'x-foo: !foo bar\n'],
+      ['a merge key', 'x-base: &b {k: 1}\nx-derived:\n  <<: *b\n  j: 2\n'],
+    ];
+
+    it('answers a !!binary scalar with 422 OAS_IMPORT_UNPARSEABLE on the import, never a raw TypeError', async () => {
+      const error = await service.import(`${head}x-blob: !!binary aGVsbG8=\n`, TENANT).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      expect(bodyOf(error)).toMatchObject({ error: 'OAS_IMPORT_UNPARSEABLE', message: 'The document is not valid YAML or JSON' });
+      expect(JSON.stringify(bodyOf(error))).not.toMatch(/replace|TypeError|is not a function/);
+      expect(apis.create).not.toHaveBeenCalled();
+    });
+
+    it.each(EXOTIC)('%s: the lint either succeeds or fails with a clean 422, never anything else', async (_label, extra) => {
+      const outcome = await new SpectralLintService().lint(`${head}${extra}`).then(
+        () => 'linted',
+        (e: unknown) => (e instanceof UnprocessableEntityException ? `422 ${bodyOf(e).error}` : `THREW ${String(e)}`),
+      );
+
+      expect(['linted', '422 OAS_IMPORT_UNPARSEABLE']).toContain(outcome);
+    });
+
+    it('a normal document still lints', async () => {
+      await expect(new SpectralLintService().lint(head)).resolves.toMatchObject({ parsed: { openapi: '3.0.3' } });
+    });
+  });
 });

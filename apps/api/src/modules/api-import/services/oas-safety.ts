@@ -28,10 +28,27 @@ export const MAX_ALIAS_DOCUMENT_BYTES = 64 * 1024;
 const MAX_WALK_NODES = 2_000_000;
 
 /**
- * A YAML alias token, matched by POSITION so prose does not count: after `:`, `-`, `,`, `[` or `{`
- * (optionally spaced), or at the start of a line.
+ * An anchor or alias NAME: YAML allows any run of non-space characters except the flow indicators
+ * `,[]{}` — `é0`, `😈`, `a.b:c` are all valid. (The first version only matched `[A-Za-z0-9_-]`, so a
+ * 184-byte document with non-ASCII anchors expanded unchecked.)
  */
-const YAML_ALIAS = /(?:^|[:,[{-])[ \t]*\*[A-Za-z0-9_-]+/gm;
+const NAME = String.raw`[^\s,[\]{}]+`;
+
+/**
+ * An alias, matched by POSITION so prose does not count: at the start of a node, i.e. at the start of
+ * a line (a key, a block item, a continuation) or after `:`, `-`, `?`, `,`, `[` or `{` (optionally
+ * followed by spaces or tabs, the only YAML separators). An alias cannot carry a tag or an anchor, so
+ * no other character can precede one. `*bold*` inside a plain scalar is preceded by a space after a
+ * word, so it is not counted.
+ */
+const YAML_ALIAS = new RegExp(String.raw`(?:^|[:?,[{-])[ \t\uFEFF]*\*${NAME}`, 'gm');
+
+/**
+ * An anchor, matched PERMISSIVELY: any `&name` after a line start, whitespace or an indicator. That
+ * over-counts `&amp;` in prose, which is harmless — anchors only decide whether aliases can expand at
+ * all (without an anchor every alias is a parse error, never an expansion).
+ */
+const YAML_ANCHOR = new RegExp(String.raw`(?:^|[\s:?,[{-])&${NAME}`, 'gm');
 
 export interface YamlAliasHazard {
   aliases: number;
@@ -52,9 +69,13 @@ export function parsesAsJson(source: string): boolean {
   }
 }
 
-/** Null when the document is safe to hand to the YAML parser. */
+/**
+ * Null when the document is safe to hand to the YAML parser. Budgets unchanged: at most
+ * {@link MAX_YAML_ALIASES} aliases, and none at all past {@link MAX_ALIAS_DOCUMENT_BYTES}.
+ */
 export function yamlAliasHazard(source: string): YamlAliasHazard | null {
-  if (!source.includes('*') || parsesAsJson(source)) return null;
+  if (!source.includes('*') || !source.includes('&') || parsesAsJson(source)) return null;
+  if (source.search(YAML_ANCHOR) === -1) return null;
 
   let aliases = 0;
   let firstIndex = -1;

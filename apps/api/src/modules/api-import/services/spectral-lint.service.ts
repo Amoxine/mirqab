@@ -66,12 +66,28 @@ export class SpectralLintService {
       });
     }
 
-    const document = new Document(source, Parsers.Yaml);
+    // The YAML parser throws raw errors on some valid tags (`!!binary` → "data.replace is not a
+    // function"), both while constructing and on the first `.data` read. Any of them is the caller's
+    // document being unusable: a 422 that never echoes the parser's text, not a 500.
+    const parse = (): { document: Document<unknown, Parsers.YamlParserResult<unknown>>; data: unknown } => {
+      const parsed = new Document(source, Parsers.Yaml);
+      return { document: parsed, data: parsed.data };
+    };
+    let document: ReturnType<typeof parse>['document'];
+    let data: unknown;
+    try {
+      ({ document, data } = parse());
+    } catch {
+      throw new UnprocessableEntityException({
+        message: 'The document is not valid YAML or JSON',
+        error: 'OAS_IMPORT_UNPARSEABLE',
+      });
+    }
 
     // Before the linter: Spectral's default resolver would FOLLOW an http(s) or file `$ref`, so the
     // uploaded document could make this process fetch a URL or read a file. A document with any
     // external reference is rejected here and `Spectral.run` is never called on it.
-    const external = findExternalRefs(document.data);
+    const external = findExternalRefs(data);
     if (external.length > 0) {
       const findings: LintFinding[] = external.map(({ path, ref }) => ({
         code: 'og-no-external-ref',
@@ -80,7 +96,7 @@ export class SpectralLintService {
         path: [...path, '$ref'].join('.'),
         line: (document.getRangeForJsonPath([...path, '$ref'], true)?.start.line ?? 0) + 1,
       }));
-      return { findings, hasErrors: true, parsed: document.data };
+      return { findings, hasErrors: true, parsed: data };
     }
 
     const results = await this.spectral.run(document);
@@ -96,7 +112,7 @@ export class SpectralLintService {
     return {
       findings,
       hasErrors: findings.some((finding) => finding.severity === 'error'),
-      parsed: document.data,
+      parsed: data,
     };
   }
 }
