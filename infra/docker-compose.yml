@@ -668,6 +668,10 @@ services:
       # Upstream hosts an API may never proxy to, on top of the built-in denylist (loopback,
       # link-local / metadata, the service names above). Comma separated.
       PROXY_DENY_HOSTS: ""
+      # OAS-08: private hosts/CIDRs the API may fetch OpenAPI documents from (comma separated,
+      # host[:port] or CIDR[:port]). Empty = public hosts only. Installation-wide: every tenant can reach
+      # every listed host. See docs/OAS-SPEC-FETCH.md.
+      SPEC_FETCH_ALLOWED_HOSTS: ${SPEC_FETCH_ALLOWED_HOSTS:-}
       # Pump liveness probe for GET /api/analytics/health (unset = reported as not running)
       PUMP_HEALTH_URL: http://tyk-pump:8083/health
       # WP20 — tracing is OFF unless this is set (apps/api/src/tracing.ts), so tests and a bare

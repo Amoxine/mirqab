@@ -132,6 +132,7 @@ services:
       TYK_GATEWAY_URL: ${TYK_GATEWAY_URL}       # /hello lives on the control port too
       TYK_ORG_ID: ${TYK_ORG_ID}
       PROXY_DENY_HOSTS: ${PROXY_DENY_HOSTS:-}   # extra hosts an API may never proxy to
+      SPEC_FETCH_ALLOWED_HOSTS: ${SPEC_FETCH_ALLOWED_HOSTS:-}   # private hosts OpenAPI documents may be fetched from
     depends_on:
       postgres:
         condition: service_healthy
@@ -340,6 +341,7 @@ services:
 | `TYK_ADMIN_URL` | **Yes** | Tyk Gateway REST API URL (`<gateway>/tyk`) on the control port, e.g. `http://tyk-gateway:8081/tyk` | No |
 | `TYK_GATEWAY_URL` | No | Base URL for the `/hello` probe — the control port, since `/hello` is served there | No |
 | `PROXY_DENY_HOSTS` | No | Extra upstream hosts an API may never proxy to (comma separated). Loopback, link-local / cloud metadata and the platform's own service names are always refused | No |
+| `SPEC_FETCH_ALLOWED_HOSTS` | No | Private hosts/CIDRs the API may fetch OpenAPI documents from (`host[:port]` or `CIDR[:port]`, comma separated). Empty = public hosts only. Installation-wide (every tenant). Loopback, link-local / metadata and the platform's own networks and service names stay refused. See `docs/OAS-SPEC-FETCH.md` | No |
 | `TYK_ADMIN_SECRET` | **Yes** | Tyk gateway secret (`TYK_GW_SECRET`) | **Yes** |
 | `TYK_ORG_ID` | No | Tyk Organization ID (set on API definitions and on keys) | No |
 | `PUMP_HEALTH_URL` | No | Tyk Pump liveness probe, e.g. `http://tyk-pump:8083/health`. Unset = analytics report "pump not running" | No |
