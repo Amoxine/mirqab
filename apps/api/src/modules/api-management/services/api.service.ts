@@ -838,8 +838,8 @@ export class ApiService {
   private syncToTykWithNodes(apiDef: ApiDefinition): Promise<{ row: ApiRow; nodes: NodeOutcome[] }> {
     const previous = this.syncChains.get(apiDef.id) ?? Promise.resolve();
     const run = previous.then(async () => {
-      // The caller's row may be a snapshot from before a later write: push what is stored NOW.
-      const fresh = await prisma.apiDefinition.findUnique({ where: { id: apiDef.id } });
+      // The caller's row may be a snapshot from before a later write: push what is stored NOW (tenant-scoped).
+      const fresh = await prisma.apiDefinition.findFirst({ where: { id: apiDef.id, tenantId: apiDef.tenantId } });
       return this.syncToTykWithNodesNow(fresh?.id === apiDef.id ? fresh : apiDef);
     });
     const tail = run.catch(() => undefined);

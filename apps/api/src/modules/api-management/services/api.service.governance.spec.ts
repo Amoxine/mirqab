@@ -187,7 +187,6 @@ describe('ApiService background syncs are serialised per API (M3)', () => {
     const { tyk, service } = setup();
     let current = row({ timeoutSeconds: 1 });
     db.findFirst.mockImplementation(() => Promise.resolve(current));
-    db.findUnique.mockImplementation(() => Promise.resolve(current));
     const landed: unknown[] = [];
     let first = true;
     tyk.upsertOasApi.mockImplementation(async (def: Record<string, unknown>) => {
@@ -207,11 +206,12 @@ describe('ApiService background syncs are serialised per API (M3)', () => {
     expect(landed).toHaveLength(2);
   });
 
-  it('a sync handed a stale snapshot pushes the config stored now', async () => {
+  it('a sync handed a stale snapshot pushes the config stored now, re-read with the tenant in the query', async () => {
     const { tyk, service } = setup();
-    db.findFirst.mockResolvedValue(row({ timeoutSeconds: 1 }));
-    db.findUnique.mockResolvedValue(row({ timeoutSeconds: 7 }));
+    // syncNow's own read returns the snapshot; the re-read inside the chain returns what is stored now.
+    db.findFirst.mockResolvedValueOnce(row({ timeoutSeconds: 1 })).mockResolvedValue(row({ timeoutSeconds: 7 }));
     await service.syncNow(ID, TENANT);
+    expect(db.findFirst).toHaveBeenLastCalledWith({ where: { id: ID, tenantId: TENANT } });
     expect((pushed(tyk)['x-tyk-api-gateway'] as { upstream: unknown }).upstream).toMatchObject({ enforceTimeout: { duration: '7s' } });
   });
 

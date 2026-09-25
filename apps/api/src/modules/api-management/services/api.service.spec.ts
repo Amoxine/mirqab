@@ -729,7 +729,9 @@ describe('ApiService', () => {
       await service.update(ID, plainToInstance(UpdateApiDto, { listenPath: '/orders/', name: 'Orders 2' }), TENANT);
       await flush();
 
-      expect(db.findFirst).toHaveBeenCalledTimes(1);
+      // No listen-path lookup (the background sync's own tenant-scoped re-read is not one).
+      const lookups = (db.findFirst.mock.calls as [{ where: Record<string, unknown> }][]).filter(([arg]) => 'listenPath' in arg.where);
+      expect(lookups).toHaveLength(0);
       expect(db.update).toHaveBeenCalled();
     });
   });

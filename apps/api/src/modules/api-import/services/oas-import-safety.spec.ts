@@ -200,13 +200,14 @@ describe('OAS import safety (OAS-00)', () => {
 
   describe('YAML tags the parser cannot turn into JSON', () => {
     const head = "openapi: 3.0.3\ninfo: {title: t, version: '1'}\nservers: [{url: 'https://b.example.com'}]\npaths: {}\n";
-    const EXOTIC: [string, string][] = [
-      ['!!binary', 'x-blob: !!binary aGVsbG8=\n'],
-      ['!!timestamp', 'x-at: !!timestamp 2001-12-14t21:59:43.10-05:00\n'],
-      ['!!set', 'x-set: !!set {a, b}\n'],
-      ['!!omap', 'x-omap: !!omap [a: 1, b: 2]\n'],
-      ['an unknown local tag', 'x-foo: !foo bar\n'],
-      ['a merge key', 'x-base: &b {k: 1}\nx-derived:\n  <<: *b\n  j: 2\n'],
+    /** Measured on the pinned parser: only `!!binary` breaks it; every other tag parses and lints. */
+    const EXOTIC: [string, string, 'linted' | '422 OAS_IMPORT_UNPARSEABLE'][] = [
+      ['!!binary', 'x-blob: !!binary aGVsbG8=\n', '422 OAS_IMPORT_UNPARSEABLE'],
+      ['!!timestamp', 'x-at: !!timestamp 2001-12-14t21:59:43.10-05:00\n', 'linted'],
+      ['!!set', 'x-set: !!set {a, b}\n', 'linted'],
+      ['!!omap', 'x-omap: !!omap [a: 1, b: 2]\n', 'linted'],
+      ['an unknown local tag', 'x-foo: !foo bar\n', 'linted'],
+      ['a merge key', 'x-base: &b {k: 1}\nx-derived:\n  <<: *b\n  j: 2\n', 'linted'],
     ];
 
     it('answers a !!binary scalar with 422 OAS_IMPORT_UNPARSEABLE on the import, never a raw TypeError', async () => {
@@ -218,13 +219,13 @@ describe('OAS import safety (OAS-00)', () => {
       expect(apis.create).not.toHaveBeenCalled();
     });
 
-    it.each(EXOTIC)('%s: the lint either succeeds or fails with a clean 422, never anything else', async (_label, extra) => {
+    it.each(EXOTIC)('%s: exactly the measured outcome, never a raw exception', async (_label, extra, expected) => {
       const outcome = await new SpectralLintService().lint(`${head}${extra}`).then(
         () => 'linted',
         (e: unknown) => (e instanceof UnprocessableEntityException ? `422 ${bodyOf(e).error}` : `THREW ${String(e)}`),
       );
 
-      expect(['linted', '422 OAS_IMPORT_UNPARSEABLE']).toContain(outcome);
+      expect(outcome).toBe(expected);
     });
 
     it('a normal document still lints', async () => {

@@ -154,7 +154,7 @@ flags is refused rather than parsed.
 | Service: stored JSON and YAML, fallback rules, publication rule, coalescing, cache weight and key, tenant scope in every query | unit, mocked Prisma (`portal-api-doc.service.spec.ts`); mutations (generated fallback, no cache hit, no tenant filter; no status check, no product check, no 410 mapping, no coalescing, source-length weight, joined-string key) each failed tests |
 | Controller: 404 across tenants, developer's own tenant id used | unit, mocked persistence |
 | Web: plain text, base URL, path-item rows | vitest + jsdom; two mutations (`dangerouslySetInnerHTML`, trusting `servers[0].url`) failed five tests |
-| Live: publication (DRAFT / DISABLED / in no product -> 404), HTTP through the guards, real Postgres, the advertised URL reaches the upstream, a `$ref` to a loopback listener makes zero connections | `apps/api/test/e2e/oas-portal.e2e.mjs` — **written, not run** until a build containing this change is deployed |
+| Live: publication (DRAFT / DISABLED / in no product -> 404), HTTP through the guards, real Postgres, the advertised URL reaches the upstream, a `$ref` to a loopback listener makes zero connections | `apps/api/test/e2e/oas-portal.e2e.mjs` — **ran live 2026-09-25 on the rebuilt api: 32/32** (local runtime; the gateway call goes to the data plane, not through the TLS edge) |
 
 Not proven: browser rendering of a real specification, the TLS edge path (the e2e calls the gateway data
 plane directly), cache behaviour with more than one API replica, and anything about a specification

@@ -2,7 +2,7 @@
 
 Measured 2026-09-25 (OAS-02) on `tykio/tyk-gateway:v5.15.0`
 (`sha256:0c8fcb5784b5d4960ee2609be655d22fd3cd1aaaba569cd2211901c85b8443d3`), the image this stack runs.
-The evidence is executable: `pnpm --filter @open-gateway/api test:e2e:oas-capabilities` (32 checks) and
+The evidence is executable: `pnpm --filter @open-gateway/api test:e2e:oas-capabilities` (40 checks) and
 the table in `apps/api/src/modules/api-management/services/endpoint-capabilities.ts`. **Re-run the e2e
 after every gateway upgrade**; a changed behaviour fails it.
 
@@ -82,7 +82,7 @@ its trailing-slash and case variants; `;param` variants still pass. **Allow-list
 Read-back fidelity of `middleware.operations` was measured for `block` only (identical); the other controls
 are measured in the OAS-03 governance e2e. Only the OAS definition format (this product's default) was probed, not classic; a single gateway node, not
 three; a keyless API for every control except `ignoreAuthentication` and the rate-limit scope test;
-behaviour under load; `rateLimit` windows other than `60s`; and the 14 unverified controls.
+behaviour under load; `rateLimit` windows outside 10 s to 3600 s (per 10, 30, 60 and 3600 s are exercised in the governance e2e); and the 14 unverified controls.
 
 ## Where these controls are offered
 
