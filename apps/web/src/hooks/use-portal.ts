@@ -46,7 +46,8 @@ export interface PortalPlan {
   updatedAt: string;
 }
 
-/** `GET /portal/catalog/apis/:id` — the generated OAS document plus the try-it console's target. */
+/** `GET /portal/catalog/apis/:id` — the API's sanitized OpenAPI document (its stored spec, else the
+ * generated one; `servers` is one path relative to the gateway origin) plus the try-it console's target. */
 export interface PortalApiDoc {
   id: string;
   name: string;

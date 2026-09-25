@@ -26,6 +26,21 @@ function makeSchema(t: (key: string) => string) {
 }
 type Values = z.infer<ReturnType<typeof makeSchema>>;
 
+/**
+ * The path clients call this API under: the sanitized document's own `servers[0].url`, which the
+ * API sets to `/{tenantSlug}{listenPath}`. The developer's key goes to whatever this returns, so only
+ * a plain path (relative to the gateway origin) is accepted from the document; anything else —
+ * an absolute URL, a scheme-relative one, a non-string — falls back to the listen path the API
+ * reported separately.
+ */
+function gatewayBasePath(api: PortalApiDoc): string {
+  const servers = api.oasDocument?.servers;
+  const first: unknown = Array.isArray(servers) ? servers[0] : undefined;
+  const url = typeof first === 'object' && first !== null ? (first as { url?: unknown }).url : undefined;
+  const base = typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') ? url : api.gatewayListenPath;
+  return base.replace(/\/+$/, '');
+}
+
 interface TryResult {
   status: number;
   body: string;
@@ -53,7 +68,7 @@ export function TryItConsole({ api }: { api: PortalApiDoc }) {
   const onSubmit = async (values: Values) => {
     setRequestError(null);
     setResult(null);
-    const url = `${GATEWAY_URL}${api.gatewayListenPath}${values.path.replace(/^\//, '')}`;
+    const url = `${GATEWAY_URL}${gatewayBasePath(api)}/${values.path.replace(/^\//, '')}`;
     try {
       const res = await fetch(url, {
         method: values.method,

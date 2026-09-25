@@ -13,14 +13,26 @@ interface EndpointRow {
   method: string;
 }
 
-/** Flattens `oasDocument.paths` (path -> method -> operation) into one row per path+method — same
- * resolution as WP17's dashboard endpoint list (the generated doc, not an imported spec's shape),
- * reimplemented locally rather than importing that dashboard component: different props, different
- * i18n namespace, and a ~10-line function is not worth a cross-domain import for. */
+/** The keys of an OpenAPI path item that are operations; the rest (`parameters`, `summary`, `servers`, `$ref`, `x-…`) are not. */
+const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Flattens `oasDocument.paths` (path -> method -> operation) into one row per path+method. The
+ * document is the sanitized copy of the API's stored specification (OAS-06), so a path item holds
+ * more than operations, and the shape is never assumed: anything that is not an object is skipped.
+ * Reimplemented locally rather than importing the dashboard's endpoint list: different props,
+ * different i18n namespace, and a few lines are not worth a cross-domain import. */
 function toRows(oasDocument: Record<string, unknown> | null): EndpointRow[] {
-  const paths = (oasDocument?.paths as Record<string, Record<string, unknown>> | undefined) ?? {};
-  return Object.entries(paths).flatMap(([path, methods]) =>
-    Object.keys(methods).map((method) => ({ path, method: method.toUpperCase() })),
+  const paths = oasDocument?.paths;
+  if (!isRecord(paths)) return [];
+  return Object.entries(paths).flatMap(([path, item]) =>
+    isRecord(item)
+      ? Object.keys(item)
+          .filter((method) => HTTP_METHODS.has(method))
+          .map((method) => ({ path, method: method.toUpperCase() }))
+      : [],
   );
 }
 

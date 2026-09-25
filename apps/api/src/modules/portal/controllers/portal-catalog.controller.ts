@@ -6,9 +6,7 @@ import { CurrentDeveloper } from '../decorators/current-developer.decorator';
 import type { DeveloperPayload } from '../../../common/types';
 import { ProductService, type ProductDetail } from '../../products/services/product.service';
 import { PlanService, type PlanDetail } from '../../plans/services/plan.service';
-import { ApiService } from '../../api-management/services/api.service';
-import { gatewayListenPath } from '../../api-management/services/tyk-mappers';
-import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
+import { PortalApiDocService, type PortalApiDoc } from '../services/portal-api-doc.service';
 
 /**
  * What a developer may subscribe to — every read scoped to THIS developer's own `tenantId`, read
@@ -17,20 +15,6 @@ import { loadTenantScope } from '../../tyk-integration/services/tenant-scope';
  * already 404s a cross-tenant id, which is exactly the cross-tenant-catalog acceptance this
  * controller has to hold.
  */
-/** `GET /portal/catalog/apis/:id` (WP23) — just enough of `ApiDetail` for the docs page: the
- * generated OAS document (WP17's endpoint list reads the same field, same resolution — the
- * generated doc, not an imported spec's original shape) and the try-it console's request target. */
-export interface PortalApiDoc {
-  id: string;
-  name: string;
-  authType: string;
-  authHeaderName?: string;
-  /** `/{tenantSlug}{listenPath}` — what the gateway actually routes on (O10), pre-computed here so
-   * the frontend never re-derives the tenant-prefix formula. */
-  gatewayListenPath: string;
-  oasDocument: unknown;
-}
-
 @ApiTags('Portal')
 @ApiBearerAuth()
 @Public()
@@ -40,7 +24,7 @@ export class PortalCatalogController {
   constructor(
     private readonly products: ProductService,
     private readonly plans: PlanService,
-    private readonly apis: ApiService,
+    private readonly apiDocs: PortalApiDocService,
   ) {}
 
   @Get('products')
@@ -88,22 +72,16 @@ export class PortalCatalogController {
 
   @Get('apis/:id')
   @ApiOperation({
-    summary: 'One API\'s generated OAS document and gateway request target, for the docs page',
-    description: 'Tenant-scoped the same way as products/plans above — 404 for another tenant\'s id.',
+    summary: 'One API\'s sanitized OpenAPI document and gateway request target, for the docs page',
+    description:
+      'The stored specification when the API has one, else the generated document — either way with ' +
+      'servers replaced by the gateway URL and every x-tyk-* key, external $ref and blocked operation ' +
+      'removed. Tenant-scoped the same way as products/plans above — 404 for another tenant\'s id.',
   })
   async findApi(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentDeveloper() developer: DeveloperPayload,
   ): Promise<PortalApiDoc> {
-    const api = await this.apis.findOne(id, developer.tenantId);
-    const tenant = await loadTenantScope(developer.tenantId);
-    return {
-      id: api.id,
-      name: api.name,
-      authType: api.authType,
-      authHeaderName: api.config.authHeaderName,
-      gatewayListenPath: gatewayListenPath(tenant.slug, api.listenPath),
-      oasDocument: api.oasDocument,
-    };
+    return this.apiDocs.forTenant(id, developer.tenantId);
   }
 }
