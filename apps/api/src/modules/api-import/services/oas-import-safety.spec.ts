@@ -5,6 +5,7 @@ import { Spectral } from '@stoplight/spectral-core';
 import { ApiImportService } from './api-import.service';
 import { SpectralLintService } from './spectral-lint.service';
 import type { ApiService } from '../../api-management/services/api.service';
+import type { ApiSpecService } from './api-spec.service';
 
 /**
  * OAS-00 — the import path must treat the uploaded document as DATA.
@@ -88,6 +89,7 @@ const bodyOf = (error: unknown): { error: string; details: Record<string, string
 
 describe('OAS import safety (OAS-00)', () => {
   let apis: { create: jest.Mock };
+  let specs: { conflicts: jest.Mock };
   let service: ApiImportService;
   let server: Server;
   let hits: string[];
@@ -114,8 +116,9 @@ describe('OAS import safety (OAS-00)', () => {
 
   beforeEach(() => {
     hits.length = 0;
+    specs = { conflicts: jest.fn().mockResolvedValue({ slug: false, listenPath: false }) };
     apis = { create: jest.fn().mockImplementation((dto: unknown) => Promise.resolve({ id: 'api-1', ...(dto as object) })) };
-    service = new ApiImportService(new SpectralLintService(), apis as unknown as ApiService);
+    service = new ApiImportService(new SpectralLintService(), apis as unknown as ApiService, specs as unknown as ApiSpecService);
   });
 
   afterEach(() => {

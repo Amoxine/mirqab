@@ -2,6 +2,7 @@ import { PayloadTooLargeException, UnprocessableEntityException } from '@nestjs/
 import { ApiImportService, MAX_SPEC_BYTES, slugifyTitle } from './api-import.service';
 import { SpectralLintService } from './spectral-lint.service';
 import type { ApiService } from '../../api-management/services/api.service';
+import type { ApiSpecService } from './api-spec.service';
 
 /**
  * WP24's two acceptance assertions, plus the size gate.
@@ -59,10 +60,12 @@ const TENANT = 'tenant-1';
 describe('ApiImportService', () => {
   let service: ApiImportService;
   let apis: { create: jest.Mock };
+  let specs: { conflicts: jest.Mock };
 
   beforeEach(() => {
+    specs = { conflicts: jest.fn().mockResolvedValue({ slug: false, listenPath: false }) };
     apis = { create: jest.fn().mockImplementation((dto: unknown) => Promise.resolve({ id: 'api-1', ...(dto as object) })) };
-    service = new ApiImportService(new SpectralLintService(), apis as unknown as ApiService);
+    service = new ApiImportService(new SpectralLintService(), apis as unknown as ApiService, specs as unknown as ApiSpecService);
   });
 
   describe('assertion 1 — a warning-only spec creates the API and returns the findings', () => {
@@ -89,6 +92,7 @@ describe('ApiImportService', () => {
           proxyUrl: 'https://backend.example.com/api',
         }),
         TENANT,
+        expect.objectContaining({ format: 'yaml', openapiVersion: '3.0.3', endpointCount: 1 }),
       );
     });
 
@@ -98,6 +102,7 @@ describe('ApiImportService', () => {
       expect(apis.create).toHaveBeenCalledWith(
         expect.objectContaining({ slug: 'orders-api', proxyUrl: 'https://backend.example.com/api' }),
         TENANT,
+        expect.objectContaining({ format: 'json', endpointCount: 1 }),
       );
       expect(fromJson.findings.some((f) => f.severity === 'error')).toBe(false);
     });

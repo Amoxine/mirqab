@@ -238,6 +238,16 @@ function toApiDetail(row: ApiRow): ApiDetail {
   };
 }
 
+/** The first stored version of the OpenAPI document an API was imported from (OAS-01). */
+export interface NewApiSpec {
+  contentHash: string;
+  format: string;
+  openapiVersion: string;
+  sourceText: string;
+  endpointIndex: Prisma.InputJsonValue;
+  endpointCount: number;
+}
+
 @Injectable()
 export class ApiService {
   private readonly logger = new Logger(ApiService.name);
@@ -248,7 +258,12 @@ export class ApiService {
     private readonly reconcile: ReconcileService,
   ) {}
 
-  async create(dto: CreateApiDto, tenantId: string): Promise<ApiDetail> {
+  /**
+   * `spec` (OAS-01) is the OpenAPI document an import came from. When present, the API row and its
+   * first `api_specs` row are written in ONE short DB transaction — never a state where the API
+   * exists but its spec was lost. No gateway call happens inside it (that stays in the background sync).
+   */
+  async create(dto: CreateApiDto, tenantId: string, spec?: NewApiSpec): Promise<ApiDetail> {
     // Check slug uniqueness within tenant
     const existing = await prisma.apiDefinition.findUnique({
       where: { tenantId_slug: { tenantId, slug: dto.slug } },
@@ -280,26 +295,31 @@ export class ApiService {
 
     // Create in our database
     let apiDef: ApiRow;
+    const data = {
+      tenantId,
+      name: dto.name,
+      slug: dto.slug,
+      proxyUrl: dto.proxyUrl,
+      listenPath: dto.listenPath,
+      authType: dto.authType,
+      config: dto.config ? toJsonObject(dto.config) : {},
+      status: ApiStatus.DRAFT,
+      syncStatus: ApiSyncStatus.PENDING,
+      protocol: dto.protocol ?? ApiProtocol.HTTP,
+      listenPort: dto.protocol === ApiProtocol.TCP ? dto.listenPort : null,
+      // WP27: OAS has no TCP fields at all, so a TCP api is forced CLASSIC here rather than left
+      // to default OAS and fail confusingly on its first sync.
+      ...(dto.protocol === ApiProtocol.TCP ? { defFormat: ApiDefFormat.CLASSIC } : {}),
+    } satisfies Prisma.ApiDefinitionUncheckedCreateInput;
     try {
-      apiDef = await prisma.apiDefinition.create({
-        data: {
-          tenantId,
-          name: dto.name,
-          slug: dto.slug,
-          proxyUrl: dto.proxyUrl,
-          listenPath: dto.listenPath,
-          authType: dto.authType,
-          config: dto.config ? toJsonObject(dto.config) : {},
-          status: ApiStatus.DRAFT,
-          syncStatus: ApiSyncStatus.PENDING,
-          protocol: dto.protocol ?? ApiProtocol.HTTP,
-          listenPort: dto.protocol === ApiProtocol.TCP ? dto.listenPort : null,
-          // WP27: OAS has no TCP fields at all, so a TCP api is forced CLASSIC here rather than left
-          // to default OAS and fail confusingly on its first sync.
-          ...(dto.protocol === ApiProtocol.TCP ? { defFormat: ApiDefFormat.CLASSIC } : {}),
-        },
-        include: withActiveKeyCount,
-      });
+      apiDef =
+        spec === undefined
+          ? await prisma.apiDefinition.create({ data, include: withActiveKeyCount })
+          : await prisma.$transaction(async (tx) => {
+              const created = await tx.apiDefinition.create({ data, include: withActiveKeyCount });
+              await tx.apiSpec.create({ data: { tenantId, apiDefId: created.id, versionNo: 1, ...spec } });
+              return created;
+            });
     } catch (err) {
       throw asConflict(err, dto.slug, dto.listenPath);
     }

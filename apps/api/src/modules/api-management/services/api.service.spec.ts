@@ -30,6 +30,8 @@ jest.mock('@open-gateway/database', () => ({
       update: jest.fn(),
       delete: jest.fn(),
     },
+    // OAS-01: create() with a spec writes the API and its first spec row in one transaction.
+    $transaction: jest.fn(),
   },
 }));
 
@@ -546,6 +548,86 @@ describe('ApiService', () => {
         service.update(ID, plainToInstance(UpdateApiDto, { name: 'Renamed' }), TENANT),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(db.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('create with a stored OpenAPI spec (OAS-01)', () => {
+    const dto = { name: 'Orders', slug: 'orders', proxyUrl: 'http://orders:4000', listenPath: '/orders/' };
+    const spec = {
+      contentHash: 'a'.repeat(64),
+      format: 'yaml',
+      openapiVersion: '3.0.3',
+      sourceText: 'openapi: 3.0.3\n',
+      endpointIndex: [{ key: 'listOrders' }],
+      endpointCount: 1,
+    };
+    const $transaction = (prisma as unknown as { $transaction: Fn }).$transaction;
+    const armTransaction = () => {
+      const tx = {
+        apiDefinition: { create: jest.fn().mockResolvedValue(row()) },
+        apiSpec: { create: jest.fn().mockResolvedValue({}) },
+      };
+      $transaction.mockImplementation((work: (client: typeof tx) => Promise<unknown>) => work(tx));
+      return tx;
+    };
+
+    it('writes the API row and the first spec row in ONE transaction, spec version 1, tenant-scoped', async () => {
+      const { service } = setup();
+      db.findUnique.mockResolvedValue(null);
+      db.findFirst.mockResolvedValue(null);
+      const tx = armTransaction();
+
+      await service.create(dto, TENANT, spec);
+      await flush();
+
+      expect($transaction).toHaveBeenCalledTimes(1);
+      expect(db.create).not.toHaveBeenCalled(); // not the non-transactional path
+      expect(firstArg(tx.apiDefinition.create).data).toMatchObject({ tenantId: TENANT, slug: 'orders' });
+      expect(firstArg(tx.apiSpec.create).data).toEqual({ tenantId: TENANT, apiDefId: ID, versionNo: 1, ...spec });
+    });
+
+    it('does not open a transaction when there is no spec (the hand-written create path is unchanged)', async () => {
+      const { service } = setup();
+      db.findUnique.mockResolvedValue(null);
+      db.findFirst.mockResolvedValue(null);
+      db.create.mockResolvedValue(row());
+      db.update.mockResolvedValue(row());
+
+      await service.create(dto, TENANT);
+      await flush();
+
+      expect($transaction).not.toHaveBeenCalled();
+      expect(db.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves NO API and starts NO gateway sync when the spec row cannot be written', async () => {
+      const { service, tyk } = setup();
+      db.findUnique.mockResolvedValue(null);
+      db.findFirst.mockResolvedValue(null);
+      const tx = armTransaction();
+      tx.apiSpec.create.mockRejectedValue(new Error('disk full'));
+
+      await expect(service.create(dto, TENANT, spec)).rejects.toThrow('disk full');
+      await flush();
+
+      expect(tyk.createApi).not.toHaveBeenCalled();
+      expect(tyk.upsertOasApi).not.toHaveBeenCalled();
+    });
+
+    it('still maps a losing slug/listen-path race inside the transaction to 409', async () => {
+      const { service } = setup();
+      db.findUnique.mockResolvedValue(null);
+      db.findFirst.mockResolvedValue(null);
+      const tx = armTransaction();
+      tx.apiDefinition.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: '6.5.0',
+          meta: { target: ['tenant_id', 'slug'] },
+        }),
+      );
+
+      await expect(service.create(dto, TENANT, spec)).rejects.toBeInstanceOf(ConflictException);
     });
   });
 

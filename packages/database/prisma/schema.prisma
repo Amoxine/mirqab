@@ -201,6 +201,7 @@ model Tenant {
   webhookSubscriptions WebhookSubscription[]
   /// WP28.
   mcpServers     McpServer[]
+  apiSpecs       ApiSpec[]
 
   @@map("tenants")
 }
@@ -351,6 +352,7 @@ model ApiDefinition {
   webhookSubscriptions WebhookSubscription[]
   /// WP28: the MCP proxies paired to this API. `Restrict` on the far side — see McpServer.
   mcpServers           McpServer[]
+  specs                ApiSpec[]
 
   @@unique([tenantId, slug])
   // Per tenant, not global (O10). `listenPath` is what the *user* types; what reaches the gateway is
@@ -469,6 +471,36 @@ model McpServer {
   @@index([tenantId])
   @@index([sourceApiId])
   @@map("mcp_servers")
+}
+
+/// OAS-01: the OpenAPI document an API was imported from, one row per submitted version. The source
+/// text is kept VERBATIM (its SHA-256 is `contentHash`, so a re-upload of the same bytes is
+/// recognisable) and `endpointIndex` is computed once at import, so listing endpoints never
+/// re-parses a document of up to 5 MB. This is NOT `ApiDefinition.oasDocument`, which is the
+/// Tyk-OAS document the sync path GENERATES and overwrites on every sync.
+model ApiSpec {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  apiDefId       String   @map("api_def_id")
+  /// 1, 2, 3 … per API. Immutable rows: a new upload is a new row, never an update.
+  versionNo      Int      @map("version_no")
+  contentHash    String   @map("content_hash")
+  /// 'json' or 'yaml' — how the source text was written, for download and for display.
+  format         String
+  openapiVersion String   @map("openapi_version")
+  sourceText     String   @map("source_text")
+  /// [{ key, method, path, operationId, summary, tags, deprecated, securitySchemes }] — see
+  /// `oas-endpoints.ts`. Bounded by MAX_ENDPOINTS at import.
+  endpointIndex  Json     @map("endpoint_index")
+  endpointCount  Int      @map("endpoint_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiDef ApiDefinition @relation(fields: [apiDefId], references: [id], onDelete: Cascade)
+
+  @@unique([apiDefId, versionNo])
+  @@index([tenantId, apiDefId])
+  @@map("api_specs")
 }
 
 /// A commercial plan (WP18): one Tyk policy, shared by every key assigned to it.

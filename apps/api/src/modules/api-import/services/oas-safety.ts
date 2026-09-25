@@ -40,7 +40,8 @@ export interface YamlAliasHazard {
   reason: 'too-many-aliases' | 'document-too-large-for-aliases';
 }
 
-function parsesAsJson(source: string): boolean {
+/** True when the whole text is a JSON document (which cannot contain YAML aliases). */
+export function parsesAsJson(source: string): boolean {
   const first = source.trimStart()[0];
   if (first !== '{' && first !== '[') return false;
   try {

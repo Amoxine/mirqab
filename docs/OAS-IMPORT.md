@@ -88,8 +88,14 @@ impossible, not a style guide.
 | `name` | `info.title`, truncated to 100 characters |
 | `slug` | `info.title` slugified (accents decomposed, non-alphanumerics collapsed to `-`) |
 | `listenPath` | `/{slug}/` |
-| `proxyUrl` | `servers[0].url` |
+| `proxyUrl` | `servers[serverIndex].url` (default the first), with `{variables}` replaced by their declared defaults; a variable with no default makes that server unusable |
 | `authType` | left unset, so the schema default (`NONE`) applies |
+
+Two query parameters override what the document cannot decide on its own, on both routes below:
+`slug` (replaces the slug derived from `info.title`, and with it the listen path — this is the way
+out of the "two specs with the same title" collision) and `serverIndex` (0–49, which `servers[]`
+entry becomes the upstream). Both are validated again by `CreateApiDto`, so an override cannot
+smuggle in a bad slug or a denied upstream.
 
 `authType` is deliberately not inferred. A specification's `securitySchemes` describe what the
 **upstream** expects, not what the gateway should enforce; turning one into gateway authentication
@@ -101,14 +107,53 @@ uses — so name length, slug shape, listen-path shape, URL validity and the SSR
 a hand-created one may not. Import then calls `ApiService.create()`, so slug and listen-path
 uniqueness, conflict mapping and the background gateway sync are all the existing code path.
 
+## Preview, and what is kept
+
+**`POST /apis/import/preview`** takes the same body, the same query parameters and the same permission
+(`api:create`) but **writes nothing** and is not audited. It answers with what an import would create:
+the derived API (`name`, `slug`, `listenPath`, `proxyUrl`), every server with the one selected and
+the reason a server is refused (`denyReason`), any slug or listen-path **conflict**, the lint
+findings with line numbers, the endpoint list, the content hash and `valid` / `canImport`. Lint
+errors and an unusable derived API are **reported** (`valid: false`, `problems`) rather than thrown,
+so a UI can show what to fix; a document that cannot be processed at all (over 5 MB, not JSON or
+YAML, not OpenAPI 3.x, more than 5 aliases, more than 5000 operations) fails exactly like the real
+import.
+
+**The document is kept.** A successful import stores it in `api_specs` **in the same transaction as
+the API row** — verbatim (comments and formatting included), with its SHA-256 (`contentHash`), the
+`openapiVersion`, a `format` of `json` or `yaml`, a version number (1 for an import), and an
+**endpoint index** computed once at import. This is not `ApiDefinition.oasDocument`, which is the
+Tyk-OAS document the sync path generates and overwrites on every sync.
+
+| Route | Permission | Answers |
+|---|---|---|
+| `GET /apis/:id/spec` | `api:read` | the newest stored version with its source text |
+| `GET /apis/:id/endpoints` | `api:read` | the endpoint index of the newest version, without the source text |
+
+Both are tenant-scoped: another tenant's API looks exactly like an API with no stored spec (404). An
+API created by hand has no spec (404).
+
+An **endpoint** is one path + method. Its `key` is the `operationId` when that is present and unique
+in the document, otherwise `METHOD path` (for example `GET /orders/{id}`), so it stays stable across
+re-imports of the same document. Each row also carries `summary`, `tags`, `deprecated` and the names
+of the security schemes the operation requires (operation-level, else document-level). A path item
+that is a **local** `$ref` (`#/components/pathItems/…`) is followed; nothing else is. The index is
+capped at **5000** operations: a larger document is refused with 422
+`OAS_IMPORT_TOO_MANY_ENDPOINTS`, not truncated.
+
 ## Known limits
 
-- **Two specs with the same `info.title` collide.** The second import returns 409 from the existing
-  uniqueness check. There is no slug override parameter yet; rename the title or create the API by
-  hand. Worth adding when someone actually hits it.
-- **The submitted document is not stored.** `ApiDefinition.oasDocument` holds the Tyk-OAS document
-  the sync path generates and last pushed, and it is overwritten on every sync — it is not a place
-  to keep the user's source specification. Keeping the original would need its own column.
+- **Two specs with the same `info.title` collide** unless you pass `slug`: the second import
+  returns 409 from the existing uniqueness check. `POST /apis/import/preview` reports the conflict
+  before you try.
+- **Only the first import is stored.** Re-uploading a changed document onto an existing API (with a
+  diff of added, removed and changed endpoints) is not built yet; the table already keys rows by
+  `(api, version number)` for it.
+- **Endpoints are recorded, not yet governed.** Nothing about an individual endpoint reaches the
+  gateway: it still proxies the whole upstream under the API's listen path. Per-endpoint controls
+  wait for a live check of what Tyk OSS 5.15.0 actually enforces per operation.
+- **Only `servers[0]` is checked by the lint rule** `og-server-url-absolute`, so choosing a later
+  server with `serverIndex` relies on `CreateApiDto`'s URL and denylist validation for that server.
 - **Swagger 2.0 is refused** with `OAS_IMPORT_UNSUPPORTED_VERSION`. Spectral's `oas` ruleset lints
   2.0 happily under its oas2 rules, so a 2.0 document can lint clean; the version check is separate
   from the lint gate for that reason.
