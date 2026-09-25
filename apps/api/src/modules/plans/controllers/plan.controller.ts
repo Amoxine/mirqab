@@ -80,7 +80,9 @@ export class PlanController {
   @Post(':id/sync')
   @Permissions('plan:update')
   @ApiOperation({ summary: 'Re-push this plan’s policy to every node' })
-  @Audit('plan:synced', 'Plan')
+  // `updated`, not `sync_succeeded`: this route answers 200 with per-node outcomes even when a node
+  // failed, so claiming success would overstate; and `synced` is not an AuditAction value at all.
+  @Audit('plan:updated', 'Plan')
   @HttpCode(HttpStatus.OK)
   async sync(
     @Param('id', ParseUUIDPipe) id: string,
