@@ -20,6 +20,7 @@ import enPlans from '@/messages/en/plans.json';
 import enProducts from '@/messages/en/products.json';
 import enRoles from '@/messages/en/roles.json';
 import enCertificates from '@/messages/en/certificates.json';
+import enOpenapi from '@/messages/en/openapi.json';
 
 import frCommon from '@/messages/fr/common.json';
 import frNav from '@/messages/fr/nav.json';
@@ -36,6 +37,7 @@ import frPlans from '@/messages/fr/plans.json';
 import frProducts from '@/messages/fr/products.json';
 import frRoles from '@/messages/fr/roles.json';
 import frCertificates from '@/messages/fr/certificates.json';
+import frOpenapi from '@/messages/fr/openapi.json';
 
 import arCommon from '@/messages/ar/common.json';
 import arNav from '@/messages/ar/nav.json';
@@ -52,6 +54,7 @@ import arPlans from '@/messages/ar/plans.json';
 import arProducts from '@/messages/ar/products.json';
 import arRoles from '@/messages/ar/roles.json';
 import arCertificates from '@/messages/ar/certificates.json';
+import arOpenapi from '@/messages/ar/openapi.json';
 
 const MESSAGES = {
   en: {
@@ -70,6 +73,7 @@ const MESSAGES = {
     products: enProducts,
     roles: enRoles,
     certificates: enCertificates,
+    openapi: enOpenapi,
   },
   fr: {
     common: frCommon,
@@ -87,6 +91,7 @@ const MESSAGES = {
     products: frProducts,
     roles: frRoles,
     certificates: frCertificates,
+    openapi: frOpenapi,
   },
   ar: {
     common: arCommon,
@@ -104,6 +109,7 @@ const MESSAGES = {
     products: arProducts,
     roles: arRoles,
     certificates: arCertificates,
+    openapi: arOpenapi,
   },
 };
 

@@ -23,6 +23,8 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.apis.all, 'detail', id] as const,
     keys: (id: string, pageSize: number) => [...queryKeys.apis.all, 'detail', id, 'keys', { pageSize }] as const,
     clients: (id: string) => [...queryKeys.apis.all, 'detail', id, 'clients'] as const,
+    /** OAS-05: stored spec index + endpoint governance (`GET /apis/:id/endpoints`). */
+    endpoints: (id: string) => [...queryKeys.apis.all, 'detail', id, 'endpoints'] as const,
   },
   keys: {
     get all() {

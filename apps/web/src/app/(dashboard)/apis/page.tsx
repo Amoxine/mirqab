@@ -4,10 +4,11 @@ import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Pencil, Plus, Power, Trash2 } from 'lucide-react';
+import { FileUp, MoreHorizontal, Pencil, Plus, Power, Trash2 } from 'lucide-react';
 import { ApiFormSheet } from '@/components/apis/api-form-sheet';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
 import { DeleteApiDialog } from '@/components/apis/delete-api-dialog';
+import { ImportWizardSheet } from '@/components/apis/import/import-wizard-sheet';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Button } from '@/components/ui/button';
@@ -90,11 +91,13 @@ function ApiRowActions({ item, onToggleStatus, onDelete }: ApiRowActionsProps) {
 function ApisPage() {
   const t = useTranslations('apis');
   const tCommon = useTranslations('common');
+  const tOpenapi = useTranslations('openapi');
   const [page, setPage] = useState(1);
   // 'ALL' is the "no filter" sentinel: Radix Select forbids an empty-string item value.
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [syncFilter, setSyncFilter] = useState('ALL');
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApiDefinition | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useApis(
@@ -179,6 +182,15 @@ function ApisPage() {
 
   const createButton = (
     <PermissionGate permission="api:create">
+      <Button
+        variant="outline"
+        onClick={() => {
+          setImportOpen(true);
+        }}
+      >
+        <FileUp className="h-4 w-4" aria-hidden="true" />
+        {tOpenapi('import.button')}
+      </Button>
       <Button
         onClick={() => {
           setCreateOpen(true);
@@ -271,6 +283,7 @@ function ApisPage() {
       />
 
       <ApiFormSheet mode="create" open={createOpen} onOpenChange={setCreateOpen} />
+      <ImportWizardSheet open={importOpen} onOpenChange={setImportOpen} />
       <DeleteApiDialog
         api={deleteTarget}
         onClose={() => {

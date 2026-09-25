@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
 import { AlertTriangle, Pencil, Power, SearchX, Trash2 } from 'lucide-react';
@@ -12,6 +12,7 @@ import { ApiStatusBadge } from '@/components/apis/api-status-badge';
 import { ClientsTab } from '@/components/apis/clients-tab';
 import { DeleteApiDialog } from '@/components/apis/delete-api-dialog';
 import { DesignerTab } from '@/components/apis/designer/designer-tab';
+import { EndpointsTab } from '@/components/apis/endpoints/endpoints-tab';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,9 @@ const KEY_VARIANT: Record<ApiKeyStatus, 'default' | 'secondary' | 'destructive'>
 };
 
 const formatDate = (value: string | null) => (value ? <FormattedDateTime value={value} /> : '—');
+
+/** Tabs a link may open directly (`?tab=`), e.g. the import wizard landing on `endpoints`. */
+const LINKABLE_TABS = ['overview', 'configuration', 'designer', 'endpoints'];
 
 const isNotFound = (error: unknown) => error instanceof ApiRequestError && error.status === 404;
 
@@ -140,6 +144,8 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
   const { can } = usePermissions();
   const t = useTranslations('apis');
   const tCommon = useTranslations('common');
+  const tOpenapi = useTranslations('openapi');
+  const requestedTab = useSearchParams().get('tab') ?? '';
   const statusMutation = useSetApiStatus();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApiDetail | null>(null);
@@ -203,11 +209,12 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
         }
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={LINKABLE_TABS.includes(requestedTab) ? requestedTab : 'overview'}>
         <TabsList>
           <TabsTrigger value="overview">{t('tabs.overview')}</TabsTrigger>
           <TabsTrigger value="configuration">{t('tabs.configuration')}</TabsTrigger>
           <TabsTrigger value="designer">{t('tabs.designer')}</TabsTrigger>
+          <TabsTrigger value="endpoints">{tOpenapi('tab')}</TabsTrigger>
           {/* An OAUTH api authenticates JWTs, so a Tyk auth-token key could never work on it. */}
           {can('key:read') && !isOAuth && <TabsTrigger value="keys">{t('tabs.keys')}</TabsTrigger>}
           {can('key:read') && isOAuth && <TabsTrigger value="clients">{t('tabs.clients')}</TabsTrigger>}
@@ -279,6 +286,10 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
 
         <TabsContent value="designer" className="mt-4">
           <DesignerTab api={apiDef} />
+        </TabsContent>
+
+        <TabsContent value="endpoints" className="mt-4">
+          <EndpointsTab api={apiDef} />
         </TabsContent>
 
         {can('key:read') && !isOAuth && (

@@ -41,11 +41,14 @@ export function canAttemptReauth(): boolean {
 /** A non-2xx API answer. Callers branch on `status` (404, 403, 409...), never on the message text. */
 export class ApiRequestError extends Error {
   status: number;
+  /** The API's machine code (`error.code`, e.g. `SPEC_VERSION_STALE`) when the body carried one. */
+  code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = 'ApiRequestError';
     this.status = status;
+    if (code) this.code = code;
   }
 }
 
@@ -77,9 +80,11 @@ async function toRequestError(res: Response): Promise<ApiRequestError> {
   // class-validator failures arrive as a list of messages.
   const raw: unknown = body?.error?.message;
   const message = Array.isArray(raw) ? raw.join('; ') : raw;
+  const code: unknown = body?.error?.code;
   return new ApiRequestError(
     typeof message === 'string' && message !== '' ? message : `HTTP ${String(res.status)}`,
     res.status,
+    typeof code === 'string' ? code : undefined,
   );
 }
 
@@ -118,6 +123,9 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** POST a raw text body (an OpenAPI document, JSON or YAML) instead of a JSON-encoded value. */
+  postRaw: <T>(path: string, body: string, contentType: string) =>
+    request<T>(path, { method: 'POST', body, headers: { 'Content-Type': contentType } }),
   /** GET a non-JSON body (e.g. a CSV export); `request()` always parses JSON, so it cannot carry one. */
   getBlob: async (path: string): Promise<Blob> => {
     const headers = new Headers();
