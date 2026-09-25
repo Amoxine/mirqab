@@ -65,7 +65,7 @@ export interface ImportPreview {
 }
 
 /** What a caller must fix, grouped by rule id, in the `details` field the error contract already has. */
-function toDetails(findings: LintFinding[]): Record<string, string[]> {
+export function toDetails(findings: LintFinding[]): Record<string, string[]> {
   const details: Record<string, string[]> = {};
   for (const finding of findings) {
     const where = finding.path ? `line ${String(finding.line)} (${finding.path})` : `line ${String(finding.line)}`;

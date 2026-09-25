@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Query, UnsupportedMediaTypeException, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiImportService, type ImportPreview, type ImportResult } from '../services/api-import.service';
 import { ImportQueryDto } from '../dto/import-query.dto';
@@ -7,6 +7,23 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { CurrentTenant } from '../../../common/decorators/current-tenant.decorator';
 import { Audit } from '../../../common/decorators/audit.decorator';
+
+/**
+ * The raw document `specBodyMiddleware` read as text. An OBJECT means Nest's app-wide JSON parser got
+ * there first (it runs before any route-scoped middleware, so a `Content-Type: application/json` body
+ * is parsed — and capped at 100 kB — before this route sees it): refused with 415 instead of being
+ * linted as an empty document. No body at all is linted as empty, like any unparseable document.
+ */
+export function rawDocument(body: unknown): string {
+  if (typeof body === 'string') return body;
+  if (typeof body === 'object' && body !== null) {
+    throw new UnsupportedMediaTypeException({
+      message: 'Send the document as text/plain or application/yaml (not application/json); the format is detected from the content',
+      error: 'OAS_IMPORT_WRONG_CONTENT_TYPE',
+    });
+  }
+  return '';
+}
 
 @ApiTags('APIs')
 @ApiBearerAuth()
@@ -34,6 +51,7 @@ export class ApiImportController {
   @ApiBody({ description: 'Raw OpenAPI 3.x document (JSON or YAML)', schema: { type: 'string' } })
   @ApiResponse({ status: 201, description: 'API created; `data.findings` carries any warnings' })
   @ApiResponse({ status: 413, description: 'Document larger than 5 MB' })
+  @ApiResponse({ status: 415, description: 'Sent as application/json: send text/plain or application/yaml' })
   @ApiResponse({ status: 422, description: 'Lint errors, or a document that yields no usable API' })
   // `created`, like a hand-written API: there is no `IMPORTED` in the AuditAction enum, and an unknown
   // label makes the audit write throw and get swallowed (audit-actions.tripwire.spec.ts guards this).
@@ -44,11 +62,9 @@ export class ApiImportController {
     @Query() query: ImportQueryDto,
     @CurrentTenant() tenantId: string,
   ): Promise<{ success: true; data: ImportResult }> {
-    // `specBodyMiddleware` installs a text parser for this route, so the body is a string. An empty
-    // body arrives as '' and is rejected by the lint gate like any other unparseable document.
     return {
       success: true,
-      data: await this.importService.import(typeof source === 'string' ? source : '', tenantId, query),
+      data: await this.importService.import(rawDocument(source), tenantId, query),
     };
   }
 
@@ -75,7 +91,7 @@ export class ApiImportController {
   ): Promise<{ success: true; data: ImportPreview }> {
     return {
       success: true,
-      data: await this.importService.preview(typeof source === 'string' ? source : '', tenantId, query),
+      data: await this.importService.preview(rawDocument(source), tenantId, query),
     };
   }
 }

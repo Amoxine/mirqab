@@ -28,6 +28,13 @@ export interface EndpointRow {
   deprecated: boolean;
   /** Names of the security schemes the operation requires (operation-level, else document-level). Empty = none declared. */
   securitySchemes: string[];
+  /**
+   * SHA-256 of the canonical JSON of the raw operation object plus its path item's `parameters`
+   * (OAS-04), so a changed parameter, request body, response or security block is visible on
+   * re-upload even when every indexed field above is unchanged. A change inside a shared
+   * `components` entry the operation `$ref`s is NOT seen. `null` on rows stored before this field existed.
+   */
+  fingerprint: string | null;
 }
 
 export interface ServerOption {
@@ -72,6 +79,25 @@ function resolvePathItem(doc: Json, item: unknown): Json | undefined {
   return undefined;
 }
 
+/**
+ * JSON with object keys sorted at every depth, so two documents that differ only in key order or
+ * formatting (YAML vs JSON) produce the same text. Written out as a string rather than rebuilt as an
+ * object, so a hostile key such as `__proto__` is just text. A YAML alias cycle is cut, not followed.
+ */
+export function canonicalJson(value: unknown, ancestors = new Set<unknown>()): string {
+  if (typeof value !== 'object' || value === null) return value === undefined ? 'null' : JSON.stringify(value);
+  if (ancestors.has(value)) return '"[circular]"';
+  ancestors.add(value);
+  const text = Array.isArray(value)
+    ? `[${value.map((item) => canonicalJson(item, ancestors)).join(',')}]`
+    : `{${Object.keys(value)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Json)[key], ancestors)}`)
+        .join(',')}}`;
+  ancestors.delete(value);
+  return text;
+}
+
 function summaryOf(operation: Json): string | null {
   const summary = typeof operation.summary === 'string' ? operation.summary.trim() : '';
   if (summary) return summary.slice(0, MAX_SUMMARY);
@@ -99,7 +125,7 @@ export interface EndpointIndex {
 export function buildEndpointIndex(doc: unknown): EndpointIndex {
   if (!isRecord(doc) || !isRecord(doc.paths)) return { endpoints: [], overflow: false };
 
-  const raw: { method: string; path: string; operation: Json }[] = [];
+  const raw: { method: string; path: string; operation: Json; pathParameters: unknown }[] = [];
   let overflow = false;
   outer: for (const [path, item] of Object.entries(doc.paths)) {
     const pathItem = resolvePathItem(doc, item);
@@ -111,7 +137,7 @@ export function buildEndpointIndex(doc: unknown): EndpointIndex {
         overflow = true;
         break outer;
       }
-      raw.push({ method: method.toUpperCase(), path, operation });
+      raw.push({ method: method.toUpperCase(), path, operation, pathParameters: pathItem.parameters ?? null });
     }
   }
 
@@ -124,7 +150,7 @@ export function buildEndpointIndex(doc: unknown): EndpointIndex {
   }
 
   const used = new Set<string>();
-  const endpoints = raw.map(({ method, path, operation }): EndpointRow => {
+  const endpoints = raw.map(({ method, path, operation, pathParameters }): EndpointRow => {
     const operationId =
       typeof operation.operationId === 'string' && operation.operationId ? operation.operationId : null;
     let key = operationId !== null && idCounts.get(operationId) === 1 ? operationId : `${method} ${path}`;
@@ -141,6 +167,7 @@ export function buildEndpointIndex(doc: unknown): EndpointIndex {
       tags: Array.isArray(operation.tags) ? operation.tags.filter((tag): tag is string => typeof tag === 'string') : [],
       deprecated: operation.deprecated === true,
       securitySchemes: schemeNames(security),
+      fingerprint: contentHashOf(canonicalJson({ operation, pathParameters })),
     };
   });
 

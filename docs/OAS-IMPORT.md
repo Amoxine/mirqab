@@ -26,6 +26,8 @@ described were cut; this is pass/fail.
 | **422** | ≥ 1 `error`-severity finding | nothing created; findings returned in `error.details`, keyed by rule id |
 | **413** | body larger than 5 MB | nothing created |
 | **422** `OAS_IMPORT_UNSAFE_YAML` | more than 5 YAML aliases, or any alias in a YAML document over 64 KB | rejected **before parsing**; nothing created |
+| **422** `OAS_IMPORT_UNPARSEABLE` | the document is not JSON or YAML, or uses a YAML tag the parser cannot turn into JSON (`!!binary`) | nothing created; the parser's own error text is never echoed |
+| **415** `OAS_IMPORT_WRONG_CONTENT_TYPE` | sent as `Content-Type: application/json` | nothing created — send `text/plain` or `application/yaml` |
 
 A warning never blocks an import. That is the point: rejecting a real-world specification because
 an operation lacks a description would make the feature unusable, while a document that cannot
@@ -50,8 +52,18 @@ process, so both are refused **before** the linter runs (`services/oas-safety.ts
   API's event loop. A YAML document may use at most **5** aliases, and only if it is at most
   **64 KB**; anything else returns **422** `OAS_IMPORT_UNSAFE_YAML` without being parsed. A document
   that parses as JSON has no aliases and is exempt, so **upload JSON if a large specification
-  legitimately relies on YAML anchors**. Aliases are recognised by position (after `:`, `-`, `,`, `[`,
-  `{` or at the start of a line), so `*emphasis*` in a description is not counted.
+  legitimately relies on YAML anchors**. Anchor and alias names are any run of non-space characters
+  other than `,[]{}` (so `&é0`, `&😈`, `&a.b` all count — the first version only recognised
+  `[A-Za-z0-9_-]` and a 184-byte document with non-ASCII anchors got through). Aliases are recognised
+  by position, at the start of a node: the start of a line, or after `:`, `-`, `?`, `,`, `[` or `{`
+  (spaces or tabs allowed in between), so `*emphasis*` inside a description is not counted. A
+  document without any anchor (`&name` after a line start, whitespace or an indicator; `&amp;` in
+  prose over-counts, harmlessly) is never refused, because an alias without an anchor cannot expand.
+  The same guard runs before every YAML parse in the API: `SpectralLintService.lint` (import,
+  import preview, spec re-upload and its preview) and the portal's document service.
+- **No exotic tags that break the parser.** A `!!binary` scalar made the YAML parser throw a raw
+  `TypeError` (a 500); any parser exception is now **422** `OAS_IMPORT_UNPARSEABLE`. `!!timestamp`,
+  `!!set`, `!!omap`, unknown local tags (`!foo`) and merge keys (`<<`) parse and lint normally.
 
 Neither control resolves anything over the network, and neither adds a dependency.
 `@stoplight/spectral-ref-resolver` is not a direct dependency of this package, so passing Spectral a
@@ -129,9 +141,11 @@ Tyk-OAS document the sync path generates and overwrites on every sync.
 |---|---|---|
 | `GET /apis/:id/spec` | `api:read` | the newest stored version with its source text |
 | `GET /apis/:id/endpoints` | `api:read` | the endpoint index of the newest version, without the source text |
+| `POST /apis/:id/spec/preview` | `api:update` | the diff a changed document would make; writes nothing (below) |
+| `POST /apis/:id/spec` | `api:update` | apply a changed document as the next version (below) |
 
-Both are tenant-scoped: another tenant's API looks exactly like an API with no stored spec (404). An
-API created by hand has no spec (404).
+The two `GET`s are tenant-scoped: another tenant's API looks exactly like an API with no stored spec
+(404). An API created by hand has no spec (404) until one is attached with `expectedVersion=0`.
 
 An **endpoint** is one path + method. Its `key` is the `operationId` when that is present and unique
 in the document, otherwise `METHOD path` (for example `GET /orders/{id}`), so it stays stable across
@@ -141,17 +155,81 @@ that is a **local** `$ref` (`#/components/pathItems/…`) is followed; nothing e
 capped at **5000** operations: a larger document is refused with 422
 `OAS_IMPORT_TOO_MANY_ENDPOINTS`, not truncated.
 
+## Re-uploading a changed document (OAS-04)
+
+Two routes, both `api:update`, both taking the raw document like the import:
+
+- **`POST /apis/:id/spec/preview?expectedVersion=<n>`** — computes the diff and the governance impact
+  and **writes nothing**; not audited (like `POST /apis/import/preview`). Lint errors are reported in
+  `findings`, not thrown. Answers with `dryRun: true, applied: false`.
+- **`POST /apis/:id/spec?expectedVersion=<n>[&acknowledgeRemoved=true]`** — the apply, audited as
+  `api:updated`. It has no dry-run flag (an unknown query field is 400).
+
+The body and its gates are exactly the import's (same route-scoped text parser, 5 MB, YAML alias
+budget, no external `$ref`, the Spectral ruleset, OpenAPI 3.x only, at most 5000 operations, 415 for
+`application/json`): the service runs the import preview, which writes nothing, and ignores the
+derived name, slug and upstream — a re-upload changes none of them.
+
+| Query | Meaning |
+|---|---|
+| `expectedVersion` (required) | The latest `versionNo` the caller has seen, or **0** when the API has no stored spec yet. Anything else: **409** `SPEC_VERSION_STALE` (preview included) — `0` on an API that has a spec, or `> 0` on one that has none, is stale too. |
+| `acknowledgeRemoved=true` (apply only) | Needed to apply a document that no longer declares an endpoint that has governance. |
+
+The answer is `{ dryRun, applied, unchanged, versionNo, findings, diff: { added, removed, changed }, governanceImpact: { removedGoverned, changedGoverned } }`.
+
+- **A first spec for a hand-created API**: `expectedVersion=0` creates version 1. Every endpoint is
+  `added` and there is no governance impact; the API can then be governed like an imported one.
+
+- **Identity is the endpoint key.** A renamed `operationId` changes the key, so it shows as one
+  removal plus one addition, never as a change — the old key's settings are never carried over to a
+  different operation. `changed` lists the fields that differ: `method`, `path`, `summary`, `tags`,
+  `deprecated`, `securitySchemes`, `fingerprint`.
+- **`fingerprint`** is new on each index row: the SHA-256 of the operation object as written together
+  with its path item's `parameters` (they apply to every operation of the path), with keys sorted at
+  every depth (so a JSON and a YAML copy match). It catches a changed parameter, request body,
+  response or security block that the other fields do not show. Rows stored before it existed have
+  none; they are compared on the other fields only.
+- **Same bytes as the latest version** (same content hash): `unchanged: true`, nothing written, no
+  new version — even when `expectedVersion` is stale, so retrying an upload whose response was lost
+  is safe.
+- **Applying** (the apply route, no lint error) writes version `latest + 1` in one short transaction:
+  it re-checks the latest version (compare-and-set), inserts the row, and sets the API's `syncStatus`
+  to `PENDING` only if its `config` is still the one the governance impact was computed from.
+  Two uploads that race on the same version: one wins, the other gets **409** `SPEC_VERSION_STALE`
+  (the unique `(api_def_id, version_no)` index is the backstop, answered 409, never 500). A change to
+  the API's `config` in the middle (a governance `PATCH`, for example) answers **409**
+  `SPEC_GOVERNANCE_CHANGED` and the new version is rolled back: review the diff again.
+  After the commit the normal gateway sync runs and reads the new index.
+- **Governance is never rewritten.** `config.endpoints` is not touched: surviving keys keep their
+  settings; a removed key's settings become an **orphan** (listed by `GET /apis/:id/endpoints`, not sent
+  to the gateway, cleared only by `PATCH /apis/:id/endpoints` with `dropOrphans`). Because the gateway
+  stops enforcing a removed endpoint's settings at the next sync (a blocked path starts proxying
+  again), applying with `removedGoverned` non-empty needs `acknowledgeRemoved=true`, else **409**
+  `SPEC_REMOVES_GOVERNED_ENDPOINTS` with the keys in `details.removedGoverned`.
+- Another tenant's API is **404**, on both routes.
+
+Proof: `spec-diff.spec.ts`, `spec-update.service.spec.ts` (mocked database, real lint and gates),
+`api-spec-update.controller.spec.ts` (HTTP: body scoping, query parsing, 415), `spec-update.db-spec.ts`
+(throwaway Postgres: concurrent applies, the unique-index backstop, rollback, tenant isolation, a
+first spec with `expectedVersion=0`; run
+command in the file) and `test/e2e/oas-spec-update.e2e.mjs` (live stack and gateway).
+
 ## Known limits
 
+- **Send `text/plain` or `application/yaml`, never `application/json`**, on `POST /apis/import`,
+  `/apis/import/preview`, `/apis/:id/spec` and `/apis/:id/spec/preview`. Nest's app-wide JSON parser
+  runs before the route-scoped text parser, so a JSON content type would reach the route as an object
+  (capped at 100 kB): it is refused with **415** `OAS_IMPORT_WRONG_CONTENT_TYPE`. The format is
+  detected from the content, so a JSON *document* sent as `text/plain` is fine.
+- **The fingerprint does not follow `$ref`s**: a change inside a shared `components` entry the
+  operation references does not mark the endpoint as changed.
+- **A re-upload never changes the API's upstream, name or slug.**
 - **Two specs with the same `info.title` collide** unless you pass `slug`: the second import
   returns 409 from the existing uniqueness check. `POST /apis/import/preview` reports the conflict
   before you try.
-- **Only the first import is stored.** Re-uploading a changed document onto an existing API (with a
-  diff of added, removed and changed endpoints) is not built yet; the table already keys rows by
-  `(api, version number)` for it.
-- **Endpoints are recorded, not yet governed.** Nothing about an individual endpoint reaches the
-  gateway: it still proxies the whole upstream under the API's listen path. Per-endpoint controls
-  wait for a live check of what Tyk OSS 5.15.0 actually enforces per operation.
+- **Per-endpoint governance** (block, public, rate limit, cache, timeout, size limit, mock, request
+  validation, allow-list mode) is documented in `OAS-ENDPOINT-GOVERNANCE.md`; an endpoint without
+  governance is still proxied as part of the whole upstream under the API's listen path.
 - **Only `servers[0]` is checked by the lint rule** `og-server-url-absolute`, so choosing a later
   server with `serverIndex` relies on `CreateApiDto`'s URL and denylist validation for that server.
 - **Swagger 2.0 is refused** with `OAS_IMPORT_UNSUPPORTED_VERSION`. Spectral's `oas` ruleset lints

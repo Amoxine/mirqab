@@ -1,8 +1,10 @@
 import { Module, type MiddlewareConsumer, type NestModule, RequestMethod } from '@nestjs/common';
 import { ApiImportController } from './controllers/api-import.controller';
 import { ApiSpecController } from './controllers/api-spec.controller';
+import { ApiSpecUpdateController } from './controllers/api-spec-update.controller';
 import { ApiImportService } from './services/api-import.service';
 import { ApiSpecService } from './services/api-spec.service';
+import { SpecUpdateService } from './services/spec-update.service';
 import { SpectralLintService } from './services/spectral-lint.service';
 import { ApiManagementModule } from '../api-management/api-management.module';
 import { specBodyMiddleware } from './spec-body.middleware';
@@ -17,18 +19,21 @@ import { specBodyMiddleware } from './spec-body.middleware';
  */
 @Module({
   imports: [ApiManagementModule],
-  controllers: [ApiImportController, ApiSpecController],
-  providers: [ApiImportService, SpectralLintService, ApiSpecService],
+  controllers: [ApiImportController, ApiSpecController, ApiSpecUpdateController],
+  providers: [ApiImportService, SpectralLintService, ApiSpecService, SpecUpdateService],
 })
 export class ApiImportModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    // Scoped to the two routes that take a raw document. Applied app-wide it would swallow every
+    // Scoped to the four routes that take a raw document. Applied app-wide it would swallow every
     // other route's JSON body, because it reads any content type (see the middleware's own note).
     consumer
       .apply(specBodyMiddleware)
       .forRoutes(
         { path: 'apis/import', method: RequestMethod.POST },
         { path: 'apis/import/preview', method: RequestMethod.POST },
+        // OAS-04. POST only: `GET apis/:id/spec` has no body, and no other POST matches these shapes.
+        { path: 'apis/:id/spec', method: RequestMethod.POST },
+        { path: 'apis/:id/spec/preview', method: RequestMethod.POST },
       );
   }
 }

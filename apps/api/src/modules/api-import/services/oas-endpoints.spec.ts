@@ -1,4 +1,4 @@
-import { buildEndpointIndex, contentHashOf, expandServerUrl, listServers, MAX_ENDPOINTS, MAX_SERVERS } from './oas-endpoints';
+import { buildEndpointIndex, canonicalJson, contentHashOf, expandServerUrl, listServers, MAX_ENDPOINTS, MAX_SERVERS } from './oas-endpoints';
 
 const ok = { description: 'ok' };
 
@@ -116,6 +116,68 @@ describe('buildEndpointIndex', () => {
     for (let i = 0; i < MAX_ENDPOINTS; i += 1) paths[`/p${String(i)}`] = { get: {} };
 
     expect(buildEndpointIndex({ paths })).toMatchObject({ overflow: false });
+  });
+});
+
+describe('fingerprint (OAS-04)', () => {
+  const fingerprintOf = (operation: unknown): string | null =>
+    buildEndpointIndex({ paths: { '/a': { get: operation } } }).endpoints[0]?.fingerprint ?? null;
+  const op = {
+    operationId: 'getA',
+    parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+    responses: { 200: { description: 'ok' } },
+  };
+
+  it('is the SHA-256 of the canonical JSON of the raw operation and its path-level parameters', () => {
+    expect(fingerprintOf(op)).toBe(contentHashOf(canonicalJson({ operation: op, pathParameters: null })));
+    expect(fingerprintOf(op)).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('changes with a path-level parameter, which applies to every operation of the path', () => {
+    const withParam = (type: string): (string | null)[] =>
+      buildEndpointIndex({
+        paths: { '/a/{id}': { parameters: [{ name: 'id', in: 'path', schema: { type } }], get: op, post: {} } },
+      }).endpoints.map((e) => e.fingerprint);
+    const [getBefore, postBefore] = withParam('string');
+    const [getAfter, postAfter] = withParam('integer');
+
+    expect(getAfter).not.toBe(getBefore);
+    expect(postAfter).not.toBe(postBefore);
+  });
+
+  it('ignores key order, so a JSON and a YAML copy of one operation match', () => {
+    const reordered = { responses: { 200: { description: 'ok' } }, parameters: op.parameters, operationId: 'getA' };
+    expect(fingerprintOf(reordered)).toBe(fingerprintOf(op));
+  });
+
+  it.each([
+    ['a parameter type', { ...op, parameters: [{ name: 'q', in: 'query', schema: { type: 'integer' } }] }],
+    ['a response', { ...op, responses: { 200: { description: 'ok' }, 404: { description: 'missing' } } }],
+    ['a request body schema', { ...op, requestBody: { content: { 'application/json': { schema: { type: 'object' } } } } }],
+    ['the parameter order', { ...op, parameters: [...op.parameters, { name: 'r', in: 'query' }].reverse() }],
+  ])('changes with %s', (_label, changed) => {
+    expect(fingerprintOf(changed)).not.toBe(fingerprintOf(op));
+  });
+});
+
+describe('canonicalJson', () => {
+  it('sorts keys at every depth and keeps array order', () => {
+    expect(canonicalJson({ b: [2, 1], a: { d: null, c: 'x' } })).toBe('{"a":{"c":"x","d":null},"b":[2,1]}');
+  });
+
+  it('treats hostile keys as plain text', () => {
+    const hostile = JSON.parse('{"__proto__":{"polluted":1},"constructor":{"prototype":2}}') as unknown;
+
+    expect(canonicalJson(hostile)).toBe('{"__proto__":{"polluted":1},"constructor":{"prototype":2}}');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('cuts a cycle instead of recursing forever, and keeps a repeated (non-cyclic) reference', () => {
+    const shared = { x: 1 };
+    const cyclic: Record<string, unknown> = { shared, again: shared };
+    cyclic.self = cyclic;
+
+    expect(canonicalJson(cyclic)).toBe('{"again":{"x":1},"self":"[circular]","shared":{"x":1}}');
   });
 });
 
