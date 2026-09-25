@@ -2,6 +2,7 @@ import { ApiStatus, type ApiDefinition, type Prisma } from '@prisma/client';
 import type { ApiConfig } from '../dto/api-config.dto';
 import type { TenantGatewayScope } from '../../tyk-integration/services/tenant-scope';
 import { buildTykEventHandlers } from '../../webhooks/webhook-relay.constants';
+import { CATCH_ALL_METHODS, buildCatchAllOperations } from './endpoint-operations';
 
 /**
  * Both Tyk definition formats — classic and Tyk-OAS — in one place.
@@ -385,25 +386,6 @@ const rateLimitPer = (seconds: number): string => `${String(seconds)}s`;
  */
 const SCHEME_NAME = { token: 'authToken', jwt: 'jwtAuth', hmac: 'hmacAuth', basic: 'basicAuth' } as const;
 
-/**
- * Methods an API-wide middleware entry is expanded across.
- *
- * Both Tyk formats attach timeout / size-limit / circuit-breaker middleware PER PATH AND METHOD;
- * neither has an "any method" form. An API-level setting is therefore one entry per method, in both
- * mappers — emitting only GET would silently leave every write request unprotected.
- */
-const CATCH_ALL_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
-
-/**
- * OAS path template used for API-wide middleware. Tyk matches operations by the path template, so a
- * single templated segment stands in for the regex a classic definition would use (`/.*`).
- * Verified on v5.15.0: a breaker declared on this operation trips, and the gateway logs
- * `[CIRCUIT BREAKER] Breaker tripped for path: /{wildcard}`.
- */
-const CATCH_ALL_PATH = '/{wildcard}';
-
-const catchAllOperationId = (method: string): string => `catchAll${method}`;
-
 /** One entry of a versioned base's `info.versioning.versions` array (WP16) — a child's own name and Tyk id. */
 export interface ApiVersionChild {
   versionName: string;
@@ -611,25 +593,9 @@ export function mapToTykOas(
     };
   }
 
-  const operations: Record<string, unknown> = {};
-  const catchAllPaths: Record<string, unknown> = {};
-  if (Object.keys(perOperation).length > 0) {
-    const pathItem: Record<string, unknown> = {
-      parameters: [{ name: 'wildcard', in: 'path', required: true, schema: { type: 'string' } }],
-    };
-    for (const method of CATCH_ALL_METHODS) {
-      const operationId = catchAllOperationId(method);
-      pathItem[method.toLowerCase()] = {
-        operationId,
-        responses: { '200': { description: 'ok' } },
-        ...(validateRequestSchema
-          ? { requestBody: { required: true, content: { 'application/json': { schema: validateRequestSchema } } } }
-          : {}),
-      };
-      operations[operationId] = { ...perOperation };
-    }
-    catchAllPaths[CATCH_ALL_PATH] = pathItem;
-  }
+  // API-wide settings above live on a family of synthetic catch-all operations; see endpoint-operations.ts
+  // for why one `/{wildcard}` was not enough (it matches a single path segment only).
+  const { paths: catchAllPaths, operations } = buildCatchAllOperations(perOperation, validateRequestSchema);
 
   return {
     openapi: '3.0.3',

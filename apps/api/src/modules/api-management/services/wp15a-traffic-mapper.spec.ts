@@ -84,14 +84,16 @@ describe('WP15a traffic middleware — both mappers', () => {
   describe('circuit breaker — OAS has no API-level field, so it is synthesised', () => {
     const cb = { circuitBreaker: { threshold: 0.5, sampleSize: 4, coolDownSeconds: 10 } };
 
-    it('synthesises a catch-all path with one operation per method', () => {
+    it('synthesises catch-all paths with one operation per method', () => {
       const d = oas(cb);
       // Measured: `circuitBreaker` exists only on X-Tyk-Operation, so an API-wide breaker needs a
       // path to hang off. Verified live on v5.15.0 — the breaker trips and the gateway logs
-      // "[CIRCUIT BREAKER] Breaker tripped for path: /{wildcard}".
-      expect(Object.keys(d.paths)).toEqual(['/{wildcard}']);
+      // "[CIRCUIT BREAKER] Breaker tripped for path: /{wildcard}". `{wildcard}` matches ONE segment,
+      // so there is a family of them (endpoint-operations.spec.ts pins its shape); the single-segment
+      // member keeps the name and path it always had.
+      expect(d.paths).toHaveProperty(['/{wildcard}']);
       const ops = d['x-tyk-api-gateway'].middleware?.operations ?? {};
-      expect(Object.keys(ops).sort()).toEqual(ALL_METHODS.map((m) => `catchAll${m}`).sort());
+      expect(Object.keys(ops)).toEqual(expect.arrayContaining(ALL_METHODS.map((m) => `catchAll${m}`)));
       expect(ops.catchAllGET.circuitBreaker).toEqual({
         enabled: true,
         threshold: 0.5,

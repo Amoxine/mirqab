@@ -15,7 +15,7 @@
  * and a control request that must not. The expectations ARE the capability table
  * (`endpoint-capabilities.ts`): a Tyk upgrade that changes any of them fails here, which is the point.
  *
- * WHAT IT TOUCHES. Seven throwaway OAS APIs (`og-probe-oas02-<run>-*`) and three keys on the running
+ * WHAT IT TOUCHES. Eight throwaway OAS APIs (`og-probe-oas02-<run>-*`) and three keys on the running
  * gateway, a local upstream on :9911 inside the api container, removed in `finally`. It bypasses
  * Postgres entirely (no ApiDefinition rows), so reconcile never sees them, and it never prints the
  * gateway secret. It leaves nothing behind unless the process is killed; a stale `og-probe-oas02-*`
@@ -39,7 +39,7 @@ const UP_PORT = Number(process.env.PROBE_UPSTREAM_PORT ?? 9911);
 const UP = `http://api:${String(UP_PORT)}`;
 const RUN = Date.now().toString(36);
 const id = (k) => `og-probe-oas02-${RUN}-${k}`;
-const IDS = Object.fromEntries(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((k) => [k, id(k)]));
+const IDS = Object.fromEntries(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((k) => [k, id(k)]));
 
 const tyk = new TykClientService({ get: (k, d) => process.env[k] ?? d }, new CircuitBreakerService());
 
@@ -165,7 +165,10 @@ async function main() {
 
   console.log('--- A: matching of what the spec does NOT describe');
   check('an undeclared path is proxied (no allow-list): 200', (await call(A, '/undefined-path')).status, 200);
-  check('a trailing slash on a declared path still matches: 200', (await call(A, '/plain/')).status, 200);
+  // A trailing slash is a DIFFERENT route. (This used to assert "/plain/ still matches: 200" on an
+  // undecorated path, which passes whether or not the route matched — it proved nothing.) The control on
+  // /blocked does not apply to /blocked/, so a control can be walked around unless the twin is declared.
+  check('a trailing slash is a different route: the block on /blocked does NOT apply to /blocked/ (200)', (await call(A, '/blocked/')).status, 200);
   check('a method the spec does not declare is proxied: POST /plain -> 200', (await call(A, '/plain', { method: 'POST' })).status, 200);
   check('the listen path WITHOUT its trailing slash is not routed: 404', (await call(A, '')).status, 404);
 
@@ -233,6 +236,24 @@ async function main() {
   const s1 = await statuses(3, () => call(G, '/lim', { headers: k1 }));
   const s2 = await statuses(2, () => call(G, '/lim', { headers: k2 }));
   check('a per-operation rateLimit is ONE counter shared by every key: key1 200,200,429 then key2 429,429', [s1, s2], [[200, 200, 429], [429, 429]]);
+
+  // ============ H: the API-wide catch-all FAMILY, built by the repo's own mapper ============
+  // `{wildcard}` matches ONE path segment, so a lone /{wildcard} left an API-wide mock/breaker/rewrite
+  // absent for /a/b, for the bare listen path and for any trailing slash. mapToTykOas now emits a
+  // catch-all per depth (with a trailing-slash twin). This drives the mapper's REAL output.
+  console.log('--- H: API-wide middleware reaches every path depth (mapper output, no test-side path surgery)');
+  const H = IDS.h;
+  const familyDef = { id: H, name: H, tykApiId: H, proxyUrl: UP, listenPath: '/', authType: 'NONE', status: 'ACTIVE', config: { mock: { code: 202, body: '{"mock":"api-wide"}' } }, parentApiId: null, versionName: null, retiredAt: null, protocol: 'HTTP' };
+  await push(H, mapToTykOas(familyDef, { tykOrgId: ORG, slug: H }, ''));
+  const mocked = async (path) => (await call(H, path)).status;
+  check('the bare listen path is covered: 202', await fetch(`${GW}/${H}/`).then((r) => r.status), 202);
+  check('1 segment: 202', await mocked('/a'), 202);
+  check('2 segments: 202 (a lone /{wildcard} left this proxied)', await mocked('/a/b'), 202);
+  check('8 segments (the ceiling): 202', await mocked('/a/b/c/d/e/f/g/h'), 202);
+  check('trailing slash, 1 segment: 202', await mocked('/a/'), 202);
+  check('trailing slash, 2 segments: 202', await mocked('/a/b/'), 202);
+  check('another method on a deep path: POST /a/b/c -> 202', (await call(H, '/a/b/c', { method: 'POST' })).status, 202);
+  check('DOCUMENTED CEILING: 9 segments are past the family and are proxied (200), not mocked', await mocked('/a/b/c/d/e/f/g/h/i'), 200);
 }
 
 let code = 0;

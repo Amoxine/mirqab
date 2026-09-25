@@ -11,13 +11,12 @@
  *
  * Nothing in the product may offer a per-endpoint control that is not `enforced` here.
  *
- * FOUR BEHAVIOURS THE MAPPER MUST RESPECT (all measured, all in the e2e):
- *  1. A REAL operation wins over the synthetic `/{wildcard}` catch-all. Once an API declares real
- *     operations, API-wide middleware that the mapper hosts on the catch-all (circuit breaker, URL
- *     rewrite, mock, body transforms, request validation) does NOT reach them — it must be copied onto
- *     each real operation.
- *  2. `GET <listenPath>/` does not match `/{wildcard}` (the parked "bare listen path" defect), but a
- *     declared `GET /` operation does match it. Declare `/` next to the catch-all.
+ * BEHAVIOURS THE MAPPER MUST RESPECT (all measured, all in the e2e):
+ *  1. A REAL operation wins over a templated catch-all. Once an API declares real operations, API-wide
+ *     middleware that the mapper hosts on catch-alls (circuit breaker, URL rewrite, mock, body transforms,
+ *     request validation) does NOT reach them — it must be copied onto each real operation.
+ *  2. `{param}` matches ONE path segment and a trailing slash is a different route, so the catch-all is a
+ *     family (bare path and 1..8 segments, each with a trailing-slash twin: `endpoint-operations.ts`).
  *  3. `cache` is only enforced when `middleware.global.cache.enabled` is on; with
  *     `cacheAllSafeRequests: false` only operations that opt in are cached.
  *  4. A per-operation `rateLimit` is ONE counter shared by every consumer, not a per-key limit.

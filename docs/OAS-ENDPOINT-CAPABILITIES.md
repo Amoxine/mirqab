@@ -35,28 +35,52 @@ Matching, for what a specification does *not* describe:
 - An **undeclared path is proxied** (200) unless allow-list mode is on. So declaring endpoints does not
   restrict anything by itself.
 - A **method the spec does not declare is proxied** (`POST /plain` when only `GET /plain` exists).
-- A **trailing slash** on a declared path still matches. The listen path **without** its trailing slash
-  (`/<slug>`) is not routed at all (404).
+- The listen path **without** its trailing slash (`/<slug>`) is not routed at all (404).
 - Methods on one path are independent (`GET /multi` blocked, `POST /multi` proxied).
-- The **operations subtree read back** from `GET /tyk/apis/oas/{id}` is **byte-identical** to what was
-  pushed, so a desired-versus-effective comparison of `middleware.operations` needs no normalisation.
+- **`{param}` matches exactly one path segment**, so `/{wildcard}` never matches `/a/b`, `/a/b/c` or the bare
+  listen path (`/`). Regex templates (`/{wildcard:.*}`) are rejected by the gateway
+  (`must define exactly all path parameters`); a schema `pattern` on the parameter changes nothing.
+- A **real operation wins over a templated one at every depth** (`/orders/{id}` blocked beats `/{a}/{b}`).
+- **A trailing slash is a different route.** A `block` on `/blocked` does **not** apply to `/blocked/`
+  (200), and a block on `/tpl/{id}` does not apply to `/tpl/5/`. Corrected 2026-09-25: the OAS-02 check
+  that claimed "a trailing slash on a declared path still matches" used an undecorated path, where 200 is
+  the answer whether or not the route matched, so it proved nothing. Declaring the twin (`/blocked/`) closes it.
 
-## Four behaviours the mapper must respect
+## Bypasses of a blocked endpoint, measured (OAS-03 probe, local runtime, 5.15.0)
 
-1. **A real operation wins over the synthetic `/{wildcard}` catch-all.** With `GET /{wildcard}` mocked and
-   `GET /orders` declared, `/orders` is *not* mocked while `/something` is. So once an API declares real
-   operations, API-wide settings that the mapper hosts on the catch-all (circuit breaker, URL rewrite,
-   mock, body transforms, request validation) **no longer reach them** and must be copied onto every real
-   operation.
-2. **The parked "bare listen path" defect is confirmed on 5.15.0.** `GET <listenPath>/` does not match
-   `/{wildcard}` (proxied, mock skipped). A declared `GET /` operation **does** match it (blocked with 403),
-   so the fix is to declare `/` alongside the catch-all.
+Requests for an endpoint that has `block` (`GET /blocked`, `GET /tpl/{id}`):
+
+| Request | Status | Closed by |
+|---|---|---|
+| exact path | 403 | — |
+| `/blocked/` (trailing slash) | **200** | declaring the trailing-slash twin |
+| `/BLOCKED`, `/TPL/5` (case) | **200** | `middleware.global.ignoreCase.enabled: true` (with the twins: 403) |
+| `/blocked;a=b` (path parameter) | **200** | **nothing in open mode.** Allow-list mode answers 403 for anything undeclared |
+| `//blocked`, `/./blocked` | 301 to the cleaned path | the gateway normalises and redirects |
+| `/%62locked` (percent-encoded) | 403 | the gateway decodes before matching |
+| `/blocked?x=1` | 403 | — |
+
+So in **open mode** (the default) a per-endpoint control is a control on the path as the spec spells it, plus
+its trailing-slash and case variants; `;param` variants still pass. **Allow-list mode is the hard boundary.**
+
+## Behaviours the mapper must respect
+
+1. **A real operation wins over a templated catch-all.** So once an API declares real operations, API-wide
+   settings that the mapper hosts on catch-alls (circuit breaker, URL rewrite, mock, body transforms, request
+   validation) no longer reach them and must be copied onto every real operation.
+2. **The catch-all is a family, not one path.** Because `{param}` is one segment and a trailing slash is a
+   different route, `mapToTykOas` emits a catch-all for the bare path and for 1 to 8 segments, each with a
+   trailing-slash twin (`(2 * 8 + 1) * 5` operations). This fixes what the roadmap parked as "the bare
+   listen path defect", which was in fact wider: an API-wide breaker, rewrite, mock or transform reached
+   single-segment paths only. **Ceiling:** an undeclared path 9 or more segments deep still skips them
+   (the e2e asserts that too); classic definitions use the regex `/.*` and have no such limit.
 3. `cache` needs the API-level switch (above).
 4. `rateLimit` is shared by all consumers (above); a UI must say so.
 
 ## Not proven here
 
-Only the OAS definition format (this product's default) was probed, not classic; a single gateway node, not
+Read-back fidelity of `middleware.operations` was measured for `block` only (identical); the other controls
+are measured in the OAS-03 governance e2e. Only the OAS definition format (this product's default) was probed, not classic; a single gateway node, not
 three; a keyless API for every control except `ignoreAuthentication` and the rate-limit scope test;
 behaviour under load; `rateLimit` windows other than `60s`; and the 14 unverified controls.
 

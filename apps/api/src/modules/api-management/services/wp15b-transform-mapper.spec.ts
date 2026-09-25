@@ -51,7 +51,7 @@ describe('WP15b transform middleware', () => {
 
   it('url rewrite and mock are per-operation, so they ride the catch-all path', () => {
     const d = oas({ urlRewrite: { pattern: '/old/(.*)', rewriteTo: '/new/$1' }, mock: { code: 418, body: 'x' } });
-    expect(Object.keys(d.paths)).toEqual(['/{wildcard}']);
+    expect(d.paths).toHaveProperty(['/{wildcard}']);
     const op = d['x-tyk-api-gateway'].middleware?.operations?.catchAllGET ?? {};
     expect(op.urlRewrite).toEqual({ enabled: true, pattern: '/old/(.*)', rewriteTo: '/new/$1' });
     expect(op.mockResponse).toEqual({ enabled: true, code: 418, body: 'x' });
