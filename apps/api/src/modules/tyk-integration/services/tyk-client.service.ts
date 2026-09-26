@@ -138,11 +138,76 @@ const CIRCUIT_NAME = 'tyk';
  */
 export const tykCacheKeyPattern = (tykApiId: string): string => `cache-${tykApiId}*`;
 
-/** What `POST /tyk/debug` answers with: the upstream response plus the gateway's own log lines. */
+/** A `POST /tyk/debug` answer, parsed: the upstream response plus the gateway's own log lines. */
 export interface TykDebugResult {
   response?: { code?: number; headers?: Record<string, string>; body?: string };
   logs?: { mw?: string; msg?: string; level?: string }[];
-  [key: string]: unknown;
+}
+
+const RESPONSE_MARK = '====== Response ======\n';
+
+/** The `====== Response ======` part of Tyk's raw dump as code, headers and body. */
+function parseResponseDump(dump: string): TykDebugResult['response'] {
+  const at = dump.indexOf(RESPONSE_MARK);
+  if (at < 0) return undefined;
+  const section = dump.slice(at + RESPONSE_MARK.length);
+  // ponytail: the dump comes from a recorder, never chunk-framed (checked on 5.15.0), so the body is
+  // everything after the first blank line.
+  const split = section.indexOf('\r\n\r\n');
+  const [statusLine = '', ...lines] = (split < 0 ? section : section.slice(0, split)).split('\r\n');
+  // A Map, not an object: header names come from the upstream, and `constructor` or `__proto__` are
+  // legal ones.
+  const headers = new Map<string, string>();
+  for (const line of lines) {
+    const colon = line.indexOf(':');
+    if (colon < 1) continue;
+    const name = line.slice(0, colon);
+    const value = line.slice(colon + 1).trim();
+    const seen = headers.get(name);
+    headers.set(name, seen === undefined ? value : `${seen}, ${value}`);
+  }
+  const code = Number(statusLine.split(' ')[1]);
+  return {
+    ...(Number.isInteger(code) ? { code } : {}),
+    headers: Object.fromEntries(headers),
+    body: split < 0 ? '' : section.slice(split + 4),
+  };
+}
+
+/** Tyk's NDJSON log lines as entries, keeping only what the Designer shows. */
+function parseLogLines(ndjson: string): NonNullable<TykDebugResult['logs']> {
+  const entries: NonNullable<TykDebugResult['logs']> = [];
+  for (const line of ndjson.split('\n')) {
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { level, msg, mw } = entry as Record<string, unknown>;
+    entries.push({
+      ...(typeof level === 'string' ? { level } : {}),
+      ...(typeof msg === 'string' ? { msg } : {}),
+      ...(typeof mw === 'string' ? { mw } : {}),
+    });
+  }
+  return entries;
+}
+
+/**
+ * Tyk 5.15.0's `/debug` answers `{message, response, logs}` where `response` is a raw HTTP dump and
+ * `logs` is NDJSON — both strings. Turn them into the {@link TykDebugResult} the Designer reads.
+ * Anything unrecognised is dropped rather than thrown on.
+ */
+export function parseDebugEnvelope(raw: unknown): TykDebugResult {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const { response, logs } = raw as Record<string, unknown>;
+  const parsed = typeof response === 'string' ? parseResponseDump(response) : undefined;
+  return {
+    ...(parsed ? { response: parsed } : {}),
+    ...(typeof logs === 'string' ? { logs: parseLogLines(logs) } : {}),
+  };
 }
 
 /**
@@ -425,11 +490,11 @@ export class TykClientService {
    * `stripSecrets`.
    */
   async debug(payload: Record<string, unknown>): Promise<TykDebugResult> {
-    const raw = await this.request<TykDebugResult>('/debug', {
+    const raw = await this.request<Record<string, unknown>>('/debug', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    return stripSecrets(raw, this.adminKey);
+    return stripSecrets(parseDebugEnvelope(raw), this.adminKey);
   }
 
   /** Read a definition from one specific node — the drift check's per-node fetch. */

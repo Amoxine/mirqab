@@ -1,8 +1,30 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsObject, IsOptional, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUrl, Matches, MaxLength, ValidateBy } from 'class-validator';
+import { HEADER_NAME, HEADER_VALUE, ITEM_MAX, LIST_MAX } from './api-config.dto';
 import { IsAllowedProxyUrl } from './proxy-url.validator';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
+
+/**
+ * Why a `headers` map is unacceptable, or null. Same rules as `ApiHeaderDto`. Checked here because
+ * anything else reaches Tyk's /debug and comes back as an opaque 400 "Request malformed".
+ */
+function headerMapProblem(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return 'headers must be an object';
+  const entries = Object.entries(value);
+  if (entries.length > LIST_MAX)
+    return `headers must not have more than ${String(LIST_MAX)} entries`;
+  for (const [name, v] of entries) {
+    if (name.length > ITEM_MAX || !HEADER_NAME.test(name))
+      return `header name "${name.slice(0, 40)}" is not an RFC 7230 token`;
+    if (typeof v !== 'string') return `header "${name}" must have a string value`;
+    if (v.length > ITEM_MAX)
+      return `header "${name}" value is longer than ${String(ITEM_MAX)} characters`;
+    if (!HEADER_VALUE.test(v)) return `header "${name}" value must not contain CR, LF or NUL`;
+  }
+  return null;
+}
 
 /**
  * A sample request to run against an API's own definition, for the Designer's "Test request".
@@ -29,7 +51,13 @@ export class DebugRequestDto {
 
   @ApiPropertyOptional({ type: Object, example: { 'X-Trace': 'abc' } })
   @IsOptional()
-  @IsObject()
+  @ValidateBy({
+    name: 'isHeaderMap',
+    validator: {
+      validate: (value: unknown) => headerMapProblem(value) === null,
+      defaultMessage: (args) => headerMapProblem(args?.value) ?? 'headers is invalid',
+    },
+  })
   headers?: Record<string, string>;
 
   @ApiPropertyOptional({ description: 'Request body, sent verbatim' })

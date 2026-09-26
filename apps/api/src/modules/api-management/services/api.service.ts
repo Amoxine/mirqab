@@ -163,12 +163,21 @@ function toJsonObject(config: ApiConfigDto): Prisma.InputJsonObject {
 
 
 
-/** Shape `POST /tyk/debug` wants for the sample request itself. */
+/**
+ * Shape `POST /tyk/debug` wants for the sample request itself. Tyk decodes `headers` as Go's
+ * `http.Header` (name -> string[]); a plain string value fails the decode ("Request malformed").
+ */
 function buildDebugRequest(dto: DebugRequestDto): Record<string, unknown> {
   return {
     method: dto.method,
     path: dto.path,
-    ...(dto.headers ? { headers: dto.headers } : {}),
+    ...(dto.headers
+      ? {
+          headers: Object.fromEntries(
+            Object.entries(dto.headers).map(([name, value]) => [name, [value]]),
+          ),
+        }
+      : {}),
     ...(dto.body === undefined ? {} : { body: dto.body }),
   };
 }

@@ -180,6 +180,20 @@ describe('ApiService sync with endpoint governance (OAS-03)', () => {
     const payload = (tyk.debug.mock.calls[0] as { oas: unknown }[])[0];
     expect(operationsOf(payload.oas).og_ep1).toEqual({ block: { enabled: true } });
   });
+
+  // Tyk's /debug decodes `headers` as Go's http.Header (name -> string[]); a plain string value
+  // fails the whole decode and comes back as 400 "Request malformed" (proved on tyk-gateway 5.15.0).
+  it('debug request headers reach Tyk as name -> string[], never name -> string', async () => {
+    const { tyk, service } = setup();
+    db.findFirst.mockResolvedValue(row({}));
+    await service.debugRequest(ID, TENANT, {
+      method: 'GET',
+      path: '/health',
+      headers: { 'X-Trace': 'abc' },
+    });
+    const payload = (tyk.debug.mock.calls[0] as { request: { headers?: unknown } }[])[0];
+    expect(payload.request.headers).toEqual({ 'X-Trace': ['abc'] });
+  });
 });
 
 describe('ApiService background syncs are serialised per API (M3)', () => {

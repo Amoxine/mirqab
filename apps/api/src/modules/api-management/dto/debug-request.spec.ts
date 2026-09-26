@@ -2,7 +2,10 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { DebugRequestDto } from './debug-request.dto';
-import { stripSecrets } from '../../tyk-integration/services/tyk-client.service';
+import {
+  parseDebugEnvelope,
+  stripSecrets,
+} from '../../tyk-integration/services/tyk-client.service';
 
 jest.mock('@open-gateway/database', () => ({ prisma: {} }));
 
@@ -33,6 +36,33 @@ describe('Test-request DTO reuses the SSRF deny list', () => {
   });
 });
 
+describe('Test-request headers are checked here, not left for Tyk to reject as "Request malformed"', () => {
+  const headerErrors = (headers: unknown) =>
+    validate({ method: 'GET', path: '/x', headers }).filter((e) => e.property === 'headers');
+
+  it('accepts a plain name -> string map', () => {
+    expect(headerErrors({ 'X-Trace': 'abc', Authorization: 'Bearer t' })).toHaveLength(0);
+  });
+
+  it('rejects a value that is not a string', () => {
+    for (const value of [['abc'], 42, { a: 'b' }, null])
+      expect(headerErrors({ 'X-Trace': value })).toHaveLength(1);
+  });
+
+  it('rejects a name that is not an RFC 7230 token and a value carrying CR, LF or NUL', () => {
+    expect(headerErrors({ 'X Trace': 'abc' })).toHaveLength(1);
+    expect(headerErrors({ 'X-Trace': 'a\r\nX-Evil: 1' })).toHaveLength(1);
+    expect(headerErrors({ 'X-Trace': 'a\0' })).toHaveLength(1);
+  });
+
+  it('caps the header count and each name/value length', () => {
+    const many = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`X-H${String(i)}`, 'v']));
+    expect(headerErrors(many)).toHaveLength(1);
+    expect(headerErrors({ 'X-Trace': 'v'.repeat(256) })).toHaveLength(1);
+    expect(headerErrors({ ['X-' + 'n'.repeat(254)]: 'v' })).toHaveLength(1);
+  });
+});
+
 describe('stripSecrets keeps the gateway secret out of the browser', () => {
   const SECRET = 'super-secret-admin-key';
 
@@ -56,5 +86,69 @@ describe('stripSecrets keeps the gateway secret out of the browser', () => {
     // Splitting on '' would shred every character of the response.
     const payload = { response: { body: 'abc' } };
     expect(stripSecrets(payload, '')).toEqual(payload);
+  });
+});
+
+// Tyk 5.15.0 answers /debug with two STRINGS — a raw HTTP dump and NDJSON logs — not the objects the
+// Designer reads. Fixtures below are trimmed captures from the live 5.15.0 gateway.
+describe('parseDebugEnvelope turns the 5.15.0 /debug strings into the declared result', () => {
+  const dump = (response: string) =>
+    '====== Request ======\nGET /health HTTP/1.1\r\nHost: api-qbus.qbot.ma\r\nX-Trace: abc\r\n\r\n\n' +
+    `====== Response ======\n${response}`;
+
+  it('reads code, headers and body out of the response dump', () => {
+    const out = parseDebugEnvelope({
+      message: 'ok',
+      response: dump(
+        'HTTP/1.1 200 OK\r\nContent-Length: 30\r\nContent-Type: application/json; charset=utf-8\r\n' +
+          'Vary: Accept-Encoding\r\nVary: Origin\r\n\r\n{"status":"ok","checks":{"a":1}}',
+      ),
+    });
+    expect(out.response).toEqual({
+      code: 200,
+      headers: {
+        'Content-Length': '30',
+        'Content-Type': 'application/json; charset=utf-8',
+        Vary: 'Accept-Encoding, Origin',
+      },
+      body: '{"status":"ok","checks":{"a":1}}',
+    });
+  });
+
+  it('keeps a gateway-generated error response and a body with its own blank lines intact', () => {
+    const out = parseDebugEnvelope({
+      response: dump(
+        'HTTP/1.1 500 Internal Server Error\r\nX-Generator: tyk.io\r\n\r\n{\n    "error": "There was a problem proxying the request"\n}',
+      ),
+    });
+    expect(out.response?.code).toBe(500);
+    expect(out.response?.body).toBe(
+      '{\n    "error": "There was a problem proxying the request"\n}',
+    );
+  });
+
+  it('turns NDJSON logs into entries, keeping only level/msg/mw and skipping junk lines', () => {
+    const logs =
+      '{"level":"warning","msg":"Legacy path detected! Upgrade to extended.","time":"t"}\n' +
+      'not json\n' +
+      '{"api_id":"a","level":"error","msg":"http: proxy error","mw":"ReverseProxy","server_name":"127.0.0.1:1"}\n';
+    expect(parseDebugEnvelope({ logs }).logs).toEqual([
+      { level: 'warning', msg: 'Legacy path detected! Upgrade to extended.' },
+      { level: 'error', msg: 'http: proxy error', mw: 'ReverseProxy' },
+    ]);
+  });
+
+  it('treats upstream header names like constructor and __proto__ as plain names', () => {
+    const out = parseDebugEnvelope({
+      response: dump('HTTP/1.1 204 No Content\r\nconstructor: a\r\n__proto__: b\r\n\r\n'),
+    });
+    expect(out.response?.headers?.constructor).toBe('a');
+    expect(Object.getOwnPropertyDescriptor(out.response?.headers, '__proto__')?.value).toBe('b');
+  });
+
+  it('never throws on shapes it does not recognise', () => {
+    expect(parseDebugEnvelope(null)).toEqual({});
+    expect(parseDebugEnvelope({ response: 'no response section here' })).toEqual({});
+    expect(parseDebugEnvelope({ response: { code: 204 }, logs: 7 })).toEqual({});
   });
 });

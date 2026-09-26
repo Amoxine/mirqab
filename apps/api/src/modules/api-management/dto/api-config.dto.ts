@@ -22,8 +22,12 @@ import type { EndpointGovernance } from '../services/endpoint-governance';
 
 // main.ts runs ValidationPipe with forbidNonWhitelisted: every accepted field must be decorated here.
 
-const LIST_MAX = 50;
-const ITEM_MAX = 255;
+export const LIST_MAX = 50;
+export const ITEM_MAX = 255;
+/** RFC 7230 token: what a header name may be. */
+export const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+/** No CR, LF or NUL in a header value: otherwise one value injects extra headers. */
+export const HEADER_VALUE = /^[^\r\n\0]*$/;
 
 /**
  * The global ValidationPipe uses enableImplicitConversion, which would turn "false" into true and
@@ -239,13 +243,13 @@ export class ApiHeaderDto {
   @ApiProperty({ example: 'X-Request-Source' })
   @IsString()
   @MaxLength(ITEM_MAX)
-  @Matches(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, { message: 'header name must be an RFC 7230 token' })
+  @Matches(HEADER_NAME, { message: 'header name must be an RFC 7230 token' })
   name!: string;
 
   @ApiProperty({ example: 'open-gateway' })
   @IsString()
   @MaxLength(ITEM_MAX)
-  @Matches(/^[^\r\n\0]*$/, { message: 'header value must not contain CR, LF or NUL' })
+  @Matches(HEADER_VALUE, { message: 'header value must not contain CR, LF or NUL' })
   value!: string;
 }
 
