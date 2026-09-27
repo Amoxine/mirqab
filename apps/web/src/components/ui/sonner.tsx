@@ -1,11 +1,15 @@
 'use client';
 
+import { useTheme } from 'next-themes';
 import { Toaster as SonnerToaster } from 'sonner';
 
 function Toaster() {
+  // Follow the user's pick (theme switcher), not just the OS: a hard-coded "system" left toasts
+  // light on a page the user had switched to dark.
+  const { theme = 'system' } = useTheme();
   return (
     <SonnerToaster
-      theme="system"
+      theme={theme === 'light' || theme === 'dark' ? theme : 'system'}
       position="top-right"
       toastOptions={{
         classNames: {

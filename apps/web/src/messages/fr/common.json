@@ -17,5 +17,11 @@
     "message": "Une erreur s'est produite lors de son affichage. Réessayez — si le problème persiste, rechargez la page."
   },
   "clearFilters": "Effacer les filtres",
-  "editItem": "Modifier : {name}"
+  "editItem": "Modifier : {name}",
+  "themeSwitcher": {
+    "label": "Thème",
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système"
+  }
 }

@@ -17,5 +17,11 @@
     "message": "Something went wrong while displaying it. Try again — if it keeps happening, reload the page."
   },
   "clearFilters": "Clear filters",
-  "editItem": "Edit {name}"
+  "editItem": "Edit {name}",
+  "themeSwitcher": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  }
 }

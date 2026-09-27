@@ -69,7 +69,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
     <html lang={locale} dir={dir} suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <NextIntlClientProvider>
-          <Providers>{children}</Providers>
+          <Providers dir={dir}>{children}</Providers>
         </NextIntlClientProvider>
       </body>
     </html>

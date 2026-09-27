@@ -85,20 +85,25 @@
   --color-foreground: #f1f5f9;
   --color-surface: #1e293b;
 
-  --color-secondary: #1e293b;
+  /* Secondary and muted used to equal the card (#1e293b), so on a card a secondary badge/button
+     lost its fill, and skeletons, the tab list, table hover/selected rows and menu separators
+     vanished. Both now sit a step above the card (checked by scripts/check-contrast.js). */
+  --color-secondary: #334155;
   --color-secondary-foreground: #f1f5f9;
 
   --color-card: #1e293b;
   --color-card-foreground: #f1f5f9;
   --color-popover: #1e293b;
   --color-popover-foreground: #f1f5f9;
-  --color-muted: #1e293b;
+  --color-muted: #2a3a50;
   /* #94a3b8 dropped to 4.04:1 on the accent surface (hovered menu items with secondary text). */
   --color-muted-foreground: #a3b1c6;
   --color-accent: #334155;
   --color-accent-foreground: #f1f5f9;
   --color-border: #334155;
-  --color-input: #334155;
+  /* Field outlines and the off-state switch track: #334155 was 1.4:1 on a card, so empty inputs
+     read as flat text. slate-500 clears the 3:1 non-text minimum on both page and card. */
+  --color-input: #64748b;
 
   --color-text-primary: #f1f5f9;
   --color-text-secondary: #a3b1c6;

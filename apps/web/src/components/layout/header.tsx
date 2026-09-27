@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Breadcrumb } from '@/components/layout/breadcrumb';
 import { LocaleSwitcher } from '@/components/layout/locale-switcher';
 import { MobileNav } from '@/components/layout/mobile-nav';
+import { ThemeSwitcher } from '@/components/layout/theme-switcher';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -59,6 +60,7 @@ export function Header() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2 md:gap-4">
+        <ThemeSwitcher />
         <LocaleSwitcher />
 
         {/* User Menu */}
