@@ -1,6 +1,6 @@
 {
-  "_comment": "mapToTykOas output of the COMMITTED mapper at 8ec2fe5 (before OAS-03), for governance-free APIs. Regenerate only from a commit, never from the working tree.",
-  "source": "git show 8ec2fe5:apps/api/src/modules/api-management/services/{tyk-mappers,endpoint-operations}.ts",
+  "_comment": "mapToTykOas output of the COMMITTED mapper at 115399f (do_not_track default fix, before OAS-03), for governance-free APIs. Regenerate only from a commit, never from the working tree.",
+  "source": "git show 115399fba11e7a8a568fe32711b6587e19767400:apps/api/src/modules/api-management/services/{tyk-mappers,endpoint-operations}.ts",
   "cases": [
     {
       "name": "keyless, API-wide mock",
@@ -1369,6 +1369,11 @@
             }
           },
           "middleware": {
+            "global": {
+              "trafficLogs": {
+                "enabled": true
+              }
+            },
             "operations": {
               "catchAllRootGET": {
                 "mockResponse": {
@@ -5008,6 +5013,9 @@
                 "maxAge": 60,
                 "optionsPassthrough": false,
                 "debug": false
+              },
+              "trafficLogs": {
+                "enabled": true
               }
             },
             "operations": {
@@ -7538,6 +7546,9 @@
               "requestSizeLimit": {
                 "enabled": true,
                 "value": 1000
+              },
+              "trafficLogs": {
+                "enabled": true
               }
             },
             "operations": {

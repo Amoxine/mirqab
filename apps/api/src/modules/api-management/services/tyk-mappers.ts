@@ -539,12 +539,14 @@ export function mapToTykOas(
     // the smaller of the two enforcers and the 413 comes from the gateway.
     globalMiddleware.requestSizeLimit = { enabled: true, value: requestSizeLimitBytes };
   }
-  if (doNotTrack !== undefined) {
-    // S6 caveat 3: POLARITY INVERTS. classic `do_not_track: true` == OAS
-    // `trafficLogs.enabled: false`. Copying the boolean across turns analytics back on for exactly
-    // the APIs that asked not to be tracked.
-    globalMiddleware.trafficLogs = { enabled: !doNotTrack };
-  }
+  // Unlike every other block above, this one is NOT conditional on `doNotTrack !== undefined`.
+  // Live-verified against v5.15.0 (2026-09-27 spike): omitting `trafficLogs` entirely from an OAS
+  // def makes Tyk default it to DISABLED — the opposite of the classic mapper's own stated default
+  // ("the gateway-wide default stays false", i.e. tracked). Without this, every API created through
+  // the OAS path (the platform's default `defFormat`) silently has NO analytics — no audit-traffic
+  // link, no traffic inspector, nothing — until an operator explicitly sets `doNotTrack: false`.
+  // S6 caveat 3: POLARITY INVERTS. classic `do_not_track: true` == OAS `trafficLogs.enabled: false`.
+  globalMiddleware.trafficLogs = { enabled: !(doNotTrack ?? false) };
 
   // An API-wide circuit breaker has no home on `upstream` or `middleware.global` — measured against
   // the v5.15.0 schema, `circuitBreaker` exists ONLY on `X-Tyk-Operation`. So an API-level breaker

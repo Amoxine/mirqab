@@ -350,8 +350,14 @@ describe('mapToTykOas — golden file against every classic key', () => {
       expect(d).not.toHaveProperty('security');
     });
 
-    it('omits middleware when there is no cors and no doNotTrack', () => {
-      expect(oas()['x-tyk-api-gateway']).not.toHaveProperty('middleware');
+    it('omits middleware.global.cors when there is no cors, but always emits trafficLogs (bug fix, 2026-09-27 live spike)', () => {
+      // Regression guard: `middleware` used to be omitted entirely here, which meant Tyk's own
+      // OAS-format default for an absent `trafficLogs` applied — DISABLED, unlike classic's absent
+      // `do_not_track` which defaults to tracked. That silently broke analytics for every API
+      // created through this (default) format until an operator opted in explicitly.
+      const global = oas()['x-tyk-api-gateway'].middleware?.global;
+      expect(global).not.toHaveProperty('cors');
+      expect(global?.trafficLogs).toEqual({ enabled: true });
     });
 
     it('leaves the classic mapper untouched — both formats stay correct side by side', () => {
