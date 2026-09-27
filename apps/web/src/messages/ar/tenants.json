@@ -81,7 +81,7 @@
   },
   "invite": {
     "title": "دعوة عضو",
-    "description": "أضف مستخدمًا موجودًا في Open Gateway إلى هذه المؤسسة عبر بريده الإلكتروني.",
+    "description": "أضف مستخدمًا موجودًا في MIRQAB إلى هذه المؤسسة عبر بريده الإلكتروني.",
     "emailPlaceholder": "person@example.com",
     "rolePlaceholder": "اختر دورًا",
     "submit": "دعوة",

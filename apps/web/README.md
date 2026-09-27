@@ -1,6 +1,6 @@
-# Open Gateway Web
+# MIRQAB Web
 
-> Next.js 15 frontend for the Open Gateway SaaS Admin Dashboard
+> Next.js 15 frontend for the MIRQAB SaaS Admin Dashboard
 
 ## Overview
 

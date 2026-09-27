@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Open Gateway — Full Stack Installer (v2.0)
+# MIRQAB — Full Stack Installer (v2.0)
 # ============================================================================
-# One-command setup for the entire Open Gateway stack.
+# One-command setup for the entire MIRQAB stack.
 #
 # Usage:
 #   bash install.sh                    # Interactive mode
@@ -942,7 +942,7 @@ log "Installation complete in $((TOTAL_DURATION / 60)) min $((TOTAL_DURATION % 6
 echo "" >&3
 echo -e "${BOLD}${GREEN}" >&3
 echo "╔══════════════════════════════════════════════════════════════╗" >&3
-echo "║     🎉 Open Gateway Setup Complete! 🎉                      ║" >&3
+echo "║     🎉 MIRQAB Setup Complete! 🎉                            ║" >&3
 echo "╚══════════════════════════════════════════════════════════════╝" >&3
 echo -e "${NC}" >&3
 

@@ -77,8 +77,8 @@ async function bootstrap() {
   // that was missing to actually serve them. Path is spelled out (not just 'docs') because
   // SwaggerModule.setup ignores the global prefix above unless told to repeat it.
   const openApiConfig = new DocumentBuilder()
-    .setTitle('Open Gateway API')
-    .setDescription('Control-plane API for the Open Gateway admin dashboard')
+    .setTitle('MIRQAB API')
+    .setDescription('Control-plane API for the MIRQAB admin dashboard')
     .setVersion('0.1.0')
     .addBearerAuth()
     .build();

@@ -576,7 +576,7 @@ export class TenantService {
   }
 
   /**
-   * Finds an existing Open Gateway user by email, for an admin inviting them into `tenantId`.
+   * Finds an existing MIRQAB user by email, for an admin inviting them into `tenantId`.
    * Requires membership in that tenant (same as every other read here) so this can't be used as a
    * general user directory across tenants the caller isn't in.
    *
@@ -609,7 +609,7 @@ export class TenantService {
   }
 
   /**
-   * Invites an email that has no Open Gateway account yet (V1-USR-01, plan §3 Option F): a `User`
+   * Invites an email that has no MIRQAB account yet (V1-USR-01, plan §3 Option F): a `User`
    * row with no Kratos identity, assigned to the tenant through the ordinary assignUser path. No
    * Kratos call, no email — the row stays `pending` until that person signs up through Kratos's own
    * self-service flow with this email and verifies it, and the login route (resolveOrProvisionUser)

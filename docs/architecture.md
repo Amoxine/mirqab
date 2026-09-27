@@ -1,6 +1,6 @@
 # Architecture
 
-> System architecture decisions, module design, and technical rationale for Open Gateway
+> System architecture decisions, module design, and technical rationale for MIRQAB
 
 ## Table of Contents
 

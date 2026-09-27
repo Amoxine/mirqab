@@ -15,14 +15,14 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Open Gateway - Admin Dashboard',
-    template: '%s | Open Gateway',
+    default: 'MIRQAB - Admin Dashboard',
+    template: '%s | MIRQAB',
   },
   description: 'Production-ready SaaS admin dashboard',
   keywords: ['admin', 'dashboard', 'saas', 'management'],
-  authors: [{ name: 'Open Gateway Team' }],
-  creator: 'Open Gateway',
-  publisher: 'Open Gateway',
+  authors: [{ name: 'MIRQAB Team' }],
+  creator: 'MIRQAB',
+  publisher: 'MIRQAB',
   formatDetection: {
     email: false,
     address: false,
@@ -33,13 +33,13 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     url: APP_URL,
-    title: 'Open Gateway - Admin Dashboard',
+    title: 'MIRQAB - Admin Dashboard',
     description: 'Production-ready SaaS admin dashboard',
-    siteName: 'Open Gateway',
+    siteName: 'MIRQAB',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Open Gateway - Admin Dashboard',
+    title: 'MIRQAB - Admin Dashboard',
     description: 'Production-ready SaaS admin dashboard',
   },
   robots: {

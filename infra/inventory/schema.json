@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-gateway.internal/schemas/inventory-v1.json",
-  "title": "Open Gateway inventory (schema_version 1)",
+  "title": "MIRQAB inventory (schema_version 1)",
   "description": "Public, synthetic schema for the HA-observability inventory (docs/ha-observability/02 §2.1). The real inventory, and the restricted management-IP/rack/rack_unit values, live in a private repository (D-OBS-04) — this file only describes the shape.",
   "type": "object",
   "additionalProperties": false,

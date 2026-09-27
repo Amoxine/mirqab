@@ -1,4 +1,4 @@
-# SISYPHUS MASTER PLAN — Open Gateway (historical)
+# SISYPHUS MASTER PLAN — MIRQAB (historical)
 
 > **Historical planning document, not maintained.** This is the original April-2026 generation
 > plan, kept for archaeology only. It describes infrastructure (Kubernetes/Helm manifests, a

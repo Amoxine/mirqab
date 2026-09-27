@@ -81,7 +81,7 @@
   },
   "invite": {
     "title": "Invite a member",
-    "description": "Add an existing Open Gateway user to this tenant by email.",
+    "description": "Add an existing MIRQAB user to this tenant by email.",
     "emailPlaceholder": "person@example.com",
     "rolePlaceholder": "Select a role",
     "submit": "Invite",

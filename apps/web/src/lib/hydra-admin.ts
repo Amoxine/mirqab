@@ -80,7 +80,7 @@ let ensured: Promise<void> | null = null;
  */
 const dashboardClientDef = {
   client_id: DASHBOARD_CLIENT_ID,
-  client_name: 'Open Gateway Dashboard',
+  client_name: 'MIRQAB Dashboard',
   token_endpoint_auth_method: 'none',
   grant_types: ['authorization_code', 'refresh_token'],
   response_types: ['code'],

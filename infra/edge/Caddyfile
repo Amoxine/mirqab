@@ -1,4 +1,4 @@
-# Open Gateway edge — TLS termination + WAF (WP26b).
+# MIRQAB edge — TLS termination + WAF (WP26b).
 #
 # One Caddy, five HTTPS listeners on the port numbers the stack already published. Nothing else
 # publishes any more (`expose:` in docker-compose.yml), which is what closes the bypass where a LAN

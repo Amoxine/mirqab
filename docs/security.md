@@ -1,6 +1,6 @@
 # Security Documentation
 
-> Security architecture, threat model, and hardening procedures for Open Gateway
+> Security architecture, threat model, and hardening procedures for MIRQAB
 
 ## ⚠️ Implementation status — read this first
 
@@ -55,7 +55,7 @@ is not published, and it must be set for any shared or exposed deployment.
 
 ## Security Architecture
 
-Open Gateway **targets** defense in depth with 5 independent security layers. The diagram below is the
+MIRQAB **targets** defense in depth with 5 independent security layers. The diagram below is the
 target design, not an inventory of the current build: network policies, mTLS, RLS, Vault-backed
 secrets and asymmetric JWT signing are **PLANNED**. See [Implementation status](#️-implementation-status--read-this-first).
 
@@ -132,7 +132,7 @@ secrets and asymmetric JWT signing are **PLANNED**. See [Implementation status](
 
 ## Tyk Credential Isolation (CRITICAL)
 
-**This is the most critical security requirement in Open Gateway.** Tyk Admin credentials must **NEVER** be exposed to the frontend or logged.
+**This is the most critical security requirement in MIRQAB.** Tyk Admin credentials must **NEVER** be exposed to the frontend or logged.
 
 ### Threat Model
 
@@ -726,7 +726,7 @@ Audit logs are exported weekly to cold storage (S3 Glacier) for long-term retent
 
 ### Responsible Disclosure
 
-If you discover a security vulnerability in Open Gateway:
+If you discover a security vulnerability in MIRQAB:
 
 1. **DO NOT** open a public GitHub issue
 2. **DO NOT** disclose the vulnerability publicly

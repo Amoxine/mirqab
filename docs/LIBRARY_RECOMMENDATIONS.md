@@ -1,4 +1,4 @@
-# Library Recommendations — Open Gateway
+# Library Recommendations — MIRQAB
 
 > Curated list of production-ready JavaScript/TypeScript libraries for this project.
 > Goal: avoid reinventing the wheel, minimize boilerplate, maximize reliability.

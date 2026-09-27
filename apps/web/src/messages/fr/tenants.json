@@ -81,7 +81,7 @@
   },
   "invite": {
     "title": "Inviter un membre",
-    "description": "Ajoutez un utilisateur Open Gateway existant à cette organisation par e-mail.",
+    "description": "Ajoutez un utilisateur MIRQAB existant à cette organisation par e-mail.",
     "emailPlaceholder": "personne@exemple.com",
     "rolePlaceholder": "Sélectionner un rôle",
     "submit": "Inviter",
