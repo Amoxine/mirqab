@@ -1,0 +1,355 @@
+rule_files:
+  - ../host.yml
+
+evaluation_interval: 1m
+
+tests:
+  # HostDown (AL-HOST-01, internal half)
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node", instance="h01.example.internal:9100"}'
+        values: '0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HostDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+              job: node
+              instance: h01.example.internal:9100
+            exp_annotations:
+              summary: 'node_exporter target h01.example.internal:9100 is unreachable'
+              description: 'Prometheus cannot scrape node_exporter on h01.example.internal:9100. Host-level dashboards (DB-03) go blind for this host, not just this one metric.'
+              runbook: RB-04
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node", instance="h01.example.internal:9100"}'
+        values: '1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HostDown
+        exp_alerts: []
+
+  # HostCpuSaturated (AL-HOST-02) — 95% busy, sustained past the 15m `for`.
+  - interval: 1m
+    input_series:
+      - series: 'node_cpu_seconds_total{instance="h01", mode="idle"}'
+        values: '0+1x20'
+      - series: 'node_cpu_seconds_total{instance="h01", mode="user"}'
+        values: '0+19x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostCpuSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              instance: h01
+            exp_annotations:
+              summary: 'CPU busy > 90% (or PSI-saturated) on h01 for 15m'
+              description: '98.33% busy or PSI-waiting, sustained. No load test has authorized either threshold yet (03 §3.3) — treat both as drafts.'
+              runbook: RB-01
+
+  - interval: 1m
+    input_series:
+      - series: 'node_cpu_seconds_total{instance="h01", mode="idle"}'
+        values: '0+50x20'
+      - series: 'node_cpu_seconds_total{instance="h01", mode="user"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostCpuSaturated
+        exp_alerts: []
+
+  # HostFilesystemReadOnly (AL-HOST-06)
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_readonly{instance="h01", mountpoint="/data"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HostFilesystemReadOnly
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+              instance: h01
+              mountpoint: /data
+            exp_annotations:
+              summary: '/data on h01 is mounted read-only'
+              description: 'A read-only remount is usually the kernel reacting to a disk error. RB-02: never delete Postgres WAL by hand.'
+              runbook: RB-02
+
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_readonly{instance="h01", mountpoint="/data"}'
+        values: '0 0 0'
+      - series: 'node_filesystem_readonly{instance="h01", mountpoint="/proc/sys"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HostFilesystemReadOnly
+        exp_alerts: []
+
+  # HostMemoryLow (AL-HOST-03, memory half): 5% available, sustained past 10m.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="h01"}'
+        values: '50000000x12'
+      - series: 'node_memory_MemTotal_bytes{instance="h01"}'
+        values: '1000000000x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: HostMemoryLow
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+              instance: h01
+            exp_annotations:
+              summary: 'Available memory below 10% on h01'
+              description: '5% of total memory available, sustained for 10m.'
+              runbook: RB-01
+
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="h01"}'
+        values: '500000000x12'
+      - series: 'node_memory_MemTotal_bytes{instance="h01"}'
+        values: '1000000000x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: HostMemoryLow
+        exp_alerts: []
+
+  # HostOomKilling (AL-HOST-03, OOM half)
+  - interval: 1m
+    input_series:
+      - series: 'node_vmstat_oom_kill{instance="h01"}'
+        values: '0+1x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostOomKilling
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+              instance: h01
+            exp_annotations:
+              summary: 'The OOM killer ran on h01'
+              description: '5 OOM kill(s) in 10m at the host level — check `dmesg` for which process (RB-01).'
+              runbook: RB-01
+
+  - interval: 1m
+    input_series:
+      - series: 'node_vmstat_oom_kill{instance="h01"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostOomKilling
+        exp_alerts: []
+
+  # HostDiskAlmostFull (AL-HOST-05): 5% free, sustained past 5m.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '500000000x8'
+      - series: 'node_filesystem_size_bytes{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '10000000000x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: HostDiskAlmostFull
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+              instance: h01
+              mountpoint: /data
+              fstype: ext4
+            exp_annotations:
+              summary: 'Disk on h01:/data below 10% free'
+              description: '5% free, sustained for 5m.'
+              runbook: RB-02
+
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '5000000000x8'
+      - series: 'node_filesystem_size_bytes{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '10000000000x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: HostDiskAlmostFull
+        exp_alerts: []
+
+  # HostInodesAlmostFull: 5% inodes free, sustained past 5m.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_files_free{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '5000x8'
+      - series: 'node_filesystem_files{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '100000x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: HostInodesAlmostFull
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              instance: h01
+              mountpoint: /data
+              fstype: ext4
+            exp_annotations:
+              summary: 'Inodes on h01:/data below 10% free'
+              description: '5% of inodes free, sustained for 5m.'
+              runbook: RB-02
+
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_files_free{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '50000x8'
+      - series: 'node_filesystem_files{instance="h01", mountpoint="/data", fstype="ext4"}'
+        values: '100000x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: HostInodesAlmostFull
+        exp_alerts: []
+
+  # HostDiskLatencyHigh (AL-HOST-07): ~0.3s average per op (read_time rate 0.5/s over reads rate
+  # 1.667/s), sustained past 15m. Write side held flat at 0 so the `+` has a matching series to
+  # add rather than dropping the whole expression for missing labels.
+  - interval: 1m
+    input_series:
+      - series: 'node_disk_read_time_seconds_total{instance="h01", device="sda"}'
+        values: '0+30x20'
+      - series: 'node_disk_write_time_seconds_total{instance="h01", device="sda"}'
+        values: '0x20'
+      - series: 'node_disk_reads_completed_total{instance="h01", device="sda"}'
+        values: '0+100x20'
+      - series: 'node_disk_writes_completed_total{instance="h01", device="sda"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostDiskLatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              instance: h01
+              device: sda
+            exp_annotations:
+              summary: 'Disk I/O latency high on h01:sda'
+              description: '300ms average per operation, sustained for 15m. PLACEHOLDER threshold (100ms) — no baseline yet.'
+              runbook: RB-02
+
+  - interval: 1m
+    input_series:
+      - series: 'node_disk_read_time_seconds_total{instance="h01", device="sda"}'
+        values: '0+5x20'
+      - series: 'node_disk_write_time_seconds_total{instance="h01", device="sda"}'
+        values: '0x20'
+      - series: 'node_disk_reads_completed_total{instance="h01", device="sda"}'
+        values: '0+100x20'
+      - series: 'node_disk_writes_completed_total{instance="h01", device="sda"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostDiskLatencyHigh
+        exp_alerts: []
+
+  # HostNetworkErrorsOrDns (AL-HOST-08, error/drop half only). Rate-based: 2/s sustained past
+  # `for: 10m`. obs-w2's lab host has a resting tx_drop=21 baseline — this must NOT fire on a
+  # one-time bump, only on an ongoing rate.
+  - interval: 1m
+    input_series:
+      - series: 'node_network_receive_errs_total{instance="h01", device="eth0"}'
+        values: '0+120x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostNetworkErrorsOrDns
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              instance: h01
+              device: eth0
+            exp_annotations:
+              summary: 'Network errors or drops on h01:eth0'
+              description: 'One or more of receive/transmit errors or drops above 1/s, sustained for 10m — check all four counters for this device.'
+              runbook: RB-03
+
+  # A one-time bump (e.g. obs-w2's resting tx_drop=21) that never recurs must not fire: constant
+  # after the initial jump means rate() over any later 5m window is 0.
+  - interval: 1m
+    input_series:
+      - series: 'node_network_transmit_drop_total{instance="h01", device="eth0"}'
+        values: '21 21x19'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostNetworkErrorsOrDns
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'node_network_receive_errs_total{instance="h01", device="eth0"}'
+        values: '0+30x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HostNetworkErrorsOrDns
+        exp_alerts: []
+
+  # HostClockSkew (AL-HOST-09): 200ms offset, sustained past 10m.
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="h01"}'
+        values: '0.2x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: HostClockSkew
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              instance: h01
+            exp_annotations:
+              summary: 'Clock offset above 50ms on h01'
+              description: '200ms offset, sustained for 10m — check NTP/chrony.'
+              runbook: RB-03
+
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="h01"}'
+        values: '0.01x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: HostClockSkew
+        exp_alerts: []
+
+  # HostRebooted (AL-HOST-10, info): node_boot_time_seconds jumps once within the last hour.
+  - interval: 1m
+    input_series:
+      - series: 'node_boot_time_seconds{instance="h01"}'
+        values: '1000 1000 1000 2000 2000 2000'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostRebooted
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              owner: platform
+              instance: h01
+            exp_annotations:
+              summary: 'Host h01 rebooted'
+              description: 'node_boot_time_seconds changed within the last hour.'
+              runbook: RB-03
+
+  - interval: 1m
+    input_series:
+      - series: 'node_boot_time_seconds{instance="h01"}'
+        values: '1000x6'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostRebooted
+        exp_alerts: []

@@ -62,6 +62,17 @@ const DENIED_HOSTS = new Set([
   // can reach them, which is how a proxied upstream would poison the trace store.
   'prometheus',
   'otel-collector',
+  // OG-OBS-01/02 (docs/ha-observability/01 §6). Same reasoning as prometheus: none authenticates.
+  // cadvisor mounts the docker socket and serves a container-inventory API; the exporters hand out
+  // host, Postgres and Redis internals; blackbox will GET any target it is asked to probe.
+  // node-exporter runs in the host network namespace, so its name does not resolve on the compose
+  // network at all — listed anyway, because this list's rule is categorical (see WP29a above).
+  'node-exporter',
+  'cadvisor',
+  'blackbox',
+  'pg-monitoring-init',
+  'postgres-exporter',
+  'redis-exporter',
   'api',
   'web',
   'ory-db-init',

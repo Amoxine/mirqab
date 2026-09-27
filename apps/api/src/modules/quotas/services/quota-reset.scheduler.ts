@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { countJobRun } from '../../../common/metrics/ops-metrics';
 import { QuotaService } from './quota.service';
 import { KeyService } from '../../keys/services/key.service';
 
@@ -27,7 +28,7 @@ export class QuotaResetScheduler {
     this.logger.debug('Running scheduled task: reset expired quotas');
 
     try {
-      const resetCount = await this.quotaService.resetExpiredQuotas();
+      const resetCount = await countJobRun('quota_reset', () => this.quotaService.resetExpiredQuotas());
       if (resetCount > 0) {
         this.logger.log(`Reset ${String(resetCount)} expired quota(s)`);
       }
@@ -46,7 +47,7 @@ export class QuotaResetScheduler {
     this.logger.debug('Running scheduled task: check for expired API keys');
 
     try {
-      const expiredCount = await this.keyService.checkExpired();
+      const expiredCount = await countJobRun('key_expiry', () => this.keyService.checkExpired());
       if (expiredCount > 0) {
         this.logger.log(`Marked ${String(expiredCount)} expired API key(s) as EXPIRED`);
       }

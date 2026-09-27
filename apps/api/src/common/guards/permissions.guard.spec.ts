@@ -3,6 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import { authzDeniedTotal } from '../metrics/ops-metrics';
 import { PermissionsGuard } from './permissions.guard';
 
 /** A route handler carrying the metadata that `@Permissions(...perms)` would attach. */
@@ -61,5 +62,14 @@ describe('PermissionsGuard', () => {
 
   it('throws 403 when no user is attached to the request', () => {
     expect(() => guard.canActivate(contextFor(guarded))).toThrow(ForbiddenException);
+  });
+
+  it('counts a missing-permission denial as og_authz_denied_total{reason="missing_permission"} only (APP-07)', async () => {
+    authzDeniedTotal.reset();
+    expect(() => guard.canActivate(contextFor(guarded, { roles: ['viewer'], permissions: [] }))).toThrow(ForbiddenException);
+    guard.canActivate(contextFor(guarded, { roles: ['operator'], permissions: ['api:read'] }));
+
+    const { values } = await authzDeniedTotal.get();
+    expect(values).toEqual([{ labels: { reason: 'missing_permission' }, value: 1 }]);
   });
 });

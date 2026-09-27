@@ -83,6 +83,13 @@ service:
   telemetry:
     logs:
       level: info
+    # MON-07: without this the collector's own metrics (otelcol_exporter_send_failed_*,
+    # otelcol_exporter_queue_size/_capacity) have nowhere to be scraped from. Legacy form
+    # (`metrics.address`, not `metrics.readers`) because 0.121.0 predates the `readers:` config —
+    # see docs/ha-observability/02 §7. Matches the `otel-collector-self` job in prometheus.yml and
+    # the container's `expose: 8888` (C1, obs-w2).
+    metrics:
+      address: 0.0.0.0:8888
   pipelines:
     traces:
       receivers: [otlp]

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { PrismaClient } from '@prisma/client';
+import { countJobRun } from '../../../common/metrics/ops-metrics';
 import {
   ANALYTICS_INDEX_DDL,
   analyticsRedactionDdl,
@@ -39,7 +40,9 @@ export class AnalyticsRetentionScheduler {
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async handleRetention(): Promise<void> {
     try {
-      const { rawDeleted, aggregateDeleted } = await this.purgeExpiredAnalytics();
+      const { rawDeleted, aggregateDeleted } = await countJobRun('analytics_retention', () =>
+        this.purgeExpiredAnalytics(),
+      );
       if (rawDeleted > 0 || aggregateDeleted > 0) {
         this.logger.log(
           `Analytics retention: deleted ${String(rawDeleted)} raw and ${String(aggregateDeleted)} aggregate row(s)`,

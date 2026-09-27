@@ -1,0 +1,563 @@
+# Edge, Tyk, data, identity, API/web and Pump/analytics rules (OG-OBS-01/02, C7). Everything here
+# is ✓/◐ per docs/ha-observability/02, or a *proposed* C4 (worker-5, apps/api) / C5 (worker-6,
+# textfile) metric that this task's contracts explicitly allow.
+#
+# obs-w7's F-lab-names.md promoted several ✗ names to ✓ (with corrections — read each rule's
+# comment, some catalog example queries in 02/03 use a form that F found does not exist). Now
+# ACTIVE that were deferred before: Edge5xx/latency (with F §9's correction — no `code`/`method` on
+# `caddy_http_requests_total`, use `caddy_http_request_duration_seconds_*` instead), Postgres
+# connections and locks (F §4), Redis rejects (coarse proxy, F §5) and persistence (F §5), Ory 5xx
+# (F §8, `status_bucket` not raw codes) and Keto check latency (F §8), OTel exporter failures (F
+# §6, no `_total` suffix). Still OUT: Postgres WAL archive age (F §4: needs a custom-queries YAML,
+# new work not configuration — the failed-count half is a candidate to split out separately, ask
+# the lead if wanted), Postgres replication (no replica built, D-OBS-06 conditional), Redis
+# replica/quorum (no Sentinel, D-OBS-07 conditional), the Redis analytics-backlog gauge (F §5's own
+# caution: cardinality is only safe if Pump uses ONE fixed key platform-wide, and the actual Pump
+# Redis key scheme was not verified here — shipping it unverified risks a tenant-id-shaped label,
+# which the label policy in 02 §4 forbids outright). Alertmanager-only alerts
+# (AlertmanagerClusterDegraded/NotificationsFailing) are out for the same reason there is no
+# `alerting:` block at all — that's OG-OBS-04. `TcpPassthroughDown` (AL-EDGE-06) is left OUT for a
+# different reason — see the comment where its job would sit, below EdgeConfigReloadFailed.
+# `EdgeCertExpiringSoon` (the other half of AL-EDGE-05) was REMOVED in verify round 2 — see the
+# comment at the point it used to sit, same place.
+#
+# Several rules below reference a scrape job or metric that is defined but not yet live in the
+# running stack (obs-w5's API metrics, obs-w6's textfile metrics). Each is commented at the point
+# it depends on one; until that lands the rule is silent (metric absent), which is the intended
+# behaviour. obs-w4's edge :9180 listener (C2) IS live as of this verify round — `OryNotReady` and
+# the `ory-hydra`/`ory-kratos`/`ory-keto` scrape jobs are no longer blocked on it.
+
+groups:
+  - name: services
+    rules:
+      # ── Edge ─────────────────────────────────────────────────────────────
+      # EDGE-03 / AL-EDGE-04. Confirmed live today (edge:2019/metrics, E-metric-names.txt) — this
+      # metric needs no new job once C2's :9180 listener republishes it. Severity is critical
+      # uniformly: at the default (non-multinode) profile every upstream here IS the site's only
+      # one, and the catalog's "warning for one of several Tyk nodes" case needs a per-node label
+      # `upstream` gives no way to count "how many total" from inside a single alert expr.
+      - alert: EdgeUpstreamUnhealthy
+        expr: caddy_reverse_proxy_upstreams_healthy == 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: gateway
+        annotations:
+          summary: 'Edge upstream {{ $labels.upstream }} is unhealthy'
+          description: 'Caddy''s own health check has taken this upstream out of rotation.'
+          runbook: RB-06
+
+      # Half of AL-EDGE-05. caddy_config_last_reload_successful is confirmed live
+      # (E-metric-names.txt), same as above.
+      - alert: EdgeConfigReloadFailed
+        expr: caddy_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+          owner: gateway
+        annotations:
+          summary: 'Last Caddy config reload on the edge failed'
+          description: 'The edge is still running its previous, still-valid config — but a bad Caddyfile is now live in git with nobody able to reload it in. RB-06: revert on a reload failure.'
+          runbook: RB-06
+
+      # Other half of AL-EDGE-05 is REMOVED (verify round 2, blocker B1): `tls internal` issues a
+      # 12-HOUR leaf (measured on this edge, see rules/open-gateway.yml's own
+      # EdgeCertificateRenewalStalled comment), so a 7-day "expires within 7 days" threshold on
+      # `probe_ssl_earliest_cert_expiry` is true FOREVER — it would have paged from the moment it
+      # first evaluated. R14 is already fully covered without this rule:
+      # `EdgeRootCertificateExpiringSoon` and `EdgeCertificateRenewalStalled` in
+      # rules/open-gateway.yml read the ROOT and the served leaf/intermediate respectively, using
+      # the fraction-of-lifetime-remaining shape that a short-lived leaf actually needs.
+      # `EdgeConfigReloadFailed` below is the other, still-valid half of AL-EDGE-05.
+
+      # AL-EDGE-02. CORRECTED per F §9: `caddy_http_requests_total{handler,server}` has NO `code`
+      # or `method` label at all — the catalog's own example query would return nothing. The
+      # duration/response-duration families DO carry `code`/`method` and are the right base for a
+      # ratio: `_count` at any `le` is the same as the total observation count for that label set.
+      - alert: Edge5xxRatioHigh
+        expr: |
+          sum by (server) (rate(caddy_http_request_duration_seconds_count{code=~"5.."}[5m]))
+            / sum by (server) (rate(caddy_http_request_duration_seconds_count[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: '5xx ratio above 5% on edge server {{ $labels.server }}'
+          description: '{{ $value | humanizePercentage }} of edge responses are 5xx, sustained for 10m. Baseline threshold (03 §3.5) — not yet measured against real traffic.'
+          runbook: RB-06
+
+      # AL-EDGE-03. PLACEHOLDER threshold (500ms p95): 03 §3.5 gives no number ("baseline-based"),
+      # and there is no traffic baseline yet.
+      - alert: EdgeLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, server) (rate(caddy_http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: 'Edge p95 latency above 500ms on server {{ $labels.server }}'
+          description: '{{ $value | humanizeDuration }} sustained for 10m. PLACEHOLDER threshold — no baseline yet.'
+          runbook: RB-06
+
+      # EDGE-08 / AL-EDGE-06 is DEFERRED, not implemented as an active rule. `tcp-33020` (the
+      # prometheus.yml job) stays — it's useful data — but no active rule may read it: WP27's
+      # `protocol: tcp` API defs are created through the API, never seeded by default, so on
+      # today's dev stack nothing listens on tyk-gateway:6000 at all and `probe_success{job=
+      # "tcp-33020"} == 0` would page permanently, not on a real failure. There is no clean gate
+      # (no metric says "a TCP API def is loaded") short of hardcoding an assumption about what's
+      # deployed, so this waits for either a seeded demo/test TCP API or a real gate metric, rather
+      # than shipping an alert that is wrong at rest — the same principle open-gateway.yml already
+      # states for `absent(coraza_rule_detections_total)`.
+
+      # ── Tyk gateway ──────────────────────────────────────────────────────
+      # TYK-01 / AL-TYK-01, per-node half.
+      # VERIFY-PHASE CORRECTION (minor): docs 02/03's own claim — "/hello returns 200 even when
+      # Redis alone is down, so the top-level status stays pass" — does NOT hold on this exact
+      # build. Lab-captured (v5.15.0 + redis:7-alpine, isolated og-lab-* pair, Redis stopped):
+      #   Redis up:   {"status":"pass","version":"5.15.0","description":"Tyk GW",
+      #                "details":{"redis":{"status":"pass","componentType":"datastore","time":"..."}}}
+      #   Redis down: {"status":"fail","version":"5.15.0","description":"Tyk GW",
+      #                "details":{"redis":{"status":"fail",
+      #                "output":"storage: Redis is either down or was not configured",
+      #                "componentType":"datastore","time":"..."}}}
+      #   (HTTP 200 in both cases — only the JSON body's `status` field changes)
+      # So `tyk_hello`'s `fail_if_body_not_matches_regexp: '"status":"pass"'` ALREADY fires on a
+      # Redis-down node by itself — TykNodeRedisFailing below is not catching a case this rule
+      # misses, it's independently confirming Redis specifically. Kept both (not deduped): "this
+      # node is unhealthy" and "this node is unhealthy BECAUSE of Redis" are both worth knowing,
+      # and neither expr needs to change — only the descriptions, which asserted the outdated
+      # premise.
+      - alert: TykNodeDown
+        expr: probe_success{job="tyk-hello"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: 'Tyk node {{ $labels.node }} failed its /hello probe'
+          description: '/hello answers HTTP 200 either way, but its body''s top-level `status` goes to "fail" for ANY dependency problem this node has, Redis included — see TykNodeRedisFailing to tell whether Redis specifically is the cause.'
+          runbook: RB-09
+
+      # TYK-01 / AL-TYK-01, "every node is down" half — the catalog's own escalation from warning
+      # to critical when the whole fleet fails together.
+      - alert: TykNodeDown
+        expr: sum(probe_success{job="tyk-hello"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: gateway
+        annotations:
+          summary: 'Every Tyk node is failing its /hello probe'
+          description: 'No node in TYK_ADMIN_URLS answers healthy — the data plane is down, not degraded.'
+          runbook: RB-09
+
+      # TYK-02 / AL-TYK-02.
+      - alert: TykNodeRedisFailing
+        expr: probe_success{job="tyk-hello-redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: gateway
+        annotations:
+          summary: 'Tyk node {{ $labels.node }} reports Redis as failing'
+          description: '/hello''s own body says this node cannot reach Redis. TykNodeDown fires at the same time on this build (Redis-down flips the top-level status too, verify-round lab finding) — this rule''s job is to say WHY, not to catch something TykNodeDown missed.'
+          runbook: RB-09
+
+      # TYK-04 / AL-TYK-04. og_tyk_fanout_total is a C4 proposed metric (worker-5); silent until
+      # that lands.
+      - alert: TykFanoutPartialFailure
+        expr: increase(og_tyk_fanout_total{outcome!="ok"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: 'A config fan-out to node {{ $labels.node }} did not reach every node cleanly'
+          description: '{{ $labels.operation }} outcome={{ $labels.outcome }}. RB-10: read back GET /apis/:id/drift before re-syncing.'
+          runbook: RB-10
+
+      # TYK-05 / AL-TYK-05. PLACEHOLDER threshold (catalog: PROPOSED, no traffic baseline yet).
+      - alert: GatewayOverheadHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(tyk_latency_bucket{type="gateway"}[5m]))) > 20
+        for: 10m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: 'Gateway''s own p95 overhead above 20ms'
+          description: '{{ $value | humanize }}ms of gateway-added latency (type="gateway", excludes upstream) sustained for 10m.'
+          runbook: RB-11
+
+      # TYK-06 / AL-TYK-06. Usually tenant-caused (catalog: "route to chat, never a page") — kept
+      # at warning for that reason, not lowered further.
+      - alert: UpstreamErrorRateHigh
+        expr: |
+          sum by (api) (rate(tyk_http_status{code=~"5.."}[5m]))
+            / sum by (api) (rate(tyk_http_status[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: '5xx ratio above 5% for API {{ $labels.api }}'
+          description: '{{ $value | humanizePercentage }} of responses are 5xx. Usually the tenant''s own upstream (RB-11) — codes only here, never a matched WAF rule.'
+          runbook: RB-11
+
+      # ── Data ─────────────────────────────────────────────────────────────
+      # PG-01 / AL-DATA-01. Silent until obs-w2's postgres-exporter (C1) is deployed.
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: data
+        annotations:
+          summary: 'postgres_exporter reports Postgres down on {{ $labels.instance }}'
+          runbook: RB-12
+
+      # AL-DATA-02. F §4's cardinality finding: `pg_stat_activity_count` carries `application_name`
+      # and `usename`, both free-text-shaped per the label policy (02 §4) — `sum()` with no `by`
+      # collapses all of it, which is also the right shape for the alert's actual question (is the
+      # SERVER close to `max_connections`, not which app/user). `postgres`'s own
+      # `metric_relabel_configs` drops those two labels at scrape time too (belt and braces).
+      - alert: PostgresConnectionsHigh
+        expr: sum(pg_stat_activity_count) / scalar(pg_settings_max_connections) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'Postgres connections above 80% of max_connections'
+          description: '{{ $value | humanizePercentage }} of max_connections in use, sustained for 10m.'
+          runbook: RB-12
+
+      # AL-DATA-03, deadlocks half only. `pg_stat_database_deadlocks` (F §4) is a clean "any
+      # deadlock is worth knowing" signal; the rollback half of the catalog's name needs an
+      # "above baseline" comparison this package has no baseline for yet (03 §3.7: "above baseline
+      # ·10m") — deferred rather than guessing a ratio.
+      - alert: PostgresDeadlocksOrRollbacks
+        expr: increase(pg_stat_database_deadlocks[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'Postgres deadlock(s) on {{ $labels.datname }}'
+          description: '{{ $value }} deadlock(s) in 10m.'
+          runbook: RB-12
+
+      # Not in the 03 catalog under its own AL-DATA-* id (PG-04 in 02 has no matching alert row) —
+      # added because the lead asked for "connections and locks" and an AccessExclusiveLock held
+      # for any real time is the one lock-mode signal that is unambiguous: it blocks every other
+      # query on the table, and normally clears in milliseconds. No PLACEHOLDER threshold games
+      # needed — presence for 5m is already the anomaly.
+      # VERIFY-PHASE FIX: postgres_exporter's `pg_locks_count` emits Postgres's own `mode` values
+      # from `pg_locks.mode`, which Postgres reports LOWERCASE (`accessexclusivelock`, not the
+      # CamelCase `AccessExclusiveLock` this rule and its test originally used) — the original
+      # regex/equality would never have matched a real series.
+      - alert: PostgresLockContention
+        expr: pg_locks_count{mode="accessexclusivelock"} > 0
+        for: 5m
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'AccessExclusiveLock held on {{ $labels.datname }} for 5m+'
+          description: 'This lock mode blocks every other query against the table. Sustained holding usually means a stuck migration or a long-running DDL statement.'
+          runbook: RB-12
+
+      # RDS-01 / AL-DATA-06. Silent until obs-w2's redis-exporter (C1) is deployed.
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: data
+        annotations:
+          summary: 'redis_exporter reports Redis down on {{ $labels.instance }}'
+          runbook: RB-14
+
+      # AL-DATA-07, coarse proxy. F §5: no OOM/noeviction-specific rejection counter exists in
+      # redis_exporter v1.92.0 — `redis_commands_rejected_calls_total{cmd}` is the closest
+      # available and cannot isolate *why* a call was rejected. Good enough to know something is
+      # wrong; RB-14 still has to read the Redis log for the reason.
+      # VERIFY-PHASE FIX (minor): this counter also counts ACL and arity errors, not only OOM
+      # rejections, so a single stray rejected call (a typo'd command from some client) is not
+      # itself an incident. Rate-based with a real window (`for: 5m`), not `increase() > 0` on the
+      # first sample, and downgraded from critical: this is "something is rejecting commands",
+      # worth knowing, not "the platform is down".
+      - alert: RedisRejectingWrites
+        expr: rate(redis_commands_rejected_calls_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'Redis is rejecting commands ({{ $labels.cmd }})'
+          description: '{{ $value | humanize }}/s rejected calls, sustained for 5m. Cannot confirm this is OOM-specific — redis_exporter does not surface that detail, and this counter also covers ACL/arity errors; check `docker compose logs redis` for the actual error.'
+          runbook: RB-14
+
+      # AL-DATA-08. All four "ok" gauges from F §5, any not ok.
+      - alert: RedisPersistenceFailing
+        expr: |
+          redis_aof_last_write_status == 0
+            or redis_aof_last_bgrewrite_status == 0
+            or redis_rdb_last_bgsave_status == 0
+        for: 5m
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'Redis persistence (AOF write, AOF rewrite or RDB bgsave) is failing on {{ $labels.instance }}'
+          runbook: RB-14
+
+      # PG-08 / AL-BKP-01. og_backup_last_success_timestamp_seconds is a C5 textfile metric
+      # (worker-6); silent until pg-backup.sh writes it.
+      - alert: PostgresBackupStale
+        expr: time() - og_backup_last_success_timestamp_seconds{kind="pg_base"} > 26 * 3600
+        for: 0m
+        labels:
+          severity: critical
+          owner: data
+        annotations:
+          summary: 'Last base-backup success is older than 26h'
+          description: '{{ $value | humanizeDuration }} since the last recorded success.'
+          runbook: RB-13
+
+      # PG-09 / AL-BKP-02. C5 textfile metric (worker-6).
+      - alert: RestoreDrillOverdue
+        expr: time() - og_restore_drill_last_success_timestamp_seconds > 35 * 86400
+        for: 0m
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'Restore drill has not succeeded in 35 days'
+          runbook: RB-13
+
+      # AL-BKP-04, guard. Same shape as the existing *MetricsAbsent rules in rules/open-gateway.yml
+      # (untouched by this task) — a stale value would lie, but so would total silence about it.
+      # VERIFY-PHASE FIX: `for: 30m` fired on every fresh deploy, from container start until
+      # pg-backup.sh's first successful run wrote the textfile — a day-1 install has no backup
+      # yet by definition, so a 30m absence there is not a fault. Matched to AL-BKP-01's own 26h
+      # staleness window (PostgresBackupStale, above) instead: this guard should only trip once
+      # the platform has been up long enough that a first backup was actually due.
+      - alert: BackupMetricAbsent
+        expr: absent(og_backup_last_success_timestamp_seconds)
+        for: 26h
+        labels:
+          severity: warning
+          owner: data
+        annotations:
+          summary: 'og_backup_last_success_timestamp_seconds has no series at all'
+          description: 'PostgresBackupStale cannot fire while this is true — either pg-backup.sh has never written its textfile, or node-exporter is not reading the og_textfile volume.'
+          runbook: RB-13
+
+      # ── Identity (Ory) ───────────────────────────────────────────────────
+      # IDP-03 / AL-IDP-01. STALE-COMMENT FIX (verify round 2): obs-w4's edge :9180 listener (C2)
+      # is in infra/edge/Caddyfile now (`/ory/hydra|kratos|keto/health` blocks exist), so this is
+      # no longer blocked on a listener that doesn't exist. Not independently re-verified live in
+      # this pass — the shared stack was mid-restart with several Ory/edge/API containers stuck at
+      # `Created` (dependency chain waiting on other workers' in-flight changes) when this edit was
+      # made, and touching that is out of scope here. If it's still down when this reads, expect
+      # `probe_success{job="ory-ready"}` to be absent rather than 0 (target unreachable at the
+      # docker-network level, not merely answering unhealthy).
+      - alert: OryNotReady
+        expr: probe_success{job="ory-ready"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: identity
+        annotations:
+          summary: 'An Ory service is not ready ({{ $labels.instance }})'
+          runbook: RB-16
+
+      # IDP-04 / AL-IDP-03. Uses the edge's existing :33010 TLS listener — live today.
+      # VERIFY-PHASE FIX (major M4): reads `oidc-availability` (insecure_skip_verify), not `oidc`
+      # (ca_file-verified) — a fresh install has no exported root.crt yet (infra/edge/README.md is
+      # a manual per-install step), which would make the verified probe read down FOREVER on a
+      # perfectly healthy Hydra, and this is `severity: critical`. Cert/trust is a separate concern,
+      # already covered by EdgeRootCertificateExpiringSoon and EdgeCertificateRenewalStalled
+      # (rules/open-gateway.yml). The `oidc` job/module stay as data — still queryable, not alerted.
+      - alert: OidcDiscoveryOrJwksFailing
+        expr: probe_success{job="oidc-availability"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: identity
+        annotations:
+          summary: 'Hydra''s OIDC discovery document is not being served'
+          description: 'Token issuance depends on this document and the JWKS it points at (IDP-04). This checks availability only (insecure_skip_verify) — a certificate-trust problem alone will not fire this.'
+          runbook: RB-16
+
+      # AL-IDP-02. F §8: `status_bucket` on `http_requests_statuses_total` is `"2xx"/"3xx"/"4xx"`
+      # (and, completing the same bounded enum, `"5xx"`) — there is no raw-code label on this
+      # family at all, so this is the only route to a ratio. `job` distinguishes hydra/kratos/keto
+      # (all three scraped through the same edge proxy path); `endpoint` is already route-templated
+      # by Ory itself (F §8's correction to the doc's own caution — no raw path/ID ever observed).
+      - alert: Ory5xxRatioHigh
+        expr: |
+          sum by (job, endpoint) (rate(http_requests_statuses_total{status_bucket="5xx"}[5m]))
+            / sum by (job, endpoint) (rate(http_requests_statuses_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          owner: identity
+        annotations:
+          summary: '5xx ratio above 5% on {{ $labels.job }} {{ $labels.endpoint }}'
+          description: '{{ $value | humanizePercentage }} of responses are 5xx, sustained for 10m.'
+          runbook: RB-16
+
+      # AL-IDP-04. `grpc_method` bounded to 11 values (F §8). PLACEHOLDER threshold (100ms p95):
+      # 03 §3.7 gives no number ("baseline-based"), and there is no traffic baseline yet.
+      - alert: KetoCheckLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, grpc_method) (rate(grpc_server_handling_seconds_bucket{job="ory-keto"}[5m]))) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          owner: identity
+        annotations:
+          summary: 'Keto {{ $labels.grpc_method }} p95 latency above 100ms'
+          description: '{{ $value | humanizeDuration }} sustained for 10m. PLACEHOLDER threshold — no baseline yet.'
+          runbook: RB-16
+
+      # ── API and web ──────────────────────────────────────────────────────
+      # APP-02 / AL-APP-01.
+      - alert: ApiHealthFailing
+        expr: probe_success{job="api-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: app
+        annotations:
+          summary: '/api/health is failing'
+          runbook: RB-17
+
+      # APP-03 / AL-APP-04.
+      - alert: WebDown
+        expr: probe_success{job="web-login"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: app
+        annotations:
+          summary: 'web is not answering (redirect chain to the login page failed)'
+          runbook: RB-17
+
+      # APP-04 / AL-APP-05. nodejs_eventloop_lag_p99_seconds confirmed live
+      # (E-metric-names.txt, api:4000/api/metrics).
+      - alert: NodeEventLoopLagHigh
+        expr: nodejs_eventloop_lag_p99_seconds > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          owner: app
+        annotations:
+          summary: 'API event-loop p99 lag above 500ms'
+          description: '{{ $value | humanizeDuration }} sustained for 10m — the process is falling behind, not just one slow request.'
+          runbook: RB-17
+
+      # APP-06 / AL-APP-06. og_job_runs_total is a C4 proposed metric (worker-5); silent until it
+      # lands. Deliberately does NOT also alert on og_spec_source_oldest_overdue_seconds (existing,
+      # ✓) — 03 §3.8 is explicit that metric is "only alerted once its runbook exists".
+      # VERIFY-PHASE FIX (blocker B2): the catalog's `job` label on this metric collided with
+      # Prometheus's own target `job` label — the target one wins the name and the metric's own
+      # value would have been silently renamed to `exported_job`. obs-w5 renamed the metric's own
+      # label to `task` (apps/api/src/common/metrics/ops-metrics.ts); this rule (and its test)
+      # reads `{{ $labels.task }}`.
+      - alert: BackgroundJobFailing
+        expr: increase(og_job_runs_total{outcome="error"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: app
+        annotations:
+          summary: 'Background job {{ $labels.task }} failed'
+          description: '{{ $value }} error outcome(s) in the last hour.'
+          runbook: RB-17
+
+      # ── Pump and analytics ───────────────────────────────────────────────
+      # PUMP-02 / AL-PUMP-01.
+      - alert: PumpHealthFailing
+        expr: probe_success{job="pump-health"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          owner: gateway
+        annotations:
+          summary: 'Pump''s :8083/health is failing'
+          description: 'A stuck-but-"healthy" purge loop (PUMP-03''s own 2026-09-27 incident) does not fail this probe — see AnalyticsStale for that case.'
+          runbook: RB-15
+
+      # PUMP-03 / AL-PUMP-02. og_analytics_newest_record_age_seconds is a C4 proposed metric
+      # (worker-5); silent until it lands. Ungated: the catalog wants this gated on edge-observed
+      # traffic so it does not stay silent exactly when Pump itself stops (TODO: Caddy :33005 rate
+      # labels, which are ✗ until EDGE-01 is enabled) — that gate is deferred, not built here.
+      # VERIFY-PHASE FIX (major M6): analytics defaults to OFF per API (see cc096d8, "a new API's
+      # analytics default to OFF, not on") — on an install where nothing has opted in yet, a
+      # growing record age is the NORMAL state, not an incident, and this would warn constantly on
+      # a correctly-configured stack. Downgraded to `info` until the traffic gate exists (the
+      # 2026-09-27 incident this rule is modeled on had analytics ON with real traffic — that
+      # combination is where `warning` belongs). FOLLOW-UP, not built here: gate on edge-observed
+      # traffic (needs Caddy :33005 rate labels) so this can go back to `warning` once it can tell
+      # "quiet because nothing is on" from "quiet because Pump died".
+      - alert: AnalyticsStale
+        expr: og_analytics_newest_record_age_seconds > 300
+        for: 10m
+        labels:
+          severity: info
+          owner: gateway
+        annotations:
+          summary: 'Newest analytics record is over 5 minutes old'
+          description: 'The 2026-09-27 incident: Pump stuck on a Redis timeout for ~11.5h while /health stayed OK. Downgraded to info: analytics default to OFF, so a quiet record age is normal on an install where nothing has opted in yet — this has no traffic gate to tell the two cases apart. Do not page on it alone until AL-PUMP-02''s gate exists.'
+          runbook: RB-15
+
+      # PUMP-05 / AL-PUMP-04. og_analytics_redaction_trigger_present is a C4 proposed metric
+      # (worker-5); silent until it lands.
+      - alert: RedactionTriggerMissing
+        expr: og_analytics_redaction_trigger_present == 0
+        for: 5m
+        labels:
+          severity: critical
+          owner: security
+        annotations:
+          summary: 'The analytics redaction trigger is missing'
+          description: 'The traffic view already fails closed without it (RB-15) — this is a security incident, not a data-quality one. Check the retention job''s reinstall.'
+          runbook: RB-15
+
+      # ── OTel collector ───────────────────────────────────────────────────
+      # AL-MON-07. F §6 settles the suffix question: NO `_total` on any of these, at 0.121.0,
+      # gauge or monotonic sum alike. Only the `_spans` variant was actually forced to a nonzero
+      # value in the lab (a real connection-refused exporter) — the `_metric_points`/`_log_records`
+      # siblings follow the same naming by construction but weren't independently re-verified, so
+      # this alerts on `_spans` only, which is also the only pipeline our own otel-collector.yaml
+      # runs today (traces -> debug; metrics/waf -> prometheus, neither of which is a network sink
+      # likely to report a send failure the way an otlp/otlphttp exporter would).
+      - alert: OtelExporterFailing
+        expr: increase(otelcol_exporter_send_failed_spans[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'OTel collector exporter {{ $labels.exporter }} is failing to send spans'
+          description: '{{ $value }} failed send(s) in 10m.'
+          runbook: RB-18
+
+      # ── Monitoring-self guard for the new blackbox jobs ────────────────────
+      # Same pattern as the four *MetricsAbsent rules in rules/open-gateway.yml: every alert above
+      # that reads a C4/C5 proposed metric goes SILENT, not failing, if that metric is never
+      # exported at all. This one is deliberately narrow — og_job_runs_total, og_tyk_fanout_total
+      # and the two og_tyk_node_* gauges all come from the same worker-5 change, so one guard
+      # covers all four rather than one per metric.
+      - alert: ApiProposedMetricsAbsent
+        expr: absent(og_job_runs_total) and on() (up{job="open-gateway-api"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'og_job_runs_total is absent even though the api is up'
+          description: 'BackgroundJobFailing (and, by the same deploy, TykFanoutPartialFailure) cannot fire while this is true.'
+          runbook: RB-17

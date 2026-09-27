@@ -441,6 +441,45 @@ else
   fi
 fi
 
+# ── PG-09 textfile metric (restore-drill success), exit-0 path only ─────────────────────────────
+# Everything above either passed or this line was never reached — `die` exits immediately. The
+# volume is resolved the same way $PRIMARY_VOLUME was resolved above: never a guessed name, always
+# read off a container Docker already knows is part of this stack, because a metric that could be
+# wrong about which stack it reports on is worse than no metric. A missing og_textfile volume (an
+# older compose, or the compose side of C1 not landed yet) is a note, never a failed drill.
+#
+# Factored into a function (rather than inlined here) so a lab test can call it directly, against
+# a fake PRIMARY_CONTAINER and a fake volume, without running an actual restore drill.
+write_restore_metric() {
+  compose_project="$(docker inspect "$PRIMARY_CONTAINER" \
+    --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+  textfile_volume=""
+  if [ -n "$compose_project" ]; then
+    # `|| true` guards the assignment itself: under `set -o pipefail`, a failing `docker volume ls`
+    # makes the whole pipeline's exit status non-zero even though `head` succeeds, and `set -e`
+    # would then abort the script — after the restore drill above already passed. Never worth it
+    # for a missing metric.
+    textfile_volume="$(docker volume ls -q \
+      --filter label=com.docker.compose.volume=og_textfile \
+      --filter label=com.docker.compose.project="$compose_project" 2>/dev/null | head -n 1)" || true
+  fi
+  if [ -z "$textfile_volume" ]; then
+    say "NOTE: no og_textfile volume for compose project '${compose_project:-?}' — restore-drill metric not written (the drill itself still passed)"
+    return 0
+  fi
+  if ! docker run --rm -v "$textfile_volume":/textfile alpine:3 sh -euc '
+      tmp="/textfile/.og_restore_drill.prom.$$"
+      {
+        echo "# HELP og_restore_drill_last_success_timestamp_seconds Last successful restore drill (epoch seconds)."
+        echo "# TYPE og_restore_drill_last_success_timestamp_seconds gauge"
+        echo "og_restore_drill_last_success_timestamp_seconds $(date +%s)"
+      } >"$tmp" && chmod 0644 "$tmp" && mv "$tmp" /textfile/og_restore_drill.prom
+    '; then
+    say "WARNING: failed to write the restore-drill metric into '$textfile_volume' (the drill itself still passed)"
+  fi
+}
+write_restore_metric
+
 # "table set matches the primary", not "complete". L3 establishes that the backup is not obviously
 # hollow and carries the same tables; it cannot establish completeness, and saying so claimed more
 # than any layer measured.

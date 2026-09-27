@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { prisma } from '@open-gateway/database';
 import { AuditService } from '../../audit/services/audit.service';
+import { countJobRun } from '../../../common/metrics/ops-metrics';
 
 /** One key's usage as the pump recorded it. */
 interface KeyUsageRow {
@@ -37,7 +38,7 @@ export class MeteringService {
   @Cron(CronExpression.EVERY_HOUR)
   async handleMeterUsage(): Promise<void> {
     try {
-      const updated = await this.meterAll();
+      const updated = await countJobRun('metering', () => this.meterAll());
       if (updated > 0) this.logger.log(`Metered usage for ${String(updated)} quota(s)`);
     } catch (err) {
       // A metering failure must not take the process down — the counter is reporting, not enforcement

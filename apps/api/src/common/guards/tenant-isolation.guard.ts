@@ -1,4 +1,5 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { authzDeniedTotal } from '../metrics/ops-metrics';
 import { UserPayload } from '../types';
 
 /** A header can arrive repeated, in which case express hands back an array. */
@@ -38,12 +39,14 @@ export class TenantIsolationGuard implements CanActivate {
 
     const headerTenantId = firstHeader(request.headers['x-tenant-id']);
     if (headerTenantId && headerTenantId !== user.tenantId) {
+      authzDeniedTotal.inc({ reason: 'tenant_mismatch' });
       throw new ForbiddenException(
         'Access denied: you do not have access to the requested tenant',
       );
     }
 
     if (!user.tenantId) {
+      authzDeniedTotal.inc({ reason: 'no_tenant' });
       throw new ForbiddenException(
         'Access denied: your account is not assigned to a tenant',
       );

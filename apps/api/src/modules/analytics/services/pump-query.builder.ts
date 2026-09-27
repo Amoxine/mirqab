@@ -367,6 +367,18 @@ export function rawStatsQuery(tykApiIds: string[]): Prisma.Sql {
   `;
 }
 
+/**
+ * Platform-wide freshness of the raw table (PUMP-03), measured on the DB's clock. `MAX` is one probe
+ * of `og_tyk_analytics_ts`; null when the table is empty. Only run once `tablePresenceQuery` says the
+ * table exists.
+ */
+export function newestRecordAgeQuery(): Prisma.Sql {
+  return Prisma.sql`
+    SELECT EXTRACT(EPOCH FROM now() - MAX("timestamp"))::float8 AS age_seconds
+    FROM public.tyk_analytics
+  `;
+}
+
 /** Retention (D10): the raw table's `timestamp` is a timestamptz. */
 export function retentionRawQuery(days: number): Prisma.Sql {
   return Prisma.sql`
@@ -614,4 +626,24 @@ BEGIN
   END IF;
 END $$;
 `;
+}
+
+/** Must match the name `analyticsRedactionDdl` creates; the spec fails if the two drift apart. */
+export const REDACTION_TRIGGER = 'og_redact_tyk_analytics_trg';
+
+/**
+ * Is the insert-time redaction trigger installed AND firing? It is created at API boot, and only if
+ * `tyk_analytics` already exists; nothing makes the API wait for Pump, so it can be silently missing.
+ * `tgenabled` 'O' and 'A' fire for Pump's ordinary sessions. 'D' is disabled, and 'R' fires only in
+ * replica mode. `to_regclass` is NULL while the table is absent, so that case reads as "missing".
+ */
+export function redactionTriggerQuery(): Prisma.Sql {
+  return Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgrelid = to_regclass('public.tyk_analytics')
+        AND tgname = ${REDACTION_TRIGGER}
+        AND tgenabled IN ('O', 'A')
+    ) AS present
+  `;
 }

@@ -1,0 +1,198 @@
+# Host rules (OG-OBS-01/02, C7). Every expr here uses only ✓/◐ names from docs/ha-observability/02
+# §3.3 — no ✗ (unverified) name is used. Per obs-w7's F-lab-names.md §2, "No HOST-* name remains
+# ✗" — HostMemoryLow, HostDiskAlmostFull, HostDiskLatencyHigh, HostNetworkErrorsOrDns (error/drop
+# half only), HostClockSkew and HostRebooted are now activated below. Still OUT: HostHardwareFault
+# (needs hardware access, D-OBS-01) and SiteUnreachable (needs a second external vantage point
+# this package does not build).
+#
+# `asset_id`/`site`/`failure_domain` scoping from docs 02 §4 is not on these series yet — that
+# needs the inventory's file_sd (OG-OBS-00), not shipped here. Every alert below still fires and
+# still says which mountpoint/device, just not which rack.
+
+groups:
+  - name: host
+    rules:
+      # AL-HOST-01, internal half only. The external-vantage half (`probe_success{module="icmp"}`)
+      # needs an icmp blackbox module this task does not build — see the README's scrape-target
+      # table for what is and isn't covered.
+      - alert: HostDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: 'node_exporter target {{ $labels.instance }} is unreachable'
+          description: 'Prometheus cannot scrape node_exporter on {{ $labels.instance }}. Host-level dashboards (DB-03) go blind for this host, not just this one metric.'
+          runbook: RB-04
+
+      # HOST-01 / AL-HOST-02. The catalog's own parenthetical ("PSI names TODO") asks for the PSI
+      # family as a second signal on the SAME alert, not a separate one — F-lab-names.md §2
+      # confirms `node_pressure_cpu_waiting_seconds_total` (time tasks spent waiting on a busy
+      # CPU), so it's added here as an `or` rather than a new alert. PLACEHOLDER PSI threshold (0.5
+      # = tasks waited half the time): no baseline exists for either branch yet (03 §3.3's own
+      # caveat — "no load test has authorized this threshold").
+      - alert: HostCpuSaturated
+        expr: |
+          (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9)
+            or (avg by (instance) (rate(node_pressure_cpu_waiting_seconds_total[5m])) > 0.5)
+        for: 15m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'CPU busy > 90% (or PSI-saturated) on {{ $labels.instance }} for 15m'
+          description: '{{ $value | humanizePercentage }} busy or PSI-waiting, sustained. No load test has authorized either threshold yet (03 §3.3) — treat both as drafts.'
+          runbook: RB-01
+
+      # HOST-06 / AL-HOST-04. fstype exclude keeps tmpfs/overlay (which report a fixed small size and
+      # would predict-linear to "full" on every idle host) out of the alert.
+      - alert: HostDiskWillFillIn24h
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 24*3600) < 0
+        for: 30m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Disk on {{ $labels.instance }}:{{ $labels.mountpoint }} predicted to fill within 24h'
+          description: 'Linear projection from the last 6h of node_filesystem_avail_bytes crosses zero inside a day.'
+          runbook: RB-02
+
+      # HOST-06 / AL-HOST-06. Excludes /sys and /proc: those are legitimately read-only pseudo-fs,
+      # not a disk fault.
+      - alert: HostFilesystemReadOnly
+        expr: node_filesystem_readonly{mountpoint!~"/sys.*|/proc.*"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: '{{ $labels.mountpoint }} on {{ $labels.instance }} is mounted read-only'
+          description: 'A read-only remount is usually the kernel reacting to a disk error. RB-02: never delete Postgres WAL by hand.'
+          runbook: RB-02
+
+      # HOST-04 / AL-HOST-03, memory half. `node_memory_MemTotal_bytes` promoted ✓ (F §2).
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: 'Available memory below 10% on {{ $labels.instance }}'
+          description: '{{ $value | humanizePercentage }} of total memory available, sustained for 10m.'
+          runbook: RB-01
+
+      # HOST-04 / AL-HOST-03, OOM half. `node_vmstat_oom_kill` promoted ✓ (F §2) — a genuine
+      # counter, on by default, no extra collector flag. Split from HostMemoryLow into its own
+      # alert: one is a slow-trending ratio, the other is a discrete kill event, and conflating
+      # them into one expr would only complicate both.
+      - alert: HostOomKilling
+        expr: increase(node_vmstat_oom_kill[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: 'The OOM killer ran on {{ $labels.instance }}'
+          description: '{{ $value }} OOM kill(s) in 10m at the host level — check `dmesg` for which process (RB-01).'
+          runbook: RB-01
+
+      # HOST-06 / AL-HOST-05. `node_filesystem_size_bytes` was always a standard, stable
+      # node_exporter name (F §2's "no HOST-* name remains ✗" covers it — 02's HOST-06 row only
+      # ever flagged the inodes half as unverified, which F resolved separately below).
+      - alert: HostDiskAlmostFull
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: 'Disk on {{ $labels.instance }}:{{ $labels.mountpoint }} below 10% free'
+          description: '{{ $value | humanizePercentage }} free, sustained for 5m.'
+          runbook: RB-02
+
+      # HOST-06, inodes half of the same signal. `node_filesystem_files`/`_files_free` promoted ✓
+      # (F §2) — not in the 03 catalog as its own alert ID, but the same "almost full" failure
+      # mode applies to inode exhaustion (a filesystem can refuse writes with plenty of bytes free
+      # but zero free inodes, e.g. many small files) and it costs nothing extra to watch now that
+      # the name exists.
+      - alert: HostInodesAlmostFull
+        expr: node_filesystem_files_free{fstype!~"tmpfs|overlay"} / node_filesystem_files{fstype!~"tmpfs|overlay"} < 0.10
+        for: 5m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Inodes on {{ $labels.instance }}:{{ $labels.mountpoint }} below 10% free'
+          description: '{{ $value | humanizePercentage }} of inodes free, sustained for 5m.'
+          runbook: RB-02
+
+      # AL-HOST-07. Names promoted ✓ (F §2). No baseline exists (03 §3.3: "baseline p95 × 3"), so
+      # this is a PLACEHOLDER absolute threshold (100ms average per I/O op) rather than a
+      # multiple-of-baseline the platform hasn't measured yet — revisit once OG-OBS-03 has real
+      # numbers. `> 0` guards the division: a disk with zero completed ops in the window yields no
+      # series rather than a divide-by-zero NaN.
+      - alert: HostDiskLatencyHigh
+        expr: |
+          (rate(node_disk_read_time_seconds_total[5m]) + rate(node_disk_write_time_seconds_total[5m]))
+            / ((rate(node_disk_reads_completed_total[5m]) + rate(node_disk_writes_completed_total[5m])) > 0) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Disk I/O latency high on {{ $labels.instance }}:{{ $labels.device }}'
+          description: '{{ $value | humanizeDuration }} average per operation, sustained for 15m. PLACEHOLDER threshold (100ms) — no baseline yet.'
+          runbook: RB-02
+
+      # AL-HOST-08, network-error half only. Names promoted ✓ (F §2). The DNS half
+      # (`probe_success{job="dns"}`) stays OUT — this package builds no `dns` blackbox module.
+      # `or` between four different metric names matches on the shared {instance,device} label
+      # set, so it can only surface ONE of them per device per evaluation — sufficient to know
+      # something on that device needs attention, not which counter specifically; the summary
+      # names all four so a responder checks each.
+      # VERIFY-PHASE FIX (minor): `increase(...[10m]) > 0` on `for: 0m` fires on a single stray
+      # error — obs-w2's own lab host already has `tx_drop=21` sitting on it at rest (a normal,
+      # already-happened baseline on real hardware, not an ongoing incident). Switched to a rate
+      # threshold with a real sustain window, so this reads "still accumulating errors right now",
+      # not "has ever incremented since boot".
+      - alert: HostNetworkErrorsOrDns
+        expr: |
+          (rate(node_network_receive_errs_total[5m]) > 1)
+            or (rate(node_network_transmit_errs_total[5m]) > 1)
+            or (rate(node_network_receive_drop_total[5m]) > 1)
+            or (rate(node_network_transmit_drop_total[5m]) > 1)
+        for: 10m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Network errors or drops on {{ $labels.instance }}:{{ $labels.device }}'
+          description: 'One or more of receive/transmit errors or drops above 1/s, sustained for 10m — check all four counters for this device.'
+          runbook: RB-03
+
+      # AL-HOST-09. Names promoted ✓ (F §2).
+      - alert: HostClockSkew
+        expr: abs(node_timex_offset_seconds) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Clock offset above 50ms on {{ $labels.instance }}'
+          description: '{{ $value | humanizeDuration }} offset, sustained for 10m — check NTP/chrony.'
+          runbook: RB-03
+
+      # AL-HOST-10, info severity per the catalog (a reboot is a fact to know, not a fault).
+      # `node_boot_time_seconds` promoted ✓ (F §2).
+      - alert: HostRebooted
+        expr: changes(node_boot_time_seconds[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+          owner: platform
+        annotations:
+          summary: 'Host {{ $labels.instance }} rebooted'
+          description: 'node_boot_time_seconds changed within the last hour.'
+          runbook: RB-03

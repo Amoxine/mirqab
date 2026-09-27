@@ -20,6 +20,16 @@ scrape_configs:
   - job_name: tyk-pump
     static_configs:
       - targets: ['tyk-pump:9090']
+    metric_relabel_configs:
+      # `api_name` is tenant free text (02 §4 forbidden-labels list); PUMP-07 in 02 §3.9 requires it
+      # gone from every series, not only the ones that carry it today.
+      - action: labeldrop
+        regex: api_name
+      # Belt and braces with C3's pump.conf `disabled_metrics` (obs-w4): if any of these three
+      # unbounded, privacy-sensitive families ever reach the scrape anyway, drop them here too.
+      - action: drop
+        source_labels: [__name__]
+        regex: 'tyk_http_status_per_key|tyk_http_status_per_path|tyk_http_status_per_oauth_client'
 
   # Control plane. 4000 is the in-network port; 33001 is the edge's host-side HTTPS mapping, and the
   # edge answers 404 for /api/metrics so this stays an internal target.
@@ -32,3 +42,294 @@ scrape_configs:
   - job_name: otel-collector
     static_configs:
       - targets: ['otel-collector:8889']
+
+  # ── OG-OBS-01/02: fleet scrape targets ──────────────────────────────────────
+  # Every target below carries the bounded static labels from 02 §4 (`environment`, `site`,
+  # `asset_id`) until file_sd from the inventory renderer (OG-OBS-00) replaces them — real values,
+  # not real hosts, come from that inventory. `unknown` here is deliberate, not a placeholder typo.
+
+  # Prometheus' own self-scrape (MON-03/04/05: head_series, rule_evaluation_failures,
+  # notifications_dropped all need this — none of it exists without a job scraping :9090 itself).
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  # node_exporter. C6 (final, obs-w2): it runs in the host netns, bound to the docker0 gateway
+  # only — not published to the LAN, and not reachable by its compose service name from inside
+  # this network the way every other exporter is. `host.docker.internal` is what resolves that
+  # from Prometheus's own container; obs-w2 adds `extra_hosts: host.docker.internal:host-gateway`
+  # to the prometheus service for it.
+  #
+  # VERIFY-PHASE FIX (major M7): no static `asset_id` here — the C5 textfile metrics
+  # (og_inventory_last_verified_timestamp_seconds, og_expected_container, og_asset_info) are
+  # collected off this SAME node-exporter target via its textfile collector, and they carry their
+  # own real `asset_id` value. A static `asset_id: unknown` on the target label set collides with
+  # that, and the textfile metric's own value would be silently renamed to `exported_asset_id` —
+  # the same class of bug as B2's `job` collision. `environment`/`site` don't collide with
+  # anything the textfile metrics set, so they stay.
+  - job_name: node
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+        labels: { environment: dev, site: unknown }
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    metric_relabel_configs:
+      # cAdvisor sees every container on the HOST, not just this project's — other compose
+      # projects share this machine. Keep only `open-gateway-*` names; no rule here needs the
+      # root cgroup or another project's containers, so an empty/other `name` is dropped, not kept.
+      - action: keep
+        source_labels: [name]
+        regex: 'open-gateway-.*'
+      # `id` is the cgroup path — churns on every container recreate (02 §3.2 CTR-01). `name` stays:
+      # it is the stable `open-gateway-*` container name the dashboards join on.
+      - action: labeldrop
+        regex: id
+
+  # VERIFY-PHASE FIX (major M2): a `labeldrop` on `application_name|usename` used to sit here.
+  # Removed: `pg_stat_activity_count` carries several OTHER labels too (backend_type, datname,
+  # state, wait_event, wait_event_type per F-lab-names.md §4) that stay after dropping just these
+  # two — so two original rows with different application_name/usename but the same remaining
+  # label set collapse onto the SAME series at the SAME scrape timestamp. Prometheus does not
+  # reject the scrape over that: it keeps the first sample, silently drops the rest as duplicates
+  # (counted in `prometheus_target_scrapes_sample_duplicate_timestamp_total`), so this would have
+  # quietly thrown away real connection rows rather than erroring loudly. The cardinality policy
+  # (02 §4: `application_name`/`usename` are free-text, both roles are a closed internal set in
+  # practice) is enforced in PromQL instead: PostgresConnectionsHigh already does
+  # `sum(pg_stat_activity_count)` with no `by`, which aggregates every label away in the query, not
+  # at scrape time — the raw series (with both labels intact) still exist for anyone who needs to
+  # see per-app/per-role
+  # detail, they just never reach an alert unaggregated.
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  - job_name: redis
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  - job_name: edge
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['edge:9180']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    metric_relabel_configs:
+      # 02 §5: map unknown Caddy methods to OTHER. F-lab-names.md §9 confirms this is still load-
+      # bearing, not optional defensive config: Caddy passes GET/POST/PATCH straight through with
+      # no auto-mapping, so a raw-socket garbage method could mint a new label value on a public
+      # listener.
+      #
+      # VERIFY-PHASE FIX (major M3): the original two-step version stamped `method="OTHER"` onto
+      # series that never had a `method` label at all (e.g. `caddy_config_last_reload_successful`,
+      # `caddy_reverse_proxy_upstreams_healthy`) — `__tmp_method_known` reads empty for those too,
+      # since there is no method to check, and the old second rule only tested `__tmp_method_known`
+      # in isolation, so it fired for "unusual method" and "no method label" alike. Fixed by joining
+      # BOTH `method` and `__tmp_method_known` with a separator: the combined string only ends in a
+      # bare `;` (matching `.+;`, i.e. "something, then nothing") when `method` is non-empty AND
+      # `__tmp_method_known` is empty — an actual unusual method. When `method` doesn't exist at
+      # all, the joined string is just `;` (nothing on either side), `.+` requires at least one
+      # character before the `;`, so it does NOT match and the series is left alone. Proved in a
+      # throwaway lab, not just reasoned about — see observability/README.md's "Blackbox" section
+      # for the fixture and the three resulting cases (no method / known method / unknown method).
+      - source_labels: [method]
+        regex: 'GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS'
+        target_label: __tmp_method_known
+        replacement: 'yes'
+      - source_labels: [method, __tmp_method_known]
+        separator: ';'
+        regex: '.+;'
+        target_label: method
+        replacement: OTHER
+      - action: labeldrop
+        regex: __tmp_method_known
+
+  # Ory admin metrics, proxied through the edge's internal :9180 listener (C2, obs-w4) rather than
+  # scraped from the loopback-only admin ports directly — Prometheus has no route to the host's
+  # 127.0.0.1:3301x, only to the docker network.
+  - job_name: ory-hydra
+    metrics_path: /ory/hydra/metrics
+    static_configs:
+      - targets: ['edge:9180']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  - job_name: ory-kratos
+    metrics_path: /ory/kratos/metrics
+    static_configs:
+      - targets: ['edge:9180']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  - job_name: ory-keto
+    metrics_path: /ory/keto/metrics
+    static_configs:
+      - targets: ['edge:9180']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  # Collector self-telemetry (MON-07). Needs otel-collector.yaml's `service.telemetry.metrics`
+  # block, which did not exist before this change — an empty scrape target otherwise.
+  - job_name: otel-collector-self
+    static_configs:
+      - targets: ['otel-collector:8888']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+
+  # ── Blackbox: one job per module (the documented multi-target pattern) ─────
+  # __address__ is rewritten to the blackbox exporter itself; the real target survives as
+  # __param_target -> instance. https://prometheus.io/docs/guides/multi-target-exporter/
+
+  - job_name: tyk-hello
+    metrics_path: /probe
+    params:
+      module: [tyk_hello]
+    static_configs:
+      - targets: ['http://tyk-gateway:8081/hello']
+        labels: { environment: dev, site: unknown, asset_id: unknown, node: tyk-1 }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # TYK-01's actual point: /hello answers 200 even when Redis is down, so this second module reads
+  # the body's nested `redis` status instead of trusting the status code.
+  - job_name: tyk-hello-redis
+    metrics_path: /probe
+    params:
+      module: [tyk_hello_redis]
+    static_configs:
+      - targets: ['http://tyk-gateway:8081/hello']
+        labels: { environment: dev, site: unknown, asset_id: unknown, node: tyk-1 }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: api-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ['http://api:4000/api/health']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: pump-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ['http://tyk-pump:8083/health']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # Depends on obs-w4's edge :9180 listener (C2), not deployed yet — see the README note on this
+  # job before relying on `up{job="ory-ready"}`.
+  - job_name: ory-ready
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://edge:9180/ory/hydra/health
+          - http://edge:9180/ory/kratos/health
+          - http://edge:9180/ory/keto/health
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: web-login
+    metrics_path: /probe
+    params:
+      module: [http_2xx_redirect]
+    static_configs:
+      - targets: ['http://web:3000/']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # Hydra's discovery document, over the edge's EXISTING published TLS listener (:33010, already
+  # live — this is not the new C2 :9180 listener). `Host: localhost` and `server_name: localhost`
+  # match the Caddyfile site block's host matcher (infra/edge/Caddyfile:293) and the SAN `tls
+  # internal` issues for; without both, the request 404s from the catch-all site block instead of
+  # reaching Hydra. DATA ONLY as of verify round 2 (M4) — no alert reads this job's `probe_success`
+  # anymore, only `oidc-availability` below. Kept because `probe_ssl_earliest_cert_expiry` off a
+  # verified probe is still useful to have queryable, even with nothing alerting on it here.
+  - job_name: oidc
+    metrics_path: /probe
+    params:
+      module: [oidc_discovery]
+    static_configs:
+      - targets: ['https://edge:33010/.well-known/openid-configuration']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # M4: the AVAILABILITY half of IDP-04 — OidcDiscoveryOrJwksFailing reads THIS job, not `oidc`
+  # above, so a fresh install with no exported root.crt cannot page on trust alone (see blackbox.yml's
+  # `oidc_discovery_insecure` module comment).
+  - job_name: oidc-availability
+    metrics_path: /probe
+    params:
+      module: [oidc_discovery_insecure]
+    static_configs:
+      - targets: ['https://edge:33010/.well-known/openid-configuration']
+        labels: { environment: dev, site: unknown, asset_id: unknown }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # WP27's TCP passthrough (:33020 host-side, 6000 in-container) bypasses the edge and its WAF
+  # entirely (EDGE-08) — this is the one gateway probe blackbox reaches directly, not through 9180.
+  - job_name: tcp-33020
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets: ['tyk-gateway:6000']
+        labels: { environment: dev, site: unknown, asset_id: unknown, node: tyk-1 }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

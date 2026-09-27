@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ForbiddenException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
+import { authzDeniedTotal } from '../metrics/ops-metrics';
 import { TenantIsolationGuard } from './tenant-isolation.guard';
 import type { UserPayload } from '../types';
 
@@ -70,6 +71,20 @@ describe('TenantIsolationGuard', () => {
 
     expect(guard.canActivate(contextFor(request))).toBe(true);
     expect(request.tenantId).toBe('t1');
+  });
+
+  it('counts each denial by reason, with no tenant or user label (APP-07)', async () => {
+    authzDeniedTotal.reset();
+    const mismatch: FakeRequest = { user: user(['admin'], 't1'), headers: { 'x-tenant-id': 't2' } };
+    const noTenant: FakeRequest = { user: user(['admin']), headers: {} };
+    expect(() => guard.canActivate(contextFor(mismatch))).toThrow(ForbiddenException);
+    expect(() => guard.canActivate(contextFor(noTenant))).toThrow(ForbiddenException);
+
+    const { values } = await authzDeniedTotal.get();
+    expect(values).toEqual([
+      { labels: { reason: 'tenant_mismatch' }, value: 1 },
+      { labels: { reason: 'no_tenant' }, value: 1 },
+    ]);
   });
 
   it('reads only the first value of a repeated header', () => {

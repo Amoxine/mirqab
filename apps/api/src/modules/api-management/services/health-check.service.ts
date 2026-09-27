@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { ApiHealthStatus } from '@prisma/client';
 import { prisma } from '@open-gateway/database';
+import { recordJobRun } from '../../../common/metrics/ops-metrics';
 import type { ApiUptimeTestDto } from '../dto/api-config.dto';
 
 /** How often uptime tests run. `healthStatus` must reflect a downed upstream within one interval. */
@@ -64,24 +65,33 @@ export class HealthCheckService {
 
   @Interval(HEALTH_CHECK_INTERVAL_MS)
   async checkAll(): Promise<void> {
-    const defs = await prisma.apiDefinition.findMany({
-      where: { status: 'ACTIVE' },
-      select: { id: true, config: true },
-    });
+    // A down upstream is a result, not a failure (`probe` never throws); `ok` goes false only when
+    // the sweep or one API's write throws.
+    let ok = false;
+    try {
+      const defs = await prisma.apiDefinition.findMany({
+        where: { status: 'ACTIVE' },
+        select: { id: true, config: true },
+      });
+      ok = true;
 
-    for (const def of defs) {
-      const config = def.config as { uptimeTests?: ApiUptimeTestDto[] | null } | null;
-      const tests = config?.uptimeTests ?? [];
-      // An API with no probes keeps whatever it had rather than being reset to UNKNOWN on every
-      // tick — there is nothing new to say about it.
-      if (tests.length === 0) continue;
-      try {
-        await this.checkOne(def.id, tests);
-      } catch (err) {
-        this.logger.warn(
-          `Health check of ${def.id} failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      for (const def of defs) {
+        const config = def.config as { uptimeTests?: ApiUptimeTestDto[] | null } | null;
+        const tests = config?.uptimeTests ?? [];
+        // An API with no probes keeps whatever it had rather than being reset to UNKNOWN on every
+        // tick — there is nothing new to say about it.
+        if (tests.length === 0) continue;
+        try {
+          await this.checkOne(def.id, tests);
+        } catch (err) {
+          ok = false;
+          this.logger.warn(
+            `Health check of ${def.id} failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
+    } finally {
+      recordJobRun('health_check', ok);
     }
   }
 }

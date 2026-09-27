@@ -150,6 +150,11 @@ jobs:
       - name: Guard — no Helm/Kustomize (Compose-only, O1)
         run: ./infra/scripts/check-no-k8s.sh
 
+      # OG-OBS-00: the inventory renderer's own unit tests (schema validation, file_sd/textfile
+      # shape, determinism, and the RFC 5737 guard on infra/inventory/*.yaml).
+      - name: Guard — inventory renderer tests
+        run: node --test infra/scripts/render-inventory.test.mjs
+
       - name: Format check
         run: pnpm format:check
 

@@ -1,0 +1,105 @@
+# Blackbox exporter (OG-OBS-01/02). One module per distinct check; prometheus.yml maps one job to
+# each module via the multi-target relabel pattern (docs/ha-observability/02 §3, TYK-01/02,
+# APP-02/03, IDP-03, EDGE-08). Never scrapes `:9090/-/*` directly — Prometheus has no
+# `--web.enable-lifecycle`, so blackbox has nothing to hit there anyway.
+
+modules:
+  # TYK-01: `/hello` answers 200 even when Redis is down (Tyk's own documented behaviour), so
+  # health has to come from the body, not the status code.
+  tyk_hello:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"status":"pass"'
+
+  # TYK-02: same endpoint, second module — matches the nested `redis` block instead of the
+  # top-level status, because a node can answer "pass" overall while its own Redis link is down.
+  tyk_hello_redis:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"redis":\{"status":"pass"'
+
+  # Plain "did it answer 200" — api-health, pump-health, ory-ready all reuse this rather than each
+  # getting a near-identical module.
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+
+  # web-login: APP-03's own text is "every path answers 307" — verified in the lab, and load-
+  # bearing, not a shortcut: web's redirect chain (GET / -> /oauth2/authorize -> Hydra's PUBLIC
+  # url, https://localhost:33010/...) targets `localhost`, the BROWSER-facing hostname the edge
+  # publishes. That resolves for an external vantage point but not from inside the docker network,
+  # which is where Prometheus/blackbox actually run (observability/README.md's own "everything
+  # runs from an in-network container" rule) — `follow_redirects: true` here would try to dial
+  # `localhost:33010` from the blackbox container itself and fail every time, which is not what
+  # "is web up" should mean. Accepting the first-hop 307 without following it is what APP-03 means
+  # for an in-network prober.
+  http_2xx_redirect:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200, 307]
+      follow_redirects: false
+
+  # oidc: Hydra's discovery document over the edge's existing TLS listener (:33010). `Host` and
+  # `tls_config.server_name` both have to say `localhost` — that is the Caddyfile site block's host
+  # matcher and the `tls internal` SAN alike (infra/edge/Caddyfile:293) — and `ca_file` is the
+  # exported root so an expired or wrong leaf fails the probe instead of `-k` hiding it.
+  #
+  # C1 (obs-w2): the container mounts the `./edge` DIRECTORY at /etc/blackbox/edge:ro, not the file
+  # directly — root.crt is per-install and git-ignored, and a file bind-mount of a missing path
+  # makes Docker create a directory there instead, which breaks edge-healthcheck the same way.
+  # Without an exported root.crt (infra/edge/README.md), this module's ca_file read fails and only
+  # this probe is affected — every other module here is untouched by that.
+  #
+  # VERIFY-PHASE (major M4): this module is now DATA ONLY, read but not alerted on — see
+  # `oidc_discovery_insecure` below for the module the alert actually uses, and
+  # OidcDiscoveryOrJwksFailing in rules/services.yml for why.
+  oidc_discovery:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      headers:
+        Host: localhost
+      tls_config:
+        server_name: localhost
+        ca_file: /etc/blackbox/edge/root.crt
+
+  # AVAILABILITY half of IDP-04, split out in verify round 2: a fresh install with no exported
+  # root.crt would have `OidcDiscoveryOrJwksFailing` (critical) firing forever on `oidc_discovery`
+  # above, even though Hydra is fully up and serving — that module's failure there means "the CA
+  # isn't trusted yet", not "the service is down". Cert/trust concerns are already covered by
+  # EdgeRootCertificateExpiringSoon and EdgeCertificateRenewalStalled (rules/open-gateway.yml),
+  # which read the API's own certificate gauges, not a blackbox TLS probe — so this module gives
+  # up nothing by skipping verification: it exists only to answer "is the document being served at
+  # all", with `insecure_skip_verify` so a missing root.crt can never be the reason it reads down.
+  oidc_discovery_insecure:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      headers:
+        Host: localhost
+      tls_config:
+        server_name: localhost
+        insecure_skip_verify: true
+
+  # EDGE-08: WP27's raw TCP passthrough. A plain connect is the whole check — it is L4, there is no
+  # body to match.
+  tcp_connect:
+    prober: tcp
+    timeout: 5s

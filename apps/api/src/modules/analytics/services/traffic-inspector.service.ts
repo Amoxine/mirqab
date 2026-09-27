@@ -3,7 +3,13 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { readConfig } from '../../api-management/services/tyk-mappers';
 import type { AnalyticsRange } from '../dto/analytics-query.dto';
 import { parseHttpDump, type HttpDump } from './http-dump-parser';
-import { analyticsWindow, toNumber, type SqlNumeric } from './pump-query.builder';
+import {
+  analyticsWindow,
+  REDACTION_TRIGGER,
+  redactionTriggerQuery,
+  toNumber,
+  type SqlNumeric,
+} from './pump-query.builder';
 
 export const TRAFFIC_DEFAULT_PAGE_SIZE = 20;
 export const TRAFFIC_MAX_PAGE_SIZE = 50;
@@ -94,26 +100,6 @@ export function trafficPageQuery(tykApiId: string, from: Date, limit: number, of
       AND "timestamp" >= ${from}
     ORDER BY "timestamp" DESC
     LIMIT ${limit} OFFSET ${offset}
-  `;
-}
-
-/** Must match the name `analyticsRedactionDdl` creates; the spec fails if the two drift apart. */
-export const REDACTION_TRIGGER = 'og_redact_tyk_analytics_trg';
-
-/**
- * Is the insert-time redaction trigger installed AND firing? It is created at API boot, and only if
- * `tyk_analytics` already exists; nothing makes the API wait for Pump, so it can be silently missing.
- * `tgenabled` 'O' and 'A' fire for Pump's ordinary sessions. 'D' is disabled, and 'R' fires only in
- * replica mode. `to_regclass` is NULL while the table is absent, so that case reads as "missing".
- */
-export function redactionTriggerQuery(): Prisma.Sql {
-  return Prisma.sql`
-    SELECT EXISTS (
-      SELECT 1 FROM pg_trigger
-      WHERE tgrelid = to_regclass('public.tyk_analytics')
-        AND tgname = ${REDACTION_TRIGGER}
-        AND tgenabled IN ('O', 'A')
-    ) AS present
   `;
 }
 

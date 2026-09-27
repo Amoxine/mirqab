@@ -14,7 +14,7 @@
 # Standalone (same checks, no compose):
 #   docker run --rm --network <project>_open-gateway-network --network <project>_ory-internal \
 #     -e NODE_ENV=production -e TYK_GW_SECRET=... -e REDIS_PASSWORD=... -e DB_PASS=... \
-#     -e TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING=... \
+#     -e TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING=... -e PG_EXPORTER_PASSWORD=... \
 #     -v "$PWD/infra/scripts/prod-preflight.sh:/preflight.sh:ro" redis:7-alpine sh /preflight.sh
 set -u
 
@@ -50,6 +50,7 @@ has_whitespace() {
 : "${DB_PASS:=}"
 : "${TYK_PMP_PUMPS_POSTGRES_META_CONNECTIONSTRING:=}"
 : "${EDGE_IMAGE:=}"
+: "${PG_EXPORTER_PASSWORD:=}"
 : "${KRATOS_PUBLIC_URL:=http://kratos:4433}"
 : "${DEFAULT_ADMIN_EMAIL:=admin@opengateway.io}"
 : "${DEFAULT_ADMIN_PASSWORD:=Admin123!}"
@@ -198,6 +199,22 @@ else
   else
     ok "$DEFAULT_ADMIN_EMAIL does not sign in with the seeded password"
   fi
+fi
+
+# ── 7. Postgres exporter password (OG-OBS-02) ──────────────────────────────────
+# The og_monitor role postgres-exporter logs in as (infra/postgres/monitoring-role.sql). The prod
+# overlay's `:?` already refuses an unset value, so what this adds is the shape: a pasted or padded
+# value is set but not a secret, and `install.sh` mints 64 hex characters, so anything under 32 was
+# typed by hand. The role is read-only (pg_monitor), but it still reads every database's activity,
+# including query text in pg_stat_activity.
+if [ -z "$PG_EXPORTER_PASSWORD" ]; then
+  bad "PG_EXPORTER_PASSWORD is unset — postgres-exporter's og_monitor role would have no password"
+elif has_whitespace "$PG_EXPORTER_PASSWORD"; then
+  bad "PG_EXPORTER_PASSWORD contains whitespace — a padded or multi-line value is not a secret"
+elif [ "${#PG_EXPORTER_PASSWORD}" -lt 32 ]; then
+  bad "PG_EXPORTER_PASSWORD is only ${#PG_EXPORTER_PASSWORD} characters — use at least 32 (openssl rand -hex 32)"
+else
+  ok "PG_EXPORTER_PASSWORD set, ${#PG_EXPORTER_PASSWORD} characters"
 fi
 
 echo "───────────────────────────────────────────────────────────"
