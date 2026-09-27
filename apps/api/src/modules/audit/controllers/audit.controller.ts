@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query, UseGuards, ParseIntPipe, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards, ParseIntPipe, ParseUUIDPipe, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { AuditService, CSV_MAX_ROWS } from '../services/audit.service';
 import { AuditQueryDto, AuditExportQueryDto } from '../dto/audit-query.dto';
+import { AnalyticsRangeQueryDto } from '../../analytics/dto/analytics-query.dto';
 import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
@@ -66,6 +67,19 @@ export class AuditController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${String(Date.now())}.csv"`);
     res.send(csv);
+  }
+
+  // Two path segments, so ':id' (one segment) can never swallow this regardless of declaration
+  // order — grouped here for readability, next to the other read routes.
+  @Get('traffic/:apiDefId')
+  @Permissions('analytics:read')
+  @ApiOperation({ summary: "An audit row's API, rolled up over the same window (view traffic)" })
+  async findRelatedTraffic(
+    @CurrentTenant() tenantId: string | undefined,
+    @Param('apiDefId', ParseUUIDPipe) apiDefId: string,
+    @Query() query: AnalyticsRangeQueryDto,
+  ) {
+    return this.auditService.findRelatedTraffic(tenantId, apiDefId, query.range);
   }
 
   // Declared after the static routes above: ':id' would otherwise swallow /stats

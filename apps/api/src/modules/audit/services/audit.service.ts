@@ -1,6 +1,10 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { AuditAction, Prisma } from '@prisma/client';
 import { prisma } from '@open-gateway/database';
+import { csvCell } from '../../../common/utils/csv';
+import { AnalyticsService } from '../../analytics/services/analytics.service';
+import { AnalyticsRange } from '../../analytics/dto/analytics-query.dto';
+import { analyticsWindow, errorRatePercent, round2, toNumber } from '../../analytics/services/pump-query.builder';
 
 export interface AuditEntry {
   tenantId?: string;
@@ -21,6 +25,17 @@ export interface AuditFilters {
   resource?: string;
   page?: number;
   pageSize?: number;
+}
+
+/** `AuditService.findRelatedTraffic` — an audit row's API, rolled up over `range` (V1-LOG-01). */
+export interface RelatedTrafficResponse {
+  apiDefId: string;
+  range: AnalyticsRange;
+  requests: number;
+  errors: number;
+  errorRate: number;
+  avgLatencyMs: number;
+  avgUpstreamLatencyMs: number;
 }
 
 /** A single CSV export stays a request, not a background job. Rows beyond this are cut. */
@@ -67,19 +82,6 @@ function createdAtFilter({ dateFrom, dateTo }: Pick<AuditFilters, 'dateFrom' | '
 const isAuditAction = (value: string | undefined): value is AuditAction =>
   value !== undefined && (Object.values(AuditAction) as string[]).includes(value);
 
-/**
- * RFC4180 cell: always quoted, embedded quotes doubled.
- *
- * A cell starting with `=`, `+`, `-` or `@` is executed as a formula when the file is opened in
- * Excel or Sheets, so an attacker who gets a crafted string into an audited field (a resource name,
- * a user agent) could run it on whoever downloads the export. A leading apostrophe defuses it.
- */
-export function csvCell(value: string | null | undefined): string {
-  const raw = value ?? '';
-  const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
 const CSV_HEADER = [
   'Timestamp',
   'User',
@@ -96,6 +98,8 @@ export class AuditService {
   // Shared singleton from @open-gateway/database: `new PrismaClient()` here opened a second pool
   // that was never disconnected.
   private readonly prisma = prisma;
+
+  constructor(private readonly analyticsService: AnalyticsService) {}
 
   async record(entry: AuditEntry): Promise<void> {
     try {
@@ -259,6 +263,56 @@ export class AuditService {
       logsByAction,
       topUsers: topUsers.map((u) => ({ userId: u.userId, count: u._count.userId })),
       topResources: topResources.map((r) => ({ resource: r.resource, count: r._count.resource })),
+    };
+  }
+
+  /**
+   * V1-LOG-01: the "view traffic in this window" jump from an audit row (whose `details` carries the
+   * `ApiDefinition` id, G3 — never a raw Tyk id) to that API's Pump rollup. `apiDefId` is resolved to
+   * a `tykApiId` inside a query already scoped to `tenantId`, so a cross-tenant or unowned id (AC-
+   * LOG01.3) or a since-deleted API never reaches Pump — it returns the zeroed shape below instead of
+   * querying at all. Inherits `getApiMetrics`/`getHealth`'s own known limitations (G11): a false zero
+   * is indistinguishable from "no traffic", and a failed rollup query is not surfaced as an error.
+   */
+  async findRelatedTraffic(
+    tenantId: string | undefined,
+    apiDefId: string,
+    range: AnalyticsRange,
+  ): Promise<RelatedTrafficResponse> {
+    const scopedTenantId = requireTenant(tenantId);
+
+    const empty = (): RelatedTrafficResponse => ({
+      apiDefId,
+      range,
+      requests: 0,
+      errors: 0,
+      errorRate: 0,
+      avgLatencyMs: 0,
+      avgUpstreamLatencyMs: 0,
+    });
+
+    const api = await this.prisma.apiDefinition.findFirst({
+      where: { id: apiDefId, tenantId: scopedTenantId },
+      select: { tykApiId: true },
+    });
+    if (!api?.tykApiId) return empty();
+
+    const window = analyticsWindow(range);
+    const rollups = await this.analyticsService.loadApiRollup([api.tykApiId], window);
+    if (rollups.length === 0) return empty();
+    const [rollup] = rollups;
+
+    const requests = toNumber(rollup.requests);
+    const errors = toNumber(rollup.errors);
+
+    return {
+      apiDefId,
+      range,
+      requests,
+      errors,
+      errorRate: errorRatePercent(errors, requests),
+      avgLatencyMs: round2(toNumber(rollup.avg_latency_ms)),
+      avgUpstreamLatencyMs: round2(toNumber(rollup.avg_upstream_ms)),
     };
   }
 }

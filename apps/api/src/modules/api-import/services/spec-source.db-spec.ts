@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { type Prisma, prisma } from '@open-gateway/database';
 import * as Parsers from '@stoplight/spectral-parsers';
 import { pendingSpecCandidates, type ApiService } from '../../api-management/services/api.service';
+import type { AnalyticsService } from '../../analytics/services/analytics.service';
 import { AuditService } from '../../audit/services/audit.service';
 import type { SpecFetchConditions, SpecFetcherPort, SpecFetchNotModified, SpecFetchOk } from '../../spec-fetch/spec-fetch.types';
 import { ApiImportService } from './api-import.service';
@@ -65,7 +66,9 @@ describe('OAS-08 spec sources and candidates on a real Postgres', () => {
     new ApiImportService(new SpectralLintService(), {} as ApiService, new ApiSpecService()),
     { syncNow } as unknown as ApiService,
   );
-  const candidates = new SpecCandidateService(specUpdate, new AuditService());
+  // AuditService now takes AnalyticsService (V1-LOG-01's findRelatedTraffic); this suite never
+  // exercises that path, only `record()`, which only touches `this.prisma`.
+  const candidates = new SpecCandidateService(specUpdate, new AuditService({} as AnalyticsService));
   const tenants: string[] = [];
 
   beforeAll(() => {

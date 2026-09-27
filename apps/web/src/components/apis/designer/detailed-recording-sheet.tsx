@@ -71,6 +71,8 @@ export function DetailedRecordingSheet({ api, open, onOpenChange }: DetailedReco
               </FormItem>
             )}
           />
+          {/* V1-LOG-02: this toggle used to be a dead end — nothing read the capture back. */}
+          <p className="text-sm text-muted-foreground">{t('designer.detailedRecording.viewHint')}</p>
           <ConfigSheetFooter isSubmitting={form.formState.isSubmitting} onCancel={handleClose} />
         </form>
       </Form>

@@ -45,12 +45,19 @@
     "title": "Members",
     "invite": "Invite",
     "empty": "No members yet.",
+    "noSearchResults": "No members match your search.",
+    "searchPlaceholder": "Search by name or email",
+    "searchAriaLabel": "Search members",
     "columnUser": "User",
     "columnJoined": "Joined",
     "roleAriaLabel": "Role for {email}",
     "removeAriaLabel": "Remove {email}",
     "roleUpdatedToast": "{email} is now {role}",
-    "roleUpdateError": "Failed to change role"
+    "roleUpdateError": "Failed to change role",
+    "pendingBadge": "Pending",
+    "pendingInstructionsText": "Not signed in yet. Ask {email} to sign up with this exact email, then check it for a verification email before logging in — this app has not sent them anything.",
+    "pendingCopyAriaLabel": "Copy invite instructions",
+    "pendingCopyFailed": "Could not copy to clipboard"
   },
   "form": {
     "createTitle": "Create tenant",
@@ -83,6 +90,11 @@
     "errorToast": "Failed to invite user",
     "notFoundError": "No user with this email has signed in yet. They need to register and log in once before you can invite them.",
     "alreadyMemberError": "This user is already a member of this tenant.",
+    "alreadyInvitedError": "This email has already been invited or is already a member.",
+    "offerText": "No account exists yet for {email}. You can invite them by email instead — this app will not send them anything; ask them to sign up with this exact email, then check it for a verification email before logging in.",
+    "inviteSubmit": "Invite by email",
+    "inviteSubmitting": "Inviting...",
+    "inviteSuccessToast": "Invited {email} by email — ask them to sign up with this address before logging in.",
     "errors": {
       "emailRequired": "Required",
       "emailInvalid": "Enter a valid email"

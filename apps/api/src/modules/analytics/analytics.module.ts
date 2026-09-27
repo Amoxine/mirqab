@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AnalyticsService } from './services/analytics.service';
 import { AnalyticsRetentionScheduler } from './services/analytics-retention.scheduler';
 import { PumpHealthService } from './services/pump-health.service';
+import { TrafficInspectorService } from './services/traffic-inspector.service';
 import { AnalyticsController } from './controllers/analytics.controller';
 
 /**
@@ -10,8 +11,9 @@ import { AnalyticsController } from './controllers/analytics.controller';
  */
 @Module({
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, AnalyticsRetentionScheduler, PumpHealthService],
-  exports: [AnalyticsService],
+  providers: [AnalyticsService, AnalyticsRetentionScheduler, PumpHealthService, TrafficInspectorService],
+  // TrafficInspectorService: served by `GET /apis/:id/traffic` on the API controller (V1-LOG-02).
+  exports: [AnalyticsService, TrafficInspectorService],
 })
 // A Nest module is a decorator-only class by design; the rule cannot see @Module's metadata.
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

@@ -118,10 +118,16 @@ Proof (compose stack): `docker stop open-gateway-tyk-pump` → the next health c
 og_tyk_analytics_apiid_ts   (apiid, "timestamp" DESC)
 og_tyk_analytics_ts         ("timestamp" DESC)
 og_tyk_analytics_apikey_ts  (apikey, "timestamp" DESC)
+og_tyk_analytics_captured_apiid_ts  (apiid, "timestamp" DESC) WHERE rawrequest <> '' OR rawresponse <> ''
 ```
 
+The last one is partial: it holds only rows with a captured dump, so the traffic inspector's "has this
+API ever been recorded" check does not walk every row of the API. Postgres uses it only when the
+query filters on exactly `rawrequest <> '' OR rawresponse <> ''`.
+
 Module init, not a Prisma migration: the pump may create the table *after* `migrate deploy` has run,
-and an applied migration never re-runs.
+and an applied migration never re-runs. The daily retention cron (below) retries the same DDL, so a
+table the pump creates after the API booted still gets its indexes and redaction trigger.
 
 ## `tyk_aggregated` — hourly rollup (48 columns)
 
@@ -210,9 +216,34 @@ decodes each row's `rawrequest`/`rawresponse`, replaces the **value** of `Author
 `Set-Cookie`, `X-Tyk-Authorization` and `X-Api-Key` headers with `[REDACTED]` (name kept, for
 diagnostics), replaces configured JSON body field values (`ANALYTICS_REDACT_FIELDS`, comma-separated;
 defaults to `password, pass, secret, token, authorization, api_key, apikey, credential, ssn,
-credit_card, creditcard, cvv`), then re-encodes — all before the row becomes readable by anyone. A
-trigger fires for the pump's actual multi-row inserts exactly as it would for a single plain one, and
-cannot be bypassed by a client that merely forgets to redact.
+credit_card, creditcard, cvv, access_token, refresh_token, client_secret`), then re-encodes — all
+before the row becomes readable by anyone. A trigger fires for the pump's actual multi-row inserts
+exactly as it would for a single plain one, and cannot be bypassed by a client that merely forgets to
+redact.
+
+Field keys match **exactly** (`token` does not cover `access_token`, hence the explicit OAuth
+entries). A field's value is redacted when it is a JSON string (escape-aware: `"a\"b"` is one value)
+or a JSON number; either becomes `"[REDACTED]"`. Nested objects/arrays under a field, form-encoded
+bodies and query-string secrets are not covered here; the traffic inspector adds a second,
+display-time pass that redacts by name pattern in headers, query/form parameters and JSON fields
+(`http-dump-parser.ts`). A redacted key is written back as configured (`"Password" : 1` is stored as
+`"password":"[REDACTED]"`).
+
+Cost is bounded: each decoded dump is cut to its first 16,384 characters **before** any regex runs,
+and a cut dump ends with the line `[TRUNCATED: capture cut at 16384 characters before redaction]`; a
+secret cut open by the cap is still redacted. Postgres regex capture groups cost ~0.5 ms per match, so
+the old single-pattern pass let a body of `"cvv":1,` repeated hold a single-row INSERT for ~11 s at
+200 KB (and stall the pump for every tenant); measured on Postgres 16 after the change, any such row
+takes 40-80 ms, and a 500-row batch of ordinary 1 KB requests got faster (~0.9 ms/row, was ~1.4).
+
+A dump that cannot be decoded (a gzip/binary body is not UTF-8) is stored as the base64
+of `[UNREDACTABLE: non-UTF8 body]` in that column only: never the unredacted original, and never an
+error that would abort the pump's whole batch.
+
+If the trigger was missing or disabled when it is (re)installed — e.g. the pump created the table
+after the API booted — the same statement redacts the dumps already stored, in the same transaction, so "trigger
+present" always means "stored rows redacted". Until then the traffic inspector reports the capture
+as failed rather than showing anything.
 
 Because a trigger cannot read `process.env` per row, the field list is baked into the trigger
 function body at API-boot time; a changed `ANALYTICS_REDACT_FIELDS` takes effect on the next boot,
@@ -224,7 +255,8 @@ the Endpoints table above.
 ## Retention
 
 A daily cron (03:00, `analytics-retention.scheduler.ts`) trims both tables, each statement guarded by
-`to_regclass`:
+`to_regclass`. When `tyk_analytics` exists it first re-applies the index DDL and the redaction
+trigger (the second chance for a table created after boot, see above):
 
 | Env var | Default | Table |
 |---|---|---|

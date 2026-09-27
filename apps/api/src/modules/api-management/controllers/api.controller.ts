@@ -31,6 +31,13 @@ import { Permissions } from '../../../common/decorators/permissions.decorator';
 import { CurrentTenant } from '../../../common/decorators/current-tenant.decorator';
 import { Audit } from '../../../common/decorators/audit.decorator';
 import { PlanLimitGuard } from '../../plans/guards/plan-limit.guard';
+import { AnalyticsRange } from '../../analytics/dto/analytics-query.dto';
+import {
+  TRAFFIC_DEFAULT_PAGE_SIZE,
+  TRAFFIC_MAX_PAGE_SIZE,
+  TrafficInspectorService,
+  type TrafficPage,
+} from '../../analytics/services/traffic-inspector.service';
 import { ApiStatus, ApiSyncStatus } from '@prisma/client';
 
 @ApiTags('APIs')
@@ -38,7 +45,10 @@ import { ApiStatus, ApiSyncStatus } from '@prisma/client';
 @UseGuards(TenantIsolationGuard, PermissionsGuard)
 @Controller('apis')
 export class ApiManagementController {
-  constructor(private readonly apiService: ApiService) {}
+  constructor(
+    private readonly apiService: ApiService,
+    private readonly trafficInspector: TrafficInspectorService,
+  ) {}
 
   @Post()
   @Permissions('api:create')
@@ -178,6 +188,33 @@ export class ApiManagementController {
     @Body() dto: DebugRequestDto,
   ): Promise<{ success: true; data: TykDebugResult }> {
     return { success: true, data: await this.apiService.debugRequest(id, tenantId, dto) };
+  }
+
+  @Get(':id/traffic')
+  @Permissions('api:update')
+  @ApiOperation({
+    summary: 'Captured request/response detail for this API (detailed recording)',
+    description:
+      'Reuses `api:update` (owner decision, like `/debug`): no new permission, no backfill. Other ' +
+      "people's real traffic, redacted twice — by the insert trigger, then on read by NAME PATTERN " +
+      '(headers, query/form parameters and JSON fields that look like passwords, tokens, keys, ' +
+      "cookies and the like, plus this API's own auth header), body cut at 16 KiB. `data.status` is " +
+      '`NOT_ENABLED` only when recording is off AND nothing was ever captured, `FAILED` when the ' +
+      'analytics store could not be read OR the redaction trigger is missing or disabled (then no ' +
+      'row is shown at all), otherwise `OK` with a page (possibly empty).',
+  })
+  @ApiQuery({ name: 'range', required: false, enum: AnalyticsRange })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: `At most ${String(TRAFFIC_MAX_PAGE_SIZE)}` })
+  async traffic(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentTenant() tenantId: string,
+    @Query('range', new DefaultValuePipe(AnalyticsRange.ONE_DAY), new ParseEnumPipe(AnalyticsRange))
+    range: AnalyticsRange,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('pageSize', new DefaultValuePipe(TRAFFIC_DEFAULT_PAGE_SIZE), ParseIntPipe) pageSize: number,
+  ): Promise<{ success: true; data: TrafficPage }> {
+    return { success: true, data: await this.trafficInspector.list(tenantId, id, range, page, pageSize) };
   }
 
   @Post(':id/cache/invalidate')

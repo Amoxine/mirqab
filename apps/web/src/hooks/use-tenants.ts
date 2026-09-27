@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import type { PaginatedResponse } from '@/types';
@@ -14,13 +14,15 @@ export interface Tenant {
   updatedAt: string;
 }
 
-/** A row of `GET /tenants/:id/users`. */
+/** A row of `GET /tenants/:id/users`. `pending` is `kratosIdentityId === null` server-side: invited
+ * but never yet claimed by a real sign-in. */
 export interface TenantMember {
   userId: string;
   email: string;
   name: string;
   role: string;
   isDefault: boolean;
+  pending: boolean;
   createdAt: string;
 }
 
@@ -86,11 +88,26 @@ export function useTenant(id: string) {
   });
 }
 
-export function useTenantMembers(id: string) {
+export interface TenantMembersParams {
+  page?: number;
+  pageSize?: number;
+  /** Case-insensitive name/email substring filter. */
+  q?: string;
+}
+
+export function useTenantMembers(id: string, { page = 1, pageSize = 20, q = '' }: TenantMembersParams = {}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (q) params.set('q', q);
   return useQuery({
-    queryKey: queryKeys.tenants.members(id),
-    queryFn: () => api.get<TenantMember[]>(`/tenants/${id}/users`).then((res) => res.data),
+    queryKey: queryKeys.tenants.members(id, Object.fromEntries(params.entries())),
+    queryFn: () =>
+      api
+        .get<TenantMember[]>(`/tenants/${id}/users?${params.toString()}`)
+        // Same envelope shape as GET /tenants: `{ success, data, meta }` passed through as-is.
+        .then((res) => res as unknown as PaginatedResponse<TenantMember>),
     enabled: !!id,
+    // Each search/page is a new key: without this the table flashes a skeleton and the pager drops to "of 1".
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -139,6 +156,20 @@ export function useInviteMember(tenantId: string) {
   return useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       api.post<TenantMember>(`/tenants/${tenantId}/users`, { userId, role }).then((res) => res.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tenants.members(tenantId) }),
+  });
+}
+
+/**
+ * `POST :id/users/invite` (V1-USR-01, Option F): pre-creates a `User` row with no Kratos identity
+ * yet — no email is sent by this app. The row shows as `pending: true` until the invitee registers
+ * with this same email through Kratos's own self-service flow and verifies it.
+ */
+export function useInviteByEmail(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, role }: { email: string; role: string }) =>
+      api.post<TenantMember>(`/tenants/${tenantId}/users/invite`, { email, role }).then((res) => res.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tenants.members(tenantId) }),
   });
 }

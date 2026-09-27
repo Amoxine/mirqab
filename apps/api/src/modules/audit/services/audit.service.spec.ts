@@ -1,7 +1,10 @@
 import 'reflect-metadata';
 import { ForbiddenException } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
-import { AuditService, CSV_MAX_ROWS, csvCell } from './audit.service';
+import type { AnalyticsService } from '../../analytics/services/analytics.service';
+import type { RollupRow } from '../../analytics/services/pump-query.builder';
+import { AnalyticsRange } from '../../analytics/dto/analytics-query.dto';
+import { AuditService, CSV_MAX_ROWS } from './audit.service';
 
 interface AuditRow {
   createdAt: Date;
@@ -32,16 +35,20 @@ interface QueryArgs {
 }
 
 /** Captures the args AuditService hands Prisma, so the where clause itself can be asserted. */
-function makeService(rows: AuditRow[] = []) {
+function makeService(rows: AuditRow[] = [], analyticsService: Partial<AnalyticsService> = {}) {
   const findMany = jest.fn((_args: QueryArgs) => Promise.resolve(rows));
   const count = jest.fn((_args: QueryArgs) => Promise.resolve(rows.length));
-  const service = new AuditService();
+  const findFirst = jest
+    .fn<Promise<{ tykApiId: string | null } | null>, [{ where: { id: string; tenantId: string } }]>()
+    .mockResolvedValue(null);
+  const service = new AuditService(analyticsService as AnalyticsService);
 
   (service as unknown as { prisma: PrismaClient }).prisma = {
     auditLog: { findMany, count, findUnique: jest.fn().mockResolvedValue(null), groupBy: jest.fn() },
+    apiDefinition: { findFirst },
   } as unknown as PrismaClient;
 
-  return { service, findMany, count };
+  return { service, findMany, count, findFirst };
 }
 
 // A1: `where = { tenantId }` with an undefined tenantId is a where clause Prisma DROPS, so a
@@ -153,35 +160,9 @@ describe('AuditService date range', () => {
   });
 });
 
-describe('csvCell', () => {
-  it('quotes every field', () => {
-    expect(csvCell('apis')).toBe('"apis"');
-  });
-
-  it('escapes embedded quotes by doubling them (RFC4180)', () => {
-    expect(csvCell('say "hi"')).toBe('"say ""hi"""');
-  });
-
-  it.each([[','], ['\n'], ['\r\n']])('keeps %p inside the quoted field', (char) => {
-    expect(csvCell(`a${char}b`)).toBe(`"a${char}b"`);
-  });
-
-  // A cell starting with one of these is executed as a formula by Excel/Sheets.
-  it.each([
-    ['=1+1', `"'=1+1"`],
-    ['+1', `"'+1"`],
-    ['-1', `"'-1"`],
-    ['@SUM(A1)', `"'@SUM(A1)"`],
-    ['=cmd|\' /c calc\'!A0', `"'=cmd|' /c calc'!A0"`],
-  ])('neutralises the formula %s', (raw, expected) => {
-    expect(csvCell(raw)).toBe(expected);
-  });
-
-  it.each([[null], [undefined]])('renders %p as an empty quoted field', (value) => {
-    expect(csvCell(value)).toBe('""');
-  });
-});
-
+// csvCell itself moved to common/utils/csv.ts (+ its own csv.spec.ts) to break the AnalyticsService
+// <-> AuditService import cycle; this file keeps only the tests that exercise AuditService's own use
+// of it (header/row quoting, formula-in-a-real-field escaping), not the function's own unit tests.
 describe('AuditService.exportCsv', () => {
   it('quotes the header and every row, separated by CRLF', async () => {
     const { service } = makeService([row()]);
@@ -292,5 +273,150 @@ describe('AuditService.record / recordOrThrow', () => {
 
     await expect(omitted).rejects.toThrow();
     expect(sharedCreate).not.toHaveBeenCalled();
+  });
+});
+
+// AC-LOG01.1/.3: apiDefId -> tykApiId is resolved inside a tenant-scoped query; a client-supplied
+// tykApiId or a cross-tenant apiDefId must never reach the Pump rollup.
+describe('AuditService.findRelatedTraffic', () => {
+  it('refuses a request with no tenant and never queries', async () => {
+    const loadApiRollup = jest.fn();
+    const { service, findFirst } = makeService([], { loadApiRollup });
+
+    await expect(
+      service.findRelatedTraffic(undefined, 'api-1', AnalyticsRange.ONE_DAY),
+    ).rejects.toThrow(ForbiddenException);
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(loadApiRollup).not.toHaveBeenCalled();
+  });
+
+  it('resolves apiDefId to a tykApiId scoped to the caller’s own tenant', async () => {
+    const loadApiRollup = jest.fn().mockResolvedValue([]);
+    const { service, findFirst } = makeService([], { loadApiRollup });
+
+    await service.findRelatedTraffic('t1', 'api-1', AnalyticsRange.ONE_DAY);
+
+    expect(findFirst.mock.calls[0][0].where).toEqual({ id: 'api-1', tenantId: 't1' });
+  });
+
+  // Simulates a cross-tenant apiDefId (AC-LOG01.3): the tenant-scoped lookup finds nothing, so the
+  // caller must never fall through to an unscoped or client-supplied tykApiId query.
+  it('returns a zeroed result and never queries Pump when the api is not owned by this tenant', async () => {
+    const loadApiRollup = jest.fn();
+    const { service, findFirst } = makeService([], { loadApiRollup });
+    findFirst.mockResolvedValue(null);
+
+    const result = await service.findRelatedTraffic('t1', 'api-1', AnalyticsRange.ONE_DAY);
+
+    expect(loadApiRollup).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      apiDefId: 'api-1',
+      range: AnalyticsRange.ONE_DAY,
+      requests: 0,
+      errors: 0,
+      errorRate: 0,
+      avgLatencyMs: 0,
+      avgUpstreamLatencyMs: 0,
+    });
+  });
+
+  // AC-LOG01.3, at the bar of AC-LOG02.3/AC-USR01.1: a REAL two-tenant fixture, not a canned null. Two
+  // genuine rows (their own real ids, own tenants, own Tyk ids) so `findFirst` actually has to pick
+  // one — this fails if the lookup is ever split into an id-only query plus a separate/loose tenant
+  // check (team-lead's regression scenario), because that shape would still resolve tenant B's row.
+  it('never surfaces tenant B’s rollup when tenant A asks for tenant B’s own real apiDefId', async () => {
+    const fixtures = [
+      { id: 'api-uuid-a', tenantId: 't1', tykApiId: 'tyk-a' },
+      { id: 'api-uuid-b', tenantId: 't2', tykApiId: 'tyk-b' },
+    ];
+    const rollupOf = (tykApiId: string): RollupRow => ({
+      dimension_value: tykApiId,
+      requests: tykApiId === 'tyk-a' ? 5 : 999_999,
+      success: tykApiId === 'tyk-a' ? 5 : 999_999,
+      errors: 0,
+      avg_latency_ms: 1,
+      avg_upstream_ms: 1,
+    });
+    const loadApiRollup = jest.fn((tykApiIds: string[], _window: unknown, _limit?: number) =>
+      Promise.resolve(tykApiIds.map(rollupOf)),
+    );
+    const { service, findFirst } = makeService([], { loadApiRollup });
+    // A real lookup, not a stub returning the same thing regardless of args: only a matching
+    // (id, tenantId) PAIR resolves, exactly like a unique-id table two tenants both have a row in.
+    findFirst.mockImplementation((args) =>
+      Promise.resolve(fixtures.find((f) => f.id === args.where.id && f.tenantId === args.where.tenantId) ?? null),
+    );
+
+    // Tenant A asks for tenant B's real, existing apiDefId — not a dropped filter, an actual other
+    // tenant's row that genuinely exists and genuinely has traffic.
+    const leaked = await service.findRelatedTraffic('t1', 'api-uuid-b', AnalyticsRange.ONE_DAY);
+    expect(leaked.requests).toBe(0);
+    expect(loadApiRollup).not.toHaveBeenCalled();
+
+    // Sanity: the fixture is genuinely wired to tell tenants apart — tenant A's OWN id does surface
+    // tenant A's own (much smaller) numbers, proving the zero above isn't just "always empty".
+    const own = await service.findRelatedTraffic('t1', 'api-uuid-a', AnalyticsRange.ONE_DAY);
+    expect(own.requests).toBe(5);
+  });
+
+  it('returns zeros when the api has never synced a tykApiId', async () => {
+    const loadApiRollup = jest.fn();
+    const { service, findFirst } = makeService([], { loadApiRollup });
+    findFirst.mockResolvedValue({ tykApiId: null });
+
+    const result = await service.findRelatedTraffic('t1', 'api-1', AnalyticsRange.ONE_DAY);
+
+    expect(loadApiRollup).not.toHaveBeenCalled();
+    expect(result.requests).toBe(0);
+  });
+
+  it('queries only the resolved tykApiId, never a client-supplied one', async () => {
+    const loadApiRollup = jest
+      .fn<Promise<RollupRow[]>, [string[], unknown, number?]>()
+      .mockResolvedValue([]);
+    const { service, findFirst } = makeService([], { loadApiRollup });
+    findFirst.mockResolvedValue({ tykApiId: 'tyk-42' });
+
+    await service.findRelatedTraffic('t1', 'api-1', AnalyticsRange.ONE_DAY);
+
+    expect(loadApiRollup.mock.calls[0][0]).toEqual(['tyk-42']);
+  });
+
+  it('maps a rollup row into the rounded response shape', async () => {
+    const loadApiRollup = jest.fn().mockResolvedValue([
+      {
+        dimension_value: 'tyk-42',
+        requests: 200,
+        success: 190,
+        errors: 10,
+        avg_latency_ms: 12.345,
+        avg_upstream_ms: 8.111,
+      },
+    ]);
+    const { service, findFirst } = makeService([], { loadApiRollup });
+    findFirst.mockResolvedValue({ tykApiId: 'tyk-42' });
+
+    const result = await service.findRelatedTraffic('t1', 'api-1', AnalyticsRange.SEVEN_DAYS);
+
+    expect(result).toEqual({
+      apiDefId: 'api-1',
+      range: AnalyticsRange.SEVEN_DAYS,
+      requests: 200,
+      errors: 10,
+      errorRate: 5,
+      avgLatencyMs: 12.35,
+      avgUpstreamLatencyMs: 8.11,
+    });
+  });
+
+  it('returns zeros when the rollup has no row for the window', async () => {
+    const loadApiRollup = jest.fn().mockResolvedValue([]);
+    const { service, findFirst } = makeService([], { loadApiRollup });
+    findFirst.mockResolvedValue({ tykApiId: 'tyk-42' });
+
+    const result = await service.findRelatedTraffic('t1', 'api-1', AnalyticsRange.ONE_DAY);
+
+    expect(result.requests).toBe(0);
+    expect(result.errorRate).toBe(0);
   });
 });

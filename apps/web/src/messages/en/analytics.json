@@ -98,6 +98,10 @@
     "clearAll": "Clear All",
     "empty": "No audit logs found.",
     "systemUser": "System",
+    "viewTraffic": "View traffic in this window",
+    "viewTrafficTitle": "Traffic for this API",
+    "trafficLoading": "Loading traffic…",
+    "trafficError": "Failed to load traffic.",
     "columns": {
       "timestamp": "Timestamp",
       "user": "User",

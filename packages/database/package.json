@@ -28,7 +28,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "test": "tsx prisma/permissions.check.ts",
+    "test": "tsx prisma/permissions.check.ts && tsx scripts/migrate-users-to-kratos.check.ts",
     "clean": "rm -rf node_modules .prisma dist"
   },
   "files": [

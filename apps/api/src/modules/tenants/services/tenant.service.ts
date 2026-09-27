@@ -17,7 +17,9 @@ import { prisma, tykOrgIdFor } from '@open-gateway/database';
 import { CreateTenantDto } from '../dto/create-tenant.dto';
 import { UpdateTenantDto } from '../dto/update-tenant.dto';
 import { PaginationDto, PaginationMeta } from '../dto/pagination.dto';
+import { ListTenantUsersDto } from '../dto/list-tenant-users.dto';
 import {
+  TenantMemberResponseDto,
   TenantResponseDto,
   TenantUserResponseDto,
   UserLookupResponseDto,
@@ -134,10 +136,14 @@ export class TenantService {
   /**
    * True when `userId` is the only admin-relation member of `tenantId` — changing their role away
    * from admin, or removing them, would leave the tenant with nobody who can manage it.
+   *
+   * Only claimed rows count (V1-USR-01): a pending invite (`User.kratosIdentityId` still null) is an
+   * admin nobody can log in as yet, so a claimed admin plus a pending admin invite is still one admin.
+   * Removing that pending row itself stays allowed — it is never counted, so it is never "the last".
    */
   private async isLastAdmin(tenantId: string, userId: string): Promise<boolean> {
     const members = await this.prisma.userTenant.findMany({
-      where: { tenantId },
+      where: { tenantId, user: { kratosIdentityId: { not: null } } },
       select: { userId: true, role: true },
     });
     const admins = members.filter((m) => relationForRole(m.role) === 'admin');
@@ -404,9 +410,14 @@ export class TenantService {
   }
 
   /**
-   * List all users assigned to a tenant. Requires membership (or super_admin).
+   * One page of the users assigned to a tenant, newest first, optionally narrowed by `q` (a
+   * case-insensitive substring of the name or email). Requires membership (or super_admin).
    */
-  async findUsers(tenantId: string, caller: UserPayload): Promise<TenantUserResponseDto[]> {
+  async findUsers(
+    tenantId: string,
+    caller: UserPayload,
+    query: ListTenantUsersDto = {},
+  ): Promise<{ data: TenantMemberResponseDto[]; meta: PaginationMeta }> {
     await this.assertPermit(caller, tenantId, 'view');
 
     // Verify tenant exists
@@ -419,28 +430,62 @@ export class TenantService {
       throw new NotFoundException(`Tenant with ID "${tenantId}" not found`);
     }
 
-    const userTenants = await this.prisma.userTenant.findMany({
-      where: { tenantId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const term = query.q?.trim();
+    // The search only ever narrows inside `tenantId` — it sits under `user`, never beside it in an OR.
+    const where: Prisma.UserTenantWhereInput = {
+      tenantId,
+      ...(term
+        ? {
+            user: {
+              OR: [
+                { name: { contains: term, mode: 'insensitive' } },
+                { email: { contains: term, mode: 'insensitive' } },
+              ],
+            },
+          }
+        : {}),
+    };
+
+    const [userTenants, totalCount] = await this.prisma.$transaction([
+      this.prisma.userTenant.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              kratosIdentityId: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        // userId breaks ties between rows created in the same instant, so pages never overlap or skip.
+        orderBy: [{ createdAt: 'desc' }, { userId: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.userTenant.count({ where }),
+    ]);
 
-    return userTenants.map((ut) => ({
-      userId: ut.userId,
-      email: ut.user.email,
-      name: ut.user.name,
-      role: ut.role,
-      isDefault: ut.isDefault,
-      createdAt: ut.createdAt,
-    }));
+    return {
+      data: userTenants.map((ut) => ({
+        userId: ut.userId,
+        email: ut.user.email,
+        name: ut.user.name,
+        role: ut.role,
+        isDefault: ut.isDefault,
+        createdAt: ut.createdAt,
+        pending: ut.user.kratosIdentityId === null,
+      })),
+      meta: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages: Math.ceil(totalCount / pageSize),
+      },
+    };
   }
 
   /**
@@ -538,8 +583,8 @@ export class TenantService {
    * Returns null for no match rather than 404 — a search with zero results isn't an error. The
    * common case is a user who has signed in at least once: the Postgres `User` row is provisioned
    * lazily on first login (apps/web's oauth2/login route), so someone who only registered in Kratos
-   * and never logged in has no row yet and can't be found here — the invite UI surfaces that as
-   * "ask them to log in once first", not a 500.
+   * and never logged in has no row yet and can't be found here. A miss is where inviteByEmail comes
+   * in: its pending row is the one that person's first verified login then claims.
    */
   async lookupUserByEmail(
     tenantId: string,
@@ -548,8 +593,9 @@ export class TenantService {
   ): Promise<UserLookupResponseDto | null> {
     await this.assertPermit(caller, tenantId, 'view');
 
+    // Lowercased to match inviteByEmail's stored form, so `Bob@x.com` and `bob@x.com` find one row.
     const user = await this.prisma.user.findUnique({
-      where: { email },
+      where: { email: email.toLowerCase() },
       select: { id: true, email: true, name: true },
     });
     if (!user) return null;
@@ -560,6 +606,68 @@ export class TenantService {
     });
 
     return { ...user, isMember: !!membership };
+  }
+
+  /**
+   * Invites an email that has no Open Gateway account yet (V1-USR-01, plan §3 Option F): a `User`
+   * row with no Kratos identity, assigned to the tenant through the ordinary assignUser path. No
+   * Kratos call, no email — the row stays `pending` until that person signs up through Kratos's own
+   * self-service flow with this email and verifies it, and the login route (resolveOrProvisionUser)
+   * claims it. Only whoever owns the inbox can complete that verification, so until then the row is
+   * inert.
+   *
+   * Not a transaction: the Keto tuple lives in another store. assignUser already compensates its own
+   * UserTenant row on failure; this method compensates the User row it created itself.
+   */
+  async inviteByEmail(
+    tenantId: string,
+    email: string,
+    role: string,
+    caller: UserPayload,
+  ): Promise<TenantMemberResponseDto> {
+    // Checked here, before anything is written, and not only inside assignUser below (where they run
+    // again, harmlessly): a refused caller or a reserved role must never create a User row first.
+    await this.assertPermit(caller, tenantId, 'manage');
+    this.assertNotReservedRole(role);
+
+    const normalizedEmail = email.toLowerCase();
+    let user: { id: string };
+    try {
+      user = await this.prisma.user.create({
+        data: { email: normalizedEmail, name: email, password: null, kratosIdentityId: null },
+        select: { id: true },
+      });
+    } catch (err) {
+      // `User.email` is @unique, so the constraint — not a lookup beforehand — settles a double invite.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(
+          `"${normalizedEmail}" is already invited or already has an account — look it up and assign it instead`,
+        );
+      }
+      throw err;
+    }
+
+    let assigned: TenantUserResponseDto;
+    try {
+      assigned = await this.assignUser(tenantId, user.id, role, caller);
+    } catch (err) {
+      // Guarded rather than a plain delete: `UserTenant.user` cascades, so a plain delete would also
+      // take any membership a concurrent request attached to this row in the meantime. This only
+      // removes the row while nothing references it.
+      await this.prisma.user.deleteMany({ where: { id: user.id, userTenants: { none: {} } } });
+      throw err;
+    }
+
+    return {
+      userId: assigned.userId,
+      email: assigned.email,
+      name: assigned.name,
+      role: assigned.role,
+      isDefault: assigned.isDefault,
+      createdAt: assigned.createdAt,
+      // Created just above with no Kratos identity, so pending by construction.
+      pending: true,
+    };
   }
 
   /**

@@ -23,6 +23,9 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.apis.all, 'detail', id] as const,
     keys: (id: string, pageSize: number) => [...queryKeys.apis.all, 'detail', id, 'keys', { pageSize }] as const,
     clients: (id: string) => [...queryKeys.apis.all, 'detail', id, 'clients'] as const,
+    /** V1-LOG-02: captured request/response detail (`GET /apis/:id/traffic`), one page at a time. */
+    traffic: (id: string, range: string, page: number) =>
+      [...queryKeys.apis.all, 'detail', id, 'traffic', range, { page }] as const,
     /** OAS-05: stored spec index + endpoint governance (`GET /apis/:id/endpoints`). */
     endpoints: (id: string) => [...queryKeys.apis.all, 'detail', id, 'endpoints'] as const,
     /** OAS-08: the watched URL's status, detected candidates and a candidate's recomputed diff. */
@@ -64,7 +67,10 @@ export const queryKeys = {
     lists: () => [...queryKeys.tenants.all, 'list'] as const,
     list: (params: Record<string, string>) => [...queryKeys.tenants.lists(), params] as const,
     detail: (id: string) => [...queryKeys.tenants.all, 'detail', id] as const,
-    members: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'members'] as const,
+    members: (id: string, params?: Record<string, string>) =>
+      params
+        ? ([...queryKeys.tenants.all, 'detail', id, 'members', params] as const)
+        : ([...queryKeys.tenants.all, 'detail', id, 'members'] as const),
     quota: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'quota'] as const,
     usage: (id: string) => [...queryKeys.tenants.all, 'detail', id, 'usage'] as const,
   },

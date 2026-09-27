@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Response } from 'express';
 import { RedisService } from '../../../common/redis/redis.service';
-import { csvCell } from '../../audit/services/audit.service';
+import { csvCell } from '../../../common/utils/csv';
 import { AnalyticsMetric, AnalyticsRange, DEFAULT_LIST_LIMIT } from '../dto/analytics-query.dto';
 import type {
   AnalyticsApiRowResponse,
@@ -19,14 +19,13 @@ import {
   analyticsRedactionDdl,
   analyticsWindow,
   apiRollupQuery,
-  DEFAULT_REDACT_FIELDS,
   errorRatePercent,
   exportRowsQuery,
   keyRollupQuery,
   percentileLatencyQuery,
   rawStatsQuery,
+  redactFieldsFrom,
   round2,
-  sanitizeRedactFields,
   statusCodeQuery,
   tablePresenceQuery,
   timeSeriesQuery,
@@ -108,13 +107,8 @@ export class AnalyticsService implements OnModuleInit {
     }
 
     try {
-      /* eslint-disable-next-line @typescript-eslint/no-unnecessary-type-arguments --
-         ConfigService.get types its default as NoInferType<T>, so T cannot be inferred from it and
-         falls back to `any` (main.ts's bootstrap has the same explicit-argument fix). */
-      const configured = this.configService.get<string>('ANALYTICS_REDACT_FIELDS', '');
-      const fields = configured
-        ? sanitizeRedactFields(configured.split(','))
-        : DEFAULT_REDACT_FIELDS;
+      // The retention scheduler re-runs this install with the same field rule (cold stack, D9).
+      const fields = redactFieldsFrom(this.configService.get<string>('ANALYTICS_REDACT_FIELDS'));
       await this.prisma.$queryRawUnsafe(analyticsRedactionDdl(fields));
       this.logger.log(
         `Analytics redaction trigger ensured on tyk_analytics (${String(fields.length)} body field(s), skipped if the table is absent)`,
@@ -415,8 +409,13 @@ export class AnalyticsService implements OnModuleInit {
     return apis.map((api) => api.tykApiId).filter((id): id is string => id !== null);
   }
 
-  /** No `limit` ⇒ every API (the overview totals need them all); `limit` ⇒ busiest N, cut in SQL. */
-  private async loadApiRollup(
+  /**
+   * No `limit` ⇒ every API (the overview totals need them all); `limit` ⇒ busiest N, cut in SQL.
+   * Public (TypeScript has no package-private) because `AuditService.findRelatedTraffic` calls it
+   * with a single tenant-owned `tykApiId` it resolved itself. The caller owns the tenant scoping:
+   * this method only guards an empty id list, it does not check that the ids belong to anyone.
+   */
+  async loadApiRollup(
     tykApiIds: string[],
     window: AnalyticsWindow,
     limit?: number,

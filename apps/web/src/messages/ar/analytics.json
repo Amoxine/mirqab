@@ -98,6 +98,10 @@
     "clearAll": "مسح الكل",
     "empty": "لم يُعثر على أي سجلات تدقيق.",
     "systemUser": "النظام",
+    "viewTraffic": "عرض الحركة خلال هذه الفترة",
+    "viewTrafficTitle": "حركة هذه الواجهة",
+    "trafficLoading": "جارٍ تحميل الحركة…",
+    "trafficError": "فشل تحميل بيانات الحركة.",
     "columns": {
       "timestamp": "التوقيت",
       "user": "المستخدم",
