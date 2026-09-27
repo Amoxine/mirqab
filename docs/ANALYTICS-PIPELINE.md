@@ -319,5 +319,5 @@ curl -s -b /tmp/og.jar https://localhost:33001/api/analytics/health
 | Tables full, API reports zeros | The tenant's APIs have no `tykApiId` (never synced), or the traffic hit a different `apiid` |
 | `counter_hits` > 0 but 2xx shows 0 | Reading `code_2x`/`code_200` instead of `counter_success` (Trap 1) |
 | Latency looks too high/low | Averaging `counter_latency` across rows instead of re-weighting (Trap 2) |
-| No rows for one API only | `config.doNotTrack = true` → `do_not_track` on the Tyk definition |
+| No rows for one API only | `config.doNotTrack = true` → `do_not_track` on the Tyk definition. If nobody set that and it's still off: the API predates the 2026-09-27 mapper fix (an unset `doNotTrack` used to default OAS-format APIs to untracked, the opposite of classic's default) — re-sync it (`POST /apis/:id/sync`) to pick up the corrected default |
 | Unauthenticated traffic missing from key charts | Expected — `apikey = '00000000'` is excluded |
