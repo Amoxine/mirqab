@@ -45,7 +45,7 @@ function OverviewTiles() {
 
   const hasTraffic = data.totalRequests > 0;
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="motion-enter grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         title={t('stats.requests')}
         value={fmt.number(data.totalRequests)}

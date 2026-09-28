@@ -62,6 +62,8 @@ const PAIRS = [
   ['destructive-foreground', 'destructive', 'destructive button / badge'],
   ['success-foreground', 'success', 'success badge'],
   ['warning-foreground', 'warning', 'warning badge'],
+  ['info-foreground', 'info', 'post method badge'],
+  ['patch-foreground', 'patch', 'patch method badge'],
   ['secondary-foreground', 'secondary', 'secondary button / badge'],
   ['foreground', 'background', 'body text'],
   ['card-foreground', 'card', 'card text'],

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
 import { AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -105,7 +106,7 @@ export function TrafficTab({ apiId }: { apiId: string }) {
     {
       accessorKey: 'method',
       header: t('trafficTab.method'),
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.method}</span>,
+      cell: ({ row }) => <MethodBadge method={row.original.method} />,
     },
     {
       accessorKey: 'path',

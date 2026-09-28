@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main content */}
       <div
-        className={`flex min-w-0 flex-1 flex-col transition-all duration-300 ${
+        className={`flex min-w-0 flex-1 flex-col transition-[padding-inline-start] duration-300 ease-out ${
           // ponytail: logical `ps-` so this stays clear of the sidebar's `start-0` edge in RTL too.
           sidebarCollapsed ? 'lg:ps-16' : 'lg:ps-64'
         }`}

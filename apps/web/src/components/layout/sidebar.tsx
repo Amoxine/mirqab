@@ -60,11 +60,15 @@ export function useNavItems() {
     .map((item) => ({ ...item, label: t(item.labelKey), active: isActive(item.href) }));
 }
 
-export const navLinkClass = (active: boolean) =>
-  cn(
-    'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-200 pointer-coarse:min-h-11',
+export const navLinkClass = (active: boolean, options?: { collapsed?: boolean }) => {
+  const collapsed = options?.collapsed ?? false;
+  return cn(
+    'flex min-h-10 items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors duration-200 pointer-coarse:min-h-11',
+    collapsed && 'justify-center px-0',
+    !collapsed && (active ? 'border-s-2 border-primary ps-[calc(0.75rem-2px)] pe-3' : 'px-3'),
     active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
   );
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -84,7 +88,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         className={cn(
           // ponytail: `start-0`/`border-e` (not `left-0`/`border-r`) so the sidebar mounts on the
           // correct physical side and border in RTL — confirmed valid Tailwind v4.1 logical inset utility.
-          'fixed inset-y-0 start-0 z-50 flex flex-col border-e bg-background transition-all duration-300 lg:z-0',
+          'fixed inset-y-0 start-0 z-50 flex flex-col border-e bg-background transition-[width] duration-300 ease-out lg:z-0',
           collapsed ? 'w-16' : 'w-64'
         )}
       >
@@ -137,7 +141,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               const linkElement = (
                 <Link
                   href={item.href}
-                  className={cn(navLinkClass(item.active), collapsed && 'justify-center px-0')}
+                  className={navLinkClass(item.active, { collapsed })}
                   aria-current={item.active ? 'page' : undefined}
                   // Collapsed, the icon is all that shows: the name still has to reach a screen reader.
                   aria-label={collapsed ? item.label : undefined}
