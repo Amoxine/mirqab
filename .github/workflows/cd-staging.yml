@@ -85,7 +85,7 @@ jobs:
       # check below now probes the web app too rather than trusting this to be configured.
       - name: Build and push Web image
         id: web
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web/Dockerfile
@@ -102,7 +102,7 @@ jobs:
 
       - name: Build and push API image
         id: api
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
@@ -117,7 +117,7 @@ jobs:
       # infra/docker-compose.prod.yml requires.
       - name: Build and push Edge image
         id: edge
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: infra/edge
           push: true

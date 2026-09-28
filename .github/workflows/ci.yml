@@ -205,7 +205,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build edge image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: infra/edge
           push: false
