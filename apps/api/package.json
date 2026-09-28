@@ -82,7 +82,7 @@
     "@open-gateway/types": "workspace:*",
     "@playwright/test": "^1.63.0",
     "@swc/cli": "^0.8.1",
-    "@swc/core": "^1.15.24",
+    "@swc/core": "^1.16.2",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
