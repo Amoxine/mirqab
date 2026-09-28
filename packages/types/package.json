@@ -32,7 +32,7 @@
   "devDependencies": {
     "@open-gateway/config": "workspace:*",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "zod": "^3.25.76"
