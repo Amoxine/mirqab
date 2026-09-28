@@ -16,6 +16,14 @@ const DENIED_HOSTS = new Set([
   // cloud metadata by name (GCP and Alibaba also answer to the bare `metadata`)
   'metadata',
   'metadata.google.internal',
+  // Docker Desktop / an `extra_hosts: host-gateway` entry resolves these to the host's own address
+  // — reachable from the container even though it's neither a compose service name nor a literal
+  // loopback/RFC1918 IP a caller typed in. No service in infra/docker-compose.yml sets either
+  // `extra_hosts` entry today, but the guard belongs at the policy layer regardless of whether the
+  // network wiring exists anywhere: if it's ever added (a local override, a future compose change),
+  // this stays the actual thing stopping a tenant from using it, not the wiring's absence.
+  'host.docker.internal',
+  'gateway.docker.internal',
   // ── Every service name in infra/docker-compose.yml ──────────────────────────────────────────
   // KEEP IN SYNC WITH THAT FILE. Each name resolves on the shared compose network, so a service
   // added there is a new upstream target here the moment it exists — this list has already drifted
