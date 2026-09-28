@@ -3,7 +3,7 @@
 # =============================================================================
 # Stage 1: Dependencies
 # =============================================================================
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 # =============================================================================
 # Stage 2: Builder
 # =============================================================================
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Install pnpm
@@ -82,7 +82,7 @@ RUN mkdir -p /prisma-engine && \
 # =============================================================================
 # Stage 3: Runner
 # =============================================================================
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
