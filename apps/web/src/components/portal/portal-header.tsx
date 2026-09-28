@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LocaleSwitcher } from '@/components/layout/locale-switcher';
+import { ThemeSwitcher } from '@/components/layout/theme-switcher';
 import { kratos } from '@/lib/kratos-client';
 import { usePortalMe } from '@/hooks/use-portal';
 import { cn } from '@/lib/utils';
@@ -66,6 +67,7 @@ export function PortalHeader() {
           </nav>
         )}
         <div className="flex items-center gap-2">
+          <ThemeSwitcher />
           <LocaleSwitcher />
           {!isAuthPage && me && (
             <>

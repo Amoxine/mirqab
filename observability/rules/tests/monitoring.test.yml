@@ -1,0 +1,199 @@
+rule_files:
+  - ../monitoring.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Watchdog: always firing by design — no input series needed at all.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels:
+              severity: heartbeat
+              owner: platform
+            exp_annotations:
+              summary: 'This is a heartbeat, always firing by design'
+              description: 'Its absence — not its presence — is the alert (MON-01, RB-18).'
+              runbook: RB-18
+
+  # TargetDown: firing and not-firing, same rule file's "one not-firing case" requirement.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="redis", instance="redis-exporter:9121"}'
+        values: '0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              job: redis
+              instance: 'redis-exporter:9121'
+            exp_annotations:
+              summary: 'Scrape target redis-exporter:9121 (job redis) is down'
+              description: 'Every rule reading this target is blind for as long as this lasts.'
+              runbook: RB-18
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="redis", instance="redis-exporter:9121"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TargetDown
+        exp_alerts: []
+
+  # SeriesBudgetExceeded
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_tsdb_head_series'
+        values: '16000x35'
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: SeriesBudgetExceeded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+            exp_annotations:
+              summary: 'Prometheus head series above the 2x expected-total budget'
+              description: "16000 series, budget 14000 (2x the ~7,000 expected total once every exporter is live — see the rule comment for the per-source breakdown). Re-baseline again from the real number once that happens."
+              runbook: RB-18
+
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_tsdb_head_series'
+        values: '5000x35'
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: SeriesBudgetExceeded
+        exp_alerts: []
+
+  # NotificationsDropped. Gated on an Alertmanager actually being discovered (verify-phase fix —
+  # without one, this metric climbs by design and the ungated rule fired permanently on the live
+  # stack).
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_notifications_dropped_total'
+        values: '0+1x15'
+      - series: 'prometheus_notifications_alertmanagers_discovered'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NotificationsDropped
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+            exp_annotations:
+              summary: 'Prometheus dropped one or more notifications'
+              runbook: RB-18
+
+  # Same rising dropped-count, but zero Alertmanagers discovered — this is the exact live-stack
+  # bug: must NOT fire.
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_notifications_dropped_total'
+        values: '0+1x15'
+      - series: 'prometheus_notifications_alertmanagers_discovered'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NotificationsDropped
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_notifications_dropped_total'
+        values: '0x15'
+      - series: 'prometheus_notifications_alertmanagers_discovered'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NotificationsDropped
+        exp_alerts: []
+
+  # MonitoringDiskFillingUp (verify-phase fix: now watches retention.size cuts, not a host mount
+  # node-exporter's own C1 excludes would drop anyway).
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_tsdb_size_retentions_total'
+        values: '0+1x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MonitoringDiskFillingUp
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+            exp_annotations:
+              summary: 'Prometheus cut its own retention on size, not time'
+              description: '2 size-forced retention cut(s) in the last hour — the 4GB `--storage.tsdb.retention.size` limit is now the binding constraint, not the 15d `--storage.tsdb.retention.time` plan. Some history is gone earlier than planned.'
+              runbook: RB-02
+
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_tsdb_size_retentions_total'
+        values: '0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MonitoringDiskFillingUp
+        exp_alerts: []
+
+  # RuleEvaluationFailures
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_rule_evaluation_failures_total'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RuleEvaluationFailures
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+            exp_annotations:
+              summary: 'Prometheus failed to evaluate one or more rules'
+              description: '5 failure(s) in 10m — a rule is silently not running, which reads exactly like health.'
+              runbook: RB-18
+
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_rule_evaluation_failures_total'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RuleEvaluationFailures
+        exp_alerts: []
+
+  # InventoryDriftOrStale. Threshold is 30 DAYS — instead of simulating 744 hours of ticks (slow,
+  # and it timed out once already), hold the timestamp at a fixed point far enough in the past
+  # that `time() - X` already exceeds 30d from t=0 onward, and just let `for: 1h` play out normally.
+  - interval: 1m
+    input_series:
+      - series: 'og_inventory_last_verified_timestamp_seconds{asset_id="og-zz-h01"}'
+        values: '-2600000x125'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: InventoryDriftOrStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              asset_id: og-zz-h01
+            exp_annotations:
+              summary: 'Inventory entry og-zz-h01 has not been verified in 30 days'
+              runbook: RB-18
+
+  - interval: 1m
+    input_series:
+      - series: 'og_inventory_last_verified_timestamp_seconds{asset_id="og-zz-h01"}'
+        values: '0x125'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: InventoryDriftOrStale
+        exp_alerts: []

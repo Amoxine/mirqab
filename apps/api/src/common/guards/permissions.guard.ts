@@ -1,6 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import { authzDeniedTotal } from '../metrics/ops-metrics';
 import { isSuperAdmin, UserPayload } from '../types';
 
 /**
@@ -45,6 +46,7 @@ export class PermissionsGuard implements CanActivate {
     );
 
     if (missingPermissions.length > 0) {
+      authzDeniedTotal.inc({ reason: 'missing_permission' });
       throw new ForbiddenException(
         `Missing permissions: ${missingPermissions.join(', ')}`,
       );

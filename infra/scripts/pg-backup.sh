@@ -30,6 +30,21 @@ set -eu
 
 log() { echo "[pg-backup] $*"; }
 
+# PG-08 (backup freshness): write the same success signal `.last-success` records, as a Prometheus
+# textfile. `/textfile` is the `og_textfile` volume (C1) — mounted only once the compose side of
+# this lands, so an older compose or a mid-rollout mismatch just means the directory is missing.
+# That is never a reason to fail a backup that otherwise succeeded: this collector runs after
+# `.last-success` is already written, and returns 0 either way.
+write_metric() {
+  [ -d /textfile ] || return 0
+  tmp="/textfile/.og_backup.prom.$$"
+  {
+    echo '# HELP og_backup_last_success_timestamp_seconds Last successful pg_basebackup (epoch seconds).'
+    echo '# TYPE og_backup_last_success_timestamp_seconds gauge'
+    echo "og_backup_last_success_timestamp_seconds{kind=\"pg_base\"} $(date +%s)"
+  } >"$tmp" && chmod 0644 "$tmp" && mv "$tmp" /textfile/og_backup.prom
+}
+
 # Prune base backups beyond PG_BACKUP_KEEP, then drop every WAL segment older than the START WAL of
 # the OLDEST backup still kept. An archive that outlives every base backup it could be replayed onto
 # is just disk; pruning it the other way round (by age) can orphan a backup that needs it.
@@ -69,6 +84,7 @@ while :; do
   if pg_basebackup -D "/backups/$label.part" -Ft -z -Xs -c fast --no-password; then
     mv "/backups/$label.part" "/backups/$label"
     date +%s >/backups/.last-success
+    write_metric || log "WARNING: textfile metric write failed; backup itself is fine"
     log "base backup $label complete"
     prune || log "WARNING: prune failed; backup itself is fine"
   else

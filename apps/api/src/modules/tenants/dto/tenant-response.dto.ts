@@ -67,6 +67,18 @@ export class TenantUserResponseDto {
   createdAt!: Date;
 }
 
+/**
+ * A row of `GET /tenants/:id/users`, and the result of `POST /tenants/:id/users/invite`.
+ *
+ * `pending` is read straight from `User.kratosIdentityId === null`: an invited email nobody has
+ * signed up and verified with yet. The login route (resolveOrProvisionUser) sets that column when the
+ * invitee claims the row, so `pending` can't drift from what actually lets someone log in.
+ */
+export class TenantMemberResponseDto extends TenantUserResponseDto {
+  @ApiProperty({ description: 'Invited, but nobody has signed up and verified this email yet' })
+  pending!: boolean;
+}
+
 /** Result of `GET /tenants/:id/users/lookup` — enough to invite the match, nothing more. */
 export class UserLookupResponseDto {
   @ApiProperty({ description: 'User unique identifier', format: 'uuid' })

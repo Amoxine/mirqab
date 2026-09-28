@@ -16,6 +16,14 @@ const DENIED_HOSTS = new Set([
   // cloud metadata by name (GCP and Alibaba also answer to the bare `metadata`)
   'metadata',
   'metadata.google.internal',
+  // Docker Desktop / an `extra_hosts: host-gateway` entry resolves these to the host's own address
+  // — reachable from the container even though it's neither a compose service name nor a literal
+  // loopback/RFC1918 IP a caller typed in. No service in infra/docker-compose.yml sets either
+  // `extra_hosts` entry today, but the guard belongs at the policy layer regardless of whether the
+  // network wiring exists anywhere: if it's ever added (a local override, a future compose change),
+  // this stays the actual thing stopping a tenant from using it, not the wiring's absence.
+  'host.docker.internal',
+  'gateway.docker.internal',
   // ── Every service name in infra/docker-compose.yml ──────────────────────────────────────────
   // KEEP IN SYNC WITH THAT FILE. Each name resolves on the shared compose network, so a service
   // added there is a new upstream target here the moment it exists — this list has already drifted
@@ -62,6 +70,17 @@ const DENIED_HOSTS = new Set([
   // can reach them, which is how a proxied upstream would poison the trace store.
   'prometheus',
   'otel-collector',
+  // OG-OBS-01/02 (docs/ha-observability/01 §6). Same reasoning as prometheus: none authenticates.
+  // cadvisor mounts the docker socket and serves a container-inventory API; the exporters hand out
+  // host, Postgres and Redis internals; blackbox will GET any target it is asked to probe.
+  // node-exporter runs in the host network namespace, so its name does not resolve on the compose
+  // network at all — listed anyway, because this list's rule is categorical (see WP29a above).
+  'node-exporter',
+  'cadvisor',
+  'blackbox',
+  'pg-monitoring-init',
+  'postgres-exporter',
+  'redis-exporter',
   'api',
   'web',
   'ory-db-init',

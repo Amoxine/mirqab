@@ -1,0 +1,52 @@
+# Container rules (OG-OBS-01/02, C7). ContainerNearMemoryLimit stays OUT: meaningless before
+# container memory limits exist (GAP-02).
+#
+# ContainerRestartLoop is now ACTIVE: obs-w7's F-lab-names.md §3 confirms `container_start_time_
+# seconds` is observed (✓) at cAdvisor v0.60.6, and separately confirms cAdvisor still has no
+# restart-count family at any `disable_metrics` setting — `changes()` on start time remains the
+# only route to this signal. It closes the real gap obs-w2 found in ContainerOomKilled below:
+# `container_oom_events_total` misses an OOM that kills PID 1 under a restart policy, because the
+# container just restart-loops instead of reporting the kill as a discrete event.
+
+groups:
+  - name: containers
+    rules:
+      # AL-CTR-01. `og_expected_container{asset_id,name}` is the inventory renderer's textfile
+      # metric (OG-OBS-00, worker-1) — not shipped by this task, so this rule is silent (the
+      # `unless` has nothing on its left side) until that renderer exists. Written now so it is
+      # live the moment the renderer is.
+      - alert: ExpectedContainerMissing
+        expr: og_expected_container unless on(name) (time() - container_last_seen < 120)
+        for: 2m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Container {{ $labels.name }} is expected but not reporting'
+          description: 'og_expected_container (inventory) lists this container; cAdvisor has not seen it in 120s. Severity is warning uniformly here — the catalog''s tier-0-vs-not split needs the asset_id/criticality labels the inventory has not wired in yet.'
+          runbook: RB-05
+
+      # CTR-03 / AL-CTR-03.
+      - alert: ContainerOomKilled
+        expr: increase(container_oom_events_total{name=~"open-gateway-.*"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: 'Container {{ $labels.name }} was OOM-killed'
+          description: '{{ $value }} OOM event(s) in 15m.'
+          runbook: RB-05
+
+      # AL-CTR-02. `changes()` on start time, not a restart counter — cAdvisor has none (F §3;
+      # docs 02 CTR-05's ◐ note stands as confirmed, not just suspected).
+      - alert: ContainerRestartLoop
+        expr: changes(container_start_time_seconds{name=~"open-gateway-.*"}[15m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Container {{ $labels.name }} is restart-looping'
+          description: '{{ $value }} restarts in 15m. Closes the ContainerOomKilled blind spot: a PID-1 OOM under a restart policy shows up here, not as an OOM event.'
+          runbook: RB-05

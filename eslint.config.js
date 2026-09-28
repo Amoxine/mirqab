@@ -20,6 +20,9 @@ export default [
       // project — typed linting can only report "not found by the project service" for them.
       '**/test/e2e/*.mjs',
       'apps/web/scripts/*.js',
+      // CI guard scripts (render-inventory, check-locale-keys), each covered by its own `node --test`
+      // or guard step instead.
+      'infra/scripts/*.mjs',
       // Next-generated, not part of src's tsconfig include and explicitly "should not be edited".
       'apps/web/next-env.d.ts',
     ],

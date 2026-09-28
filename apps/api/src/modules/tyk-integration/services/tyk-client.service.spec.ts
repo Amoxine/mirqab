@@ -317,6 +317,24 @@ describe('TykClientService', () => {
       ]);
     });
 
+    it('logs a dead node at WARN by default, and at debug only when the metrics scrape asks', async () => {
+      fetchSpy.mockRejectedValue(new TypeError('fetch failed'));
+      const warn = jest.spyOn(Logger.prototype, 'warn');
+      const debug = jest.spyOn(Logger.prototype, 'debug');
+      const failed = (spy: jest.SpyInstance) =>
+        spy.mock.calls.filter(([message]) => String(message).includes('health probe failed')).length;
+
+      await makeClient({ TYK_ADMIN_URLS: NODES }).nodeHealth();
+      expect([failed(warn), failed(debug)]).toEqual([2, 0]);
+
+      warn.mockClear();
+      await makeClient({ TYK_ADMIN_URLS: NODES }).nodeHealth('debug');
+      expect([failed(warn), failed(debug)]).toEqual([0, 2]);
+
+      warn.mockRestore();
+      debug.mockRestore();
+    });
+
     it('falls back to the single TYK_ADMIN_URL when TYK_ADMIN_URLS is unset (single-node stack)', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({ status: 'pass' }));
 

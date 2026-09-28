@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ─── Open Gateway — Local Development Setup ──────────────
+# ─── MIRQAB — Local Development Setup ──────────────
 # This script bootstraps the local development environment.
 # Usage: bash infra/scripts/setup.sh
 
@@ -24,7 +24,7 @@ check_prerequisite() {
   log "$name is installed: $(command -v "$cmd")"
 }
 
-log "Starting Open Gateway local setup..."
+log "Starting MIRQAB local setup..."
 
 # 1. Check prerequisites
 log "Checking prerequisites..."

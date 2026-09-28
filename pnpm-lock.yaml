@@ -68,6 +68,9 @@ importers:
       typescript-eslint:
         specifier: ^8.27.0
         version: 8.58.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   apps/api:
     dependencies:
@@ -276,6 +279,9 @@ importers:
       '@radix-ui/react-dialog':
         specifier: ^1.1.6
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@radix-ui/react-direction':
+        specifier: 1.1.1
+        version: 1.1.1(@types/react@19.2.14)(react@19.2.4)
       '@radix-ui/react-dropdown-menu':
         specifier: ^2.1.6
         version: 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

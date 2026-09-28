@@ -2,7 +2,7 @@
   "name": "@open-gateway/database",
   "version": "0.1.0",
   "private": true,
-  "description": "Prisma database client for Open Gateway",
+  "description": "Prisma database client for MIRQAB",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -28,7 +28,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "test": "tsx prisma/permissions.check.ts",
+    "test": "tsx prisma/permissions.check.ts && tsx scripts/migrate-users-to-kratos.check.ts",
     "clean": "rm -rf node_modules .prisma dist"
   },
   "files": [

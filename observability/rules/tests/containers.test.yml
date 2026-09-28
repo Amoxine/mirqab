@@ -1,0 +1,92 @@
+rule_files:
+  - ../containers.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ExpectedContainerMissing: no container_last_seen at all -> the `unless` has nothing to
+  # subtract, so og_expected_container passes through unfiltered.
+  - interval: 1m
+    input_series:
+      - series: 'og_expected_container{name="open-gateway-web"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ExpectedContainerMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              name: open-gateway-web
+            exp_annotations:
+              summary: 'Container open-gateway-web is expected but not reporting'
+              description: "og_expected_container (inventory) lists this container; cAdvisor has not seen it in 120s. Severity is warning uniformly here — the catalog's tier-0-vs-not split needs the asset_id/criticality labels the inventory has not wired in yet."
+              runbook: RB-05
+
+  # Not firing: container_last_seen tracks the simulated clock 1:1 (value == elapsed seconds), so
+  # time() - container_last_seen stays ~0, always under the 120s window.
+  - interval: 1m
+    input_series:
+      - series: 'og_expected_container{name="open-gateway-api"}'
+        values: '1x10'
+      - series: 'container_last_seen{name="open-gateway-api"}'
+        values: '0+60x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ExpectedContainerMissing
+        exp_alerts: []
+
+  # ContainerOomKilled: a steadily incrementing counter has positive increase() over any 15m
+  # window from the first sample on.
+  - interval: 1m
+    input_series:
+      - series: 'container_oom_events_total{name="open-gateway-tyk-gateway"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ContainerOomKilled
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: platform
+              name: open-gateway-tyk-gateway
+            exp_annotations:
+              summary: 'Container open-gateway-tyk-gateway was OOM-killed'
+              description: '5 OOM event(s) in 15m.'
+              runbook: RB-05
+
+  - interval: 1m
+    input_series:
+      - series: 'container_oom_events_total{name="open-gateway-tyk-gateway"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ContainerOomKilled
+        exp_alerts: []
+
+  # ContainerRestartLoop: 4 distinct value changes within the 15m window (> 2).
+  - interval: 1m
+    input_series:
+      - series: 'container_start_time_seconds{name="open-gateway-api"}'
+        values: '100 100 100 200 200 200 300 300 300 400 400 400 500'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ContainerRestartLoop
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              name: open-gateway-api
+            exp_annotations:
+              summary: 'Container open-gateway-api is restart-looping'
+              description: '4 restarts in 15m. Closes the ContainerOomKilled blind spot: a PID-1 OOM under a restart policy shows up here, not as an OOM event.'
+              runbook: RB-05
+
+  - interval: 1m
+    input_series:
+      - series: 'container_start_time_seconds{name="open-gateway-api"}'
+        values: '100x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ContainerRestartLoop
+        exp_alerts: []

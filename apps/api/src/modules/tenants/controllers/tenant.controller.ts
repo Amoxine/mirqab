@@ -24,9 +24,12 @@ import { CreateTenantDto } from '../dto/create-tenant.dto';
 import { UpdateTenantDto } from '../dto/update-tenant.dto';
 import { PaginationDto } from '../dto/pagination.dto';
 import { AssignUserDto } from '../dto/assign-user.dto';
+import { InviteByEmailDto } from '../dto/invite-by-email.dto';
+import { ListTenantUsersDto } from '../dto/list-tenant-users.dto';
 import { UpdateMemberRoleDto } from '../dto/update-member-role.dto';
 import { LookupUserDto } from '../dto/lookup-user.dto';
 import {
+  TenantMemberResponseDto,
   TenantResponseDto,
   TenantUserResponseDto,
   UserLookupResponseDto,
@@ -51,6 +54,27 @@ interface SingleResponse<T> {
   success: true;
   data: T;
 }
+
+/**
+ * HELD BACK (owner decision, security-v1 finding H1): `POST :id/users/invite` is not registered at
+ * all unless FEATURE_INVITE_BY_EMAIL=true. H1 is a pending-invite takeover by pre-registration:
+ * whoever registers the invitee's email first gets the pending row, role included, once the real
+ * owner verifies or recovers that address. Nothing checks the order of verification, and nothing
+ * revokes the earlier session. Before this is turned on, it needs kratos.yml hooks
+ * (`require_verified_address` on login, `revoke_active_sessions` after recovery/settings) plus an
+ * app-side check that the claiming identity was created after the invite.
+ *
+ * Unregistered rather than refused inside the handler: the global JwtAuthGuard and this controller's
+ * guards run before any handler, so an in-handler check would answer 401/403 and give the route away.
+ * Unregistered, it is the router's own 404, the same as any path that does not exist.
+ *
+ * ponytail: read once at import, so flipping it needs a restart. Set it in the process environment
+ * (compose `environment:`), not only in apps/api/.env.local, which ConfigModule loads after this file
+ * is evaluated.
+ */
+const INVITE_BY_EMAIL_ENABLED = process.env.FEATURE_INVITE_BY_EMAIL === 'true';
+const InviteByEmailRoute = (): MethodDecorator =>
+  INVITE_BY_EMAIL_ENABLED ? Post(':id/users/invite') : () => undefined;
 
 /**
  * Tenant administration.
@@ -170,15 +194,19 @@ export class TenantController {
 
   @Get(':id/users')
   @Permissions('user:read')
-  @ApiOperation({ summary: 'List all users assigned to a tenant' })
-  @ApiResponse({ status: HttpStatus.OK, description: 'Tenant users list' })
+  @ApiOperation({ summary: 'List the users assigned to a tenant, paginated and searchable' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Paginated tenant users list' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tenant not found' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'q', required: false, description: 'Case-insensitive match on name or email' })
   async findUsers(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ListTenantUsersDto,
     @CurrentUser() user: UserPayload,
-  ): Promise<SingleResponse<TenantUserResponseDto[]>> {
-    const data = await this.tenantService.findUsers(id, user);
-    return { success: true, data };
+  ): Promise<PaginatedResponse<TenantMemberResponseDto>> {
+    const result = await this.tenantService.findUsers(id, user, query);
+    return { success: true, data: result.data, meta: result.meta };
   }
 
   // ─── ASSIGN USER TO TENANT ────────────────────────────────────────────────
@@ -208,6 +236,32 @@ export class TenantController {
       body.role,
       user,
     );
+    return { success: true, data };
+  }
+
+  // ─── INVITE AN EMAIL WITH NO ACCOUNT YET ───────────────────────────────────
+
+  // Same permission and audit action as `POST :id/users` above: it is still "a user got assigned to
+  // a tenant", just for someone who has not signed up yet. Off by default, see InviteByEmailRoute.
+  @InviteByEmailRoute()
+  @Permissions('user:create')
+  @Audit('tenant:assigned', 'UserTenant')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Invite an email with no account yet; the row stays pending until they sign up and verify it',
+  })
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Pending member created' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tenant not found' })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'That email is already invited or already has an account',
+  })
+  async inviteByEmail(
+    @Param('id', ParseUUIDPipe) tenantId: string,
+    @Body() body: InviteByEmailDto,
+    @CurrentUser() user: UserPayload,
+  ): Promise<SingleResponse<TenantMemberResponseDto>> {
+    const data = await this.tenantService.inviteByEmail(tenantId, body.email, body.role, user);
     return { success: true, data };
   }
 

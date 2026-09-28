@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Open Gateway — Full Stack Installer (v2.0)
+# MIRQAB — Full Stack Installer (v2.0)
 # ============================================================================
-# One-command setup for the entire Open Gateway stack.
+# One-command setup for the entire MIRQAB stack.
 #
 # Usage:
 #   bash install.sh                    # Interactive mode
@@ -94,6 +94,9 @@ REDIS_PASSWORD=""
 # WP27: the shared secret Tyk's event handler presents to the api's own relay endpoint.
 TYK_WEBHOOK_RELAY_SECRET=""
 
+# OG-OBS-02: the og_monitor role postgres-exporter logs in as.
+PG_EXPORTER_PASSWORD=""
+
 NON_INTERACTIVE=false
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/infra/docker-compose.yml"
@@ -143,7 +146,7 @@ MANAGED_SECRETS=(
   TYK_GW_SECRET JWT_SECRET DB_PASS
   HYDRA_SECRETS_SYSTEM HYDRA_SECRETS_COOKIE
   KRATOS_SECRETS_DEFAULT KRATOS_SECRETS_COOKIE KRATOS_SECRETS_CIPHER
-  REDIS_PASSWORD TYK_WEBHOOK_RELAY_SECRET
+  REDIS_PASSWORD TYK_WEBHOOK_RELAY_SECRET PG_EXPORTER_PASSWORD
 )
 
 # Every key this script WRITES into infra/.env. The secrets plus EDGE_LAN_IP, which is not a
@@ -290,6 +293,12 @@ generate_all_secrets() {
   # header secret is the only thing separating a real Tyk event from a forged one. An empty value
   # makes the controller reject every call (fail closed), which is safe but silently dead.
   ensure_hex_secret TYK_WEBHOOK_RELAY_SECRET 32
+
+  # OG-OBS-02: pg-monitoring-init sets it as the og_monitor role's password on every `up`, and
+  # postgres-exporter logs in with it. Soft in the default compose file — missing, only Postgres
+  # monitoring fails (closed) — and required by the prod overlay. Kept on re-run like every other
+  # secret here, so an existing install only ever gains it, never rotates it.
+  ensure_hex_secret PG_EXPORTER_PASSWORD 32
 
   # Not a credential: the host's primary LAN address, so the WP26b edge's internal CA issues for
   # https://<lan-ip>:<port> as well as localhost. Empty is fine — the listeners still answer on
@@ -605,6 +614,8 @@ umask 077
   # WP27: Tyk's own event handler sends this back to the api's @Public() relay endpoint, which is
   # what tells a real Tyk event from a forged one. Required by the default compose file.
   printf 'TYK_WEBHOOK_RELAY_SECRET=%s\n' "$TYK_WEBHOOK_RELAY_SECRET"
+  # OG-OBS-02: the og_monitor role postgres-exporter logs in as. Without it Postgres monitoring stays off.
+  printf 'PG_EXPORTER_PASSWORD=%s\n' "$PG_EXPORTER_PASSWORD"
   # WP26b edge: the host's LAN address, so `tls internal` also issues a certificate for
   # https://<lan-ip>:<port>. Not a secret; empty falls back to loopback-only listeners.
   printf 'EDGE_LAN_IP=%s\n' "$EDGE_LAN_IP"
@@ -931,7 +942,7 @@ log "Installation complete in $((TOTAL_DURATION / 60)) min $((TOTAL_DURATION % 6
 echo "" >&3
 echo -e "${BOLD}${GREEN}" >&3
 echo "╔══════════════════════════════════════════════════════════════╗" >&3
-echo "║     🎉 Open Gateway Setup Complete! 🎉                      ║" >&3
+echo "║     🎉 MIRQAB Setup Complete! 🎉                            ║" >&3
 echo "╚══════════════════════════════════════════════════════════════╝" >&3
 echo -e "${NC}" >&3
 

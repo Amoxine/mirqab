@@ -8,9 +8,11 @@ import { HealthCheckService } from './services/health-check.service';
 import { EndpointGovernanceService } from './services/endpoint-governance.service';
 import { TykIntegrationModule } from '../tyk-integration/tyk-integration.module';
 import { OAuthClientsModule } from '../oauth-clients/oauth-clients.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
-  imports: [TykIntegrationModule, OAuthClientsModule],
+  // AnalyticsModule: TrafficInspectorService, for `GET /apis/:id/traffic`.
+  imports: [TykIntegrationModule, OAuthClientsModule, AnalyticsModule],
   controllers: [ApiManagementController, GatewayStatusController],
   // No `ScheduleModule.forRoot()` here — QuotasModule owns the single root (see
   // analytics.module.ts's comment); `@Interval` on ReconcileService is discovered from it.

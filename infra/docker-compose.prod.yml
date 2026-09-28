@@ -14,7 +14,16 @@
 #   TYK_GW_SECRET    openssl rand -hex 32 — the committed default is rejected
 #   DB_PASS          already required by the base file
 #   EDGE_IMAGE       the digest-pinned edge image CD last published (WP29b); a tag is rejected
+#   PG_EXPORTER_PASSWORD  openssl rand -hex 32 — soft in the base file, required here (OG-OBS-02)
 # and the seeded admin@opengateway.io / Admin123! login must no longer work.
+
+# Same cap as the base file's anchor (OG-OBS-01): YAML anchors do not cross files, so the one service
+# this overlay defines itself needs its own copy. Keep the two in step.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
 
 services:
   # ─── Preflight gate ────────────────────────────────────
@@ -27,6 +36,7 @@ services:
   prod-preflight:
     image: redis:7-alpine
     container_name: open-gateway-prod-preflight
+    logging: *default-logging
     entrypoint: ["sh", "/preflight.sh"]
     environment:
       NODE_ENV: production
@@ -39,6 +49,9 @@ services:
       # WP29b: checked here rather than only by the `:?` on the edge service below, so the failure
       # reads as one preflight line among the others instead of a compose interpolation error.
       EDGE_IMAGE: ${EDGE_IMAGE:-}
+      # OG-OBS-02: `:-` here only so the check reports it as one preflight line; the two services
+      # below make it `:?`, and this adds the shape (no whitespace, at least 32 characters).
+      PG_EXPORTER_PASSWORD: ${PG_EXPORTER_PASSWORD:-}
       KRATOS_PUBLIC_URL: http://kratos:4433
     volumes:
       - ./scripts/prod-preflight.sh:/preflight.sh:ro
@@ -102,6 +115,25 @@ services:
   tyk-pump:
     environment:
       TYK_PMP_ANALYTICSSTORAGECONFIG_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+
+  # ─── Postgres monitoring: password required (OG-OBS-02) ──
+  # The base file keeps PG_EXPORTER_PASSWORD soft so a laptop without it loses only Postgres
+  # monitoring (pg-monitoring-init fails closed). Production does not get that leniency: an unset
+  # value stops the whole `up` at interpolation, the same as every other secret in this overlay.
+  pg-monitoring-init:
+    environment:
+      PG_EXPORTER_PASSWORD: ${PG_EXPORTER_PASSWORD:?set PG_EXPORTER_PASSWORD (install.sh generates infra/.env)}
+
+  postgres-exporter:
+    environment:
+      DATA_SOURCE_PASS: ${PG_EXPORTER_PASSWORD:?set PG_EXPORTER_PASSWORD (install.sh generates infra/.env)}
+
+  # ─── Redis exporter: authenticate to Redis (OG-OBS-02) ──
+  # Same pattern as the pump above. redis_exporter reads REDIS_PASSWORD from its environment, so it
+  # never appears in the command line. Without it every scrape reports redis_up 0 (NOAUTH).
+  redis-exporter:
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
 
   # ─── Edge: digest-pinned image, fronting all three gateway nodes ───────────────
   # `image` overrides the base file's locally-built `open-gateway-edge:wp26b`. The base file's

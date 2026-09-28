@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { toast } from '@/components/ui/sonner';
-import { useInviteMember, useLookupUser } from '@/hooks/use-tenants';
+import { useInviteByEmail, useInviteMember, useLookupUser } from '@/hooks/use-tenants';
+import { ApiRequestError } from '@/lib/api-client';
 
 // 'super_admin' is deliberately not offered here — see keto.ts's relationForRole comment: it is a
 // system-wide bypass keyed only on the role name, not a per-tenant permission level, so handing it
@@ -33,7 +34,14 @@ interface InviteMemberSheetProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/** Invite-by-email sheet: looks the email up, then assigns the found user, in one submit. */
+/** Invite-by-email sheet: looks the email up first. A match gets assigned immediately.
+ *
+ * The "no match → offer to invite that email instead" branch (V1-USR-01, Option F) is held back
+ * for this release — security-v1 found that an attacker who registers the invitee's email first
+ * can take over the pending row once the real owner verifies it (see team-verify handoff). It is
+ * gated behind `NEXT_PUBLIC_FEATURE_INVITE_BY_EMAIL`, off by default, matching the backend's own
+ * `FEATURE_INVITE_BY_EMAIL` gate on `POST :id/users/invite` (404 when off). With the flag off, "no
+ * match" goes back to the plain field error this sheet had before the feature existed. */
 export function InviteMemberSheet(props: InviteMemberSheetProps) {
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
@@ -49,6 +57,12 @@ function InviteMemberForm({ tenantId, onOpenChange }: InviteMemberSheetProps) {
   const tCommon = useTranslations('common');
   const lookupMutation = useLookupUser(tenantId);
   const inviteMutation = useInviteMember(tenantId);
+  const inviteByEmailMutation = useInviteByEmail(tenantId);
+  // Read per render (not hoisted to module scope) so a test can flip the flag before rendering.
+  const inviteByEmailEnabled = process.env.NEXT_PUBLIC_FEATURE_INVITE_BY_EMAIL === 'true';
+  // Set once a lookup finds nobody, for this exact email; any further edit to the email clears it,
+  // so the offer to invite never survives onto an email it was never shown for.
+  const [offerInviteFor, setOfferInviteFor] = useState<string | null>(null);
 
   const inviteSchema = useMemo(() => makeInviteSchema(t), [t]);
   const form = useForm<InviteValues>({
@@ -58,14 +72,35 @@ function InviteMemberForm({ tenantId, onOpenChange }: InviteMemberSheetProps) {
 
   const handleClose = () => {
     form.reset();
+    setOfferInviteFor(null);
     onOpenChange(false);
   };
 
   const onSubmit = async (values: InviteValues) => {
+    if (inviteByEmailEnabled && offerInviteFor && offerInviteFor === values.email) {
+      try {
+        await inviteByEmailMutation.mutateAsync({ email: values.email, role: values.role });
+        toast.success(t('invite.inviteSuccessToast', { email: values.email }));
+        handleClose();
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.status === 409) {
+          form.setError('email', { message: t('invite.alreadyInvitedError') });
+          setOfferInviteFor(null);
+          return;
+        }
+        toast.error(error instanceof Error ? error.message : t('invite.errorToast'));
+      }
+      return;
+    }
+
     try {
       const found = await lookupMutation.mutateAsync(values.email);
       if (!found) {
-        form.setError('email', { message: t('invite.notFoundError') });
+        if (inviteByEmailEnabled) {
+          setOfferInviteFor(values.email);
+        } else {
+          form.setError('email', { message: t('invite.notFoundError') });
+        }
         return;
       }
       if (found.isMember) {
@@ -81,6 +116,7 @@ function InviteMemberForm({ tenantId, onOpenChange }: InviteMemberSheetProps) {
   };
 
   const isSubmitting = form.formState.isSubmitting;
+  const isOfferingInvite = inviteByEmailEnabled && offerInviteFor !== null && offerInviteFor === form.watch('email');
 
   return (
     <>
@@ -97,7 +133,15 @@ function InviteMemberForm({ tenantId, onOpenChange }: InviteMemberSheetProps) {
               <FormItem>
                 <FormLabel>{tCommon('email')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="email" placeholder={t('invite.emailPlaceholder')} />
+                  <Input
+                    {...field}
+                    type="email"
+                    placeholder={t('invite.emailPlaceholder')}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      setOfferInviteFor(null);
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -125,12 +169,23 @@ function InviteMemberForm({ tenantId, onOpenChange }: InviteMemberSheetProps) {
               </FormItem>
             )}
           />
+          {isOfferingInvite && (
+            <p role="status" className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              {t('invite.offerText', { email: offerInviteFor })}
+            </p>
+          )}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
               {tCommon('cancel')}
             </Button>
             <Button type="submit" loading={isSubmitting}>
-              {isSubmitting ? t('invite.submitting') : t('invite.submit')}
+              {isSubmitting
+                ? isOfferingInvite
+                  ? t('invite.inviteSubmitting')
+                  : t('invite.submitting')
+                : isOfferingInvite
+                  ? t('invite.inviteSubmit')
+                  : t('invite.submit')}
             </Button>
           </div>
         </form>

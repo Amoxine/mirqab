@@ -203,7 +203,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const traits = session.identity.traits as { email?: unknown; name?: unknown } | null;
-  const email = typeof traits?.email === 'string' ? traits.email : null;
+  // Lowercased once, here: Kratos keeps `traits.email` as typed but lowercases
+  // `verifiable_addresses[].value`, and `User.email` is a case-sensitive unique column — so every
+  // lookup, create and verified-address check below needs this one canonical form.
+  const email = typeof traits?.email === 'string' ? traits.email.toLowerCase() : null;
   if (!email) {
     return oauthError('identity_missing_email');
   }

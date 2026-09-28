@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Open Gateway — Stack Rebuild Script
+# MIRQAB — Stack Rebuild Script
 # ============================================================================
 # Rebuilds and recreates the Docker Compose stack (infra/docker-compose.yml).
 #
@@ -55,7 +55,7 @@ if [ $# -gt 0 ]; then
     SELECTED=("$@")
   fi
 else
-  step "Open Gateway — Stack Rebuild"
+  step "MIRQAB — Stack Rebuild"
   echo "Services:"
   for i in "${!ALL_SERVICES[@]}"; do
     printf "  %2d) %s\n" "$((i + 1))" "${ALL_SERVICES[$i]}"

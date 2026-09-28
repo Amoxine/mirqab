@@ -40,6 +40,11 @@ describe('proxyUrlDenyReason', () => {
     ['http://169.254.170.2/v2/credentials', /link-local/],
     ['http://metadata.google.internal/computeMetadata/v1/', /platform itself|metadata/],
     ['http://metadata/computeMetadata/v1/', /platform itself|metadata/],
+    // Not a compose service name, an IP, or a literal loopback address — but a Docker
+    // `extra_hosts: host-gateway` entry resolves this to the host itself, so it's denied at the
+    // policy layer independent of whether that network wiring exists anywhere today.
+    ['http://host.docker.internal:3001/', /platform itself/],
+    ['http://gateway.docker.internal:3001/', /platform itself/],
     ['http://tyk-gateway:8080/tyk/apis', /platform itself/],
     ['http://tyk-pump:8083/health', /platform itself/],
     ['http://postgres:5432', /platform itself/],

@@ -2,8 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { PrismaClient } from '@prisma/client';
+import { countJobRun } from '../../../common/metrics/ops-metrics';
 import {
   ANALYTICS_INDEX_DDL,
+  analyticsRedactionDdl,
+  redactFieldsFrom,
   retentionAggregateQuery,
   retentionRawQuery,
   tablePresenceQuery,
@@ -37,7 +40,9 @@ export class AnalyticsRetentionScheduler {
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async handleRetention(): Promise<void> {
     try {
-      const { rawDeleted, aggregateDeleted } = await this.purgeExpiredAnalytics();
+      const { rawDeleted, aggregateDeleted } = await countJobRun('analytics_retention', () =>
+        this.purgeExpiredAnalytics(),
+      );
       if (rawDeleted > 0 || aggregateDeleted > 0) {
         this.logger.log(
           `Analytics retention: deleted ${String(rawDeleted)} raw and ${String(aggregateDeleted)} aggregate row(s)`,
@@ -58,9 +63,11 @@ export class AnalyticsRetentionScheduler {
 
     let rawDeleted = 0;
     if (rawPresent) {
-      // Second chance at the indexes: on a cold stack the API boots before the pump creates
-      // tyk_analytics, so the init-time DDL finds nothing to index (D9).
+      // Second chance at the indexes and the redaction trigger: on a cold stack the API boots before
+      // the pump creates tyk_analytics, so the init-time DDL finds nothing (D9) — and without the
+      // trigger every captured dump would be stored unredacted until the next API boot.
       await this.ensureRawIndexes();
+      await this.ensureRedactionTrigger();
       rawDeleted = await this.prisma.$executeRaw(retentionRawQuery(this.rawRetentionDays()));
     }
     const aggregateDeleted = aggregatePresent
@@ -76,6 +83,18 @@ export class AnalyticsRetentionScheduler {
     } catch (err) {
       this.logger.warn(
         `Could not ensure analytics indexes: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** Idempotent; when the trigger was missing it also redacts the dumps stored meanwhile. */
+  private async ensureRedactionTrigger(): Promise<void> {
+    try {
+      const fields = redactFieldsFrom(this.configService.get<string>('ANALYTICS_REDACT_FIELDS'));
+      await this.prisma.$queryRawUnsafe(analyticsRedactionDdl(fields));
+    } catch (err) {
+      this.logger.error(
+        `Could not ensure analytics redaction trigger: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

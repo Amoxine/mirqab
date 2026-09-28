@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import { api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import type {
+  AnalyticsRange,
   ApiConfig,
   ApiHealthStatus,
   ApiKeyStatus,
@@ -194,5 +195,53 @@ export function useInvalidateCache(id: string) {
   return useMutation({
     mutationFn: () =>
       api.post<InvalidateCacheResult>(`/apis/${id}/cache/invalidate`, {}).then((res) => res.data),
+  });
+}
+
+/** `tyk_analytics.rawrequest`/`rawresponse`, parsed and redacted a second time for display. */
+export interface HttpDump {
+  /** Request line (`GET /path?q HTTP/1.1`) or status line (`HTTP/1.1 200 OK`), secrets redacted. */
+  startLine: string;
+  headers: Record<string, string>;
+  body: string;
+  /** The body was cut at the parser's size bound, or the query had already clipped the dump. */
+  truncated: boolean;
+}
+
+/** One captured request, redacted for display (V1-LOG-02). */
+export interface TrafficEntry {
+  timestamp: string;
+  method: string;
+  path: string;
+  responseCode: number;
+  latencyMs: number;
+  request: HttpDump | null;
+  response: HttpDump | null;
+}
+
+/**
+ * `GET /apis/:id/traffic` (AC-LOG02.4): `NOT_ENABLED` is recording off (or unset) AND nothing was
+ * ever captured for this API. `FAILED` is a read error, never folded into an empty page. `OK` may
+ * still hold rows captured while recording was on even though it is off now.
+ */
+export type TrafficPage =
+  | { status: 'NOT_ENABLED' }
+  | { status: 'FAILED' }
+  | {
+      status: 'OK';
+      detailedRecording: boolean;
+      range: AnalyticsRange;
+      page: number;
+      pageSize: number;
+      hasMore: boolean;
+      items: TrafficEntry[];
+    };
+
+export function useApiTraffic(id: string, range: AnalyticsRange, page = 1) {
+  return useQuery({
+    queryKey: queryKeys.apis.traffic(id, range, page),
+    queryFn: () =>
+      api.get<TrafficPage>(`/apis/${id}/traffic?range=${range}&page=${String(page)}`).then((res) => res.data),
+    enabled: !!id,
   });
 }

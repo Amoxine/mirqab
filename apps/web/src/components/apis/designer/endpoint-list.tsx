@@ -3,9 +3,9 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { DataTable, useViewMode, ViewModeToggle } from '@/components/shared/data-table';
+import { Card, CardContent } from '@/components/ui/card';
 import type { OasDocument } from '@/types';
 
 interface EndpointRow {
@@ -50,7 +50,7 @@ export function EndpointList({ oasDocument }: EndpointListProps) {
       {
         accessorKey: 'method',
         header: t('designer.endpoints.method'),
-        cell: ({ row }) => <Badge variant="outline">{row.original.method}</Badge>,
+        cell: ({ row }) => <MethodBadge method={row.original.method} />,
       },
       {
         accessorKey: 'path',
@@ -85,7 +85,7 @@ export function EndpointList({ oasDocument }: EndpointListProps) {
         renderCard={(row) => (
           <Card>
             <CardContent className="space-y-2 pt-6">
-              <Badge variant="outline">{row.method}</Badge>
+              <MethodBadge method={row.method} />
               <p className="break-all font-mono text-xs">{row.path}</p>
               {row.operationId && <p className="break-all font-mono text-xs text-muted-foreground">{row.operationId}</p>}
             </CardContent>

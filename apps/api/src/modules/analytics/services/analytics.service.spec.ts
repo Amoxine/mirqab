@@ -6,7 +6,7 @@ import type { RedisService } from '../../../common/redis/redis.service';
 import { AnalyticsMetric, AnalyticsRange } from '../dto/analytics-query.dto';
 import { AnalyticsService } from './analytics.service';
 import type { PumpHealthService } from './pump-health.service';
-import { ANALYTICS_INDEX_DDL } from './pump-query.builder';
+import { ANALYTICS_INDEX_DDL, analyticsRedactionDdl } from './pump-query.builder';
 import { AnalyticsRetentionScheduler } from './analytics-retention.scheduler';
 
 const TENANT = 'tenant-1';
@@ -670,6 +670,30 @@ describe('AnalyticsRetentionScheduler', () => {
     expect(aggregate.text).toContain('EXTRACT(EPOCH FROM now() - make_interval(days => $1::int))::bigint');
     expect(aggregate.text).not.toContain('to_timestamp("timestamp")');
     expect(aggregate.values).toEqual([90]);
+  });
+
+  it('second chance at the redaction trigger too: the exported DDL, with the same field rule as boot', async () => {
+    prisma.$queryRaw.mockResolvedValue([{ raw_present: true, aggregate_present: false }]);
+    prisma.$executeRaw.mockResolvedValue(0);
+
+    await makeScheduler({ ANALYTICS_REDACT_FIELDS: 'ssn, my_field, "; DROP TABLE users; --"' }).purgeExpiredAnalytics();
+
+    expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+    expect(prisma.$queryRawUnsafe).toHaveBeenNthCalledWith(1, ANALYTICS_INDEX_DDL);
+    expect(prisma.$queryRawUnsafe).toHaveBeenNthCalledWith(2, analyticsRedactionDdl(['ssn', 'my_field']));
+  });
+
+  it('a failing trigger install is logged as an error and retention still runs', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    prisma.$queryRaw.mockResolvedValue([{ raw_present: true, aggregate_present: true }]);
+    prisma.$queryRawUnsafe.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('permission denied'));
+    prisma.$executeRaw.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const result = await makeScheduler().purgeExpiredAnalytics();
+
+    expect(result).toEqual({ rawDeleted: 3, aggregateDeleted: 1 });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('redaction trigger: permission denied'));
+    error.mockRestore();
   });
 
   it('falls back to 30/365 days when the env vars are absent or invalid', async () => {

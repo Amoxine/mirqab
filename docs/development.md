@@ -1,6 +1,6 @@
 # Development Guide
 
-> Complete developer guide for contributing to Open Gateway — SaaS Admin Dashboard for Tyk OSS
+> Complete developer guide for contributing to MIRQAB — SaaS Admin Dashboard for Tyk OSS
 
 ## Table of Contents
 

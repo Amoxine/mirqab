@@ -62,6 +62,8 @@ const PAIRS = [
   ['destructive-foreground', 'destructive', 'destructive button / badge'],
   ['success-foreground', 'success', 'success badge'],
   ['warning-foreground', 'warning', 'warning badge'],
+  ['info-foreground', 'info', 'post method badge'],
+  ['patch-foreground', 'patch', 'patch method badge'],
   ['secondary-foreground', 'secondary', 'secondary button / badge'],
   ['foreground', 'background', 'body text'],
   ['card-foreground', 'card', 'card text'],
@@ -80,6 +82,32 @@ const PAIRS = [
   ['warning', 'card', 'warning text on card'],
 ];
 
+/**
+ * Non-text contrast (WCAG 1.4.11, 3:1): the analytics chart series are these tokens drawn straight
+ * onto the card, and a line or bar is only readable if it stands off that surface.
+ */
+const MIN_NON_TEXT = 3;
+const NON_TEXT_PAIRS = [
+  ['primary', 'card', 'requests / latency series'],
+  ['success', 'card', '2xx bars'],
+  ['warning', 'card', '4xx bars'],
+  ['destructive', 'card', '5xx bars / error series'],
+  // Field outlines and the off switch track. Dark only: the light theme keeps its hairline
+  // #e2e8f0 (1.2:1), a known, accepted gap rather than an oversight.
+  ['input', 'background', 'input outline on page', 'dark'],
+  ['input', 'card', 'input outline on card', 'dark'],
+];
+
+/**
+ * Surfaces drawn ON a card (skeletons, the tab list, table hover, secondary badges) must not be the
+ * card colour itself, or they disappear. Not a WCAG ratio, only "visibly different".
+ */
+const MIN_SURFACE_STEP = 1.05;
+const SURFACE_PAIRS = [
+  ['muted', 'card', 'skeleton / tab list / table hover on a card'],
+  ['secondary', 'card', 'secondary badge / button on a card'],
+];
+
 /** `alpha` of `fg` composited over `bg` — what `bg-primary/10` actually paints. */
 function mix(fgHex, bgHex, alpha) {
   const f = hexToRgb(fgHex);
@@ -93,28 +121,39 @@ function resolve(name, block) {
   return (block && readVar(block, `color-${name}`)) || readVar(theme, `color-${name}`);
 }
 
+const CHECKS = [
+  [PAIRS, MIN_RATIO],
+  [NON_TEXT_PAIRS, MIN_NON_TEXT],
+  [SURFACE_PAIRS, MIN_SURFACE_STEP],
+];
+
 let ok = true;
+let count = 0;
 for (const [themeName, block] of [['light', null], ['dark', dark]]) {
-  for (const [fgName, bgName, label] of PAIRS) {
-    const fg = resolve(fgName, block);
-    const bg = resolve(bgName, block);
-    if (!fg || !bg) {
-      console.error(`[contrast] ${themeName}: could not read --color-${fgName} / --color-${bgName}`);
-      ok = false;
-      continue;
+  for (const [pairs, min] of CHECKS) {
+    for (const [fgName, bgName, label, onlyTheme] of pairs) {
+      if (onlyTheme && onlyTheme !== themeName) continue;
+      count += 1;
+      const fg = resolve(fgName, block);
+      const bg = resolve(bgName, block);
+      if (!fg || !bg) {
+        console.error(`[contrast] ${themeName}: could not read --color-${fgName} / --color-${bgName}`);
+        ok = false;
+        continue;
+      }
+      const ratio = contrastRatio(fg, bg);
+      const pass = ratio >= min;
+      ok = ok && pass;
+      console.log(
+        `[contrast] ${themeName}: ${fgName} ${fg} on ${bgName} ${bg} (${label}) = ${ratio.toFixed(2)}:1 ` +
+          `(min ${min}) ${pass ? 'PASS' : 'FAIL'}`,
+      );
     }
-    const ratio = contrastRatio(fg, bg);
-    const pass = ratio >= MIN_RATIO;
-    ok = ok && pass;
-    console.log(
-      `[contrast] ${themeName}: ${fgName} ${fg} on ${bgName} ${bg} (${label}) = ${ratio.toFixed(2)}:1 ` +
-        `${pass ? 'PASS' : 'FAIL'}`,
-    );
   }
 }
 
 if (!ok) {
-  console.error(`[contrast] FAILED — every pair needs ${MIN_RATIO}:1 (WCAG AA), see above`);
+  console.error('[contrast] FAILED — see the FAIL lines above for the pair and its minimum');
   process.exit(1);
 }
-console.log(`[contrast] all ${PAIRS.length * 2} pairs pass WCAG AA (${MIN_RATIO}:1)`);
+console.log(`[contrast] all ${count} checks pass`);

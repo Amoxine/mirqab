@@ -1,0 +1,74 @@
+# infra/inventory/opengateway.example.yaml
+#
+# Synthetic example only (docs/ha-observability/02 §2.1). Every IP is RFC 5737 documentation
+# space (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), every name is under .example.internal,
+# and the only country code used is ZZ (ISO 3166-1 user-assigned).
+#
+# The real inventory lives in a PRIVATE repository (D-OBS-04). Management IPs, rack and
+# rack_unit are RESTRICTED fields: in the real inventory they belong in a separate file readable
+# only by the platform owner, or in a sops-encrypted file — never in this public repo, and never
+# filled in here with anything but a synthetic placeholder.
+schema_version: 1
+sites:
+  - site_id: site-zz-01
+    display_name: "Example site 1"
+    country: ZZ                  # ISO 3166 user-assigned code = placeholder
+    city: "Example City"
+    provider: "example-provider" # or "on-prem"
+    region: null                 # cloud only
+    availability_zone: null      # cloud only
+    datacenter: "EX-DC1"
+    coordinates: null            # only from a verified contract/provider record
+    last_verified_at: "2026-01-01T00:00:00Z"
+    verified_by: "platform-owner"
+failure_domains:
+  - failure_domain: fd-zz-01-a
+    site_id: site-zz-01
+    scope: rack                  # host | rack | power_feed | az | site
+    description: "Rack A, PDU A, ToR switch A"
+assets:
+  - asset_id: og-zz-h01
+    kind: vm                     # physical_host | vm | container | endpoint
+    hostname: h01
+    fqdn: h01.example.internal
+    dns_names: [h01.example.internal]
+    ip:
+      service: [192.0.2.10]      # RFC 5737 TEST-NET-1
+      management: [198.51.100.10] # RESTRICTED view only
+      public: []
+    identity: { serial: unknown, vm_uuid: unknown, hypervisor: unknown }
+    os: { name: unknown, version: unknown }
+    site_id: site-zz-01
+    rack: unknown                # RESTRICTED
+    rack_unit: unknown           # RESTRICTED
+    environment: prod            # prod | staging | dev
+    cluster: og-prod-zz
+    failure_domain: fd-zz-01-a
+    roles: [edge, tyk-gateway, api, web]
+    owner: platform-team
+    oncall: platform-oncall
+    criticality: tier-0          # tier-0 (user-facing) … tier-3
+    exposure: public-edge        # public-edge | lan | loopback | internal-network
+    scrape_targets:
+      - { job: node, target: "h01.example.internal:9100" }
+      - { job: cadvisor, target: "h01.example.internal:9338" }
+    probe_targets:
+      - { module: icmp, target: "192.0.2.10" }
+    depends_on: []
+    last_verified_at: "2026-01-01T00:00:00Z"
+  - asset_id: og-zz-h01-tyk-1
+    kind: container
+    parent_asset_id: og-zz-h01
+    compose_project: open-gateway
+    compose_service: tyk-gateway
+    container_name: open-gateway-tyk-gateway
+    node: tyk-1                  # bounded gateway-node alias used as a metric label
+    control_url_ref: "TYK_ADMIN_URLS[0]"  # reference, never the URL itself
+    image: "tykio/tyk-gateway:v5.15.0"
+    image_digest: "sha256:unknown"
+    owner: gateway-owner
+    criticality: tier-0
+    exposure: internal-network
+    probe_targets:
+      - { module: tyk_hello, target: "http://tyk-gateway:8081/hello" }
+    last_verified_at: "2026-01-01T00:00:00Z"

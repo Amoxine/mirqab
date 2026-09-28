@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CircuitBreakerService } from '../../../common/circuit-breaker/circuit-breaker.service';
+import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
+import { tykFanoutTotal, tykNodeLabel, type TykFanoutOperation } from '../../../common/metrics/ops-metrics';
 import { RedisService } from '../../../common/redis/redis.service';
 
 /**
@@ -306,8 +308,11 @@ export class TykClientService {
    * definition write plus reload on three nodes races the gateway's own file-then-reload sequence.
    * Three nodes at ~1 s each is well inside the request budget.
    */
-  async forEachNode<T>(write: (nodeUrl: string) => Promise<T>): Promise<NodeOutcome<T>[]> {
-    return (await this.forEachNodeRaw(write)).map(({ outcome }) => outcome);
+  async forEachNode<T>(
+    operation: TykFanoutOperation,
+    write: (nodeUrl: string) => Promise<T>,
+  ): Promise<NodeOutcome<T>[]> {
+    return (await this.forEachNodeRaw(operation, write)).map(({ outcome }) => outcome);
   }
 
   /**
@@ -315,15 +320,26 @@ export class TykClientService {
    * outcome. `fanOut` needs the original: `TykResponseError` is a `BadRequestException` subclass on
    * purpose (see its doc comment) and `KeyService.deleteTykKey` plus the sync-error mapping both
    * branch on `instanceof BadRequestException`. Re-wrapping it would silently change those paths.
+   *
+   * Also the one place every per-node attempt passes through, so `og_tyk_fanout_total` is counted
+   * here (TYK-04).
    */
   private async forEachNodeRaw<T>(
+    operation: TykFanoutOperation,
     write: (nodeUrl: string) => Promise<T>,
   ): Promise<{ outcome: NodeOutcome<T>; raw?: Error }[]> {
     const results: { outcome: NodeOutcome<T>; raw?: Error }[] = [];
-    for (const nodeUrl of this.nodeUrls) {
+    for (const [index, nodeUrl] of this.nodeUrls.entries()) {
+      const node = tykNodeLabel(index);
       try {
         results.push({ outcome: { nodeUrl, ok: true, data: await write(nodeUrl) } });
+        tykFanoutTotal.inc({ node, operation, outcome: 'ok' });
       } catch (err) {
+        tykFanoutTotal.inc({
+          node,
+          operation,
+          outcome: err instanceof CircuitBreakerOpenError ? 'circuit_open' : 'error',
+        });
         const error = err instanceof Error ? err.message : String(err);
         this.logger.warn(`Tyk node ${nodeUrl} failed: ${error}`);
         results.push({
@@ -340,8 +356,11 @@ export class TykClientService {
    * the caller reports as 207; all nodes down is a genuine gateway failure and throws exactly as
    * the single-node code did, so existing error handling still works.
    */
-  private async fanOut<T>(write: (nodeUrl: string) => Promise<T>): Promise<NodeOutcome<T>[]> {
-    const results = await this.forEachNodeRaw(write);
+  private async fanOut<T>(
+    operation: TykFanoutOperation,
+    write: (nodeUrl: string) => Promise<T>,
+  ): Promise<NodeOutcome<T>[]> {
+    const results = await this.forEachNodeRaw(operation, write);
     if (results.length > 0 && results.every((r) => !r.outcome.ok)) {
       // Rethrow the FIRST node's original error rather than a new one: on a single-node stack this
       // path is the only path, and callers still expect the exact exception type Tyk produced.
@@ -364,7 +383,7 @@ export class TykClientService {
   async upsertOasApi(tykDef: Record<string, unknown>): Promise<NodeOutcome[]> {
     this.logger.debug('Upserting OAS API in Tyk');
 
-    return this.fanOut(async (nodeUrl) => {
+    return this.fanOut('upsertOasApi', async (nodeUrl) => {
       const body = await this.request('/apis/oas', { method: 'POST', body: JSON.stringify(tykDef) }, nodeUrl);
       await this.reloadNode(nodeUrl);
       return body;
@@ -384,7 +403,7 @@ export class TykClientService {
   async deleteOasApi(apiId: string): Promise<NodeOutcome[]> {
     this.logger.debug(`Deleting OAS API ${apiId} from Tyk`);
 
-    return this.fanOut(async (nodeUrl) => {
+    return this.fanOut('deleteOasApi', async (nodeUrl) => {
       const body = await this.request(
         `/apis/oas/${encodeURIComponent(apiId)}`,
         { method: 'DELETE' },
@@ -412,7 +431,7 @@ export class TykClientService {
   async upsertMcp(tykDef: Record<string, unknown>): Promise<NodeOutcome[]> {
     this.logger.debug('Upserting MCP proxy in Tyk');
 
-    return this.fanOut(async (nodeUrl) => {
+    return this.fanOut('upsertMcp', async (nodeUrl) => {
       const body = await this.request('/mcps', { method: 'POST', body: JSON.stringify(tykDef) }, nodeUrl);
       await this.reloadNode(nodeUrl);
       return body;
@@ -428,7 +447,7 @@ export class TykClientService {
   async deleteMcp(apiId: string): Promise<NodeOutcome[]> {
     this.logger.debug(`Deleting MCP proxy ${apiId} from Tyk`);
 
-    return this.fanOut(async (nodeUrl) => {
+    return this.fanOut('deleteMcp', async (nodeUrl) => {
       const body = await this.request(
         `/mcps/${encodeURIComponent(apiId)}`,
         { method: 'DELETE' },
@@ -451,7 +470,7 @@ export class TykClientService {
 
     // Still called, even though it is a no-op today: it is the supported API, it costs one request,
     // and if Tyk fixes it this keeps working without a change here.
-    const nodes = await this.fanOut((nodeUrl) =>
+    const nodes = await this.fanOut('invalidateCache', (nodeUrl) =>
       this.request(`/cache/${encodeURIComponent(apiId)}`, { method: 'DELETE' }, nodeUrl),
     );
 
@@ -505,7 +524,7 @@ export class TykClientService {
   async createApi(tykDef: Record<string, unknown>): Promise<TykCreateResult> {
     this.logger.debug('Creating API in Tyk');
 
-    const outcomes = await this.fanOut(async (nodeUrl) => {
+    const outcomes = await this.fanOut('createApi', async (nodeUrl) => {
       const body = await this.request('/apis', { method: 'POST', body: JSON.stringify(tykDef) }, nodeUrl);
       await this.reloadNode(nodeUrl);
       return body;
@@ -556,7 +575,7 @@ export class TykClientService {
   ): Promise<TykApiResponse & { nodes: NodeOutcome[] }> {
     this.logger.debug(`Updating API ${apiId} in Tyk`);
 
-    const outcomes = await this.fanOut(async (nodeUrl) => {
+    const outcomes = await this.fanOut('updateApi', async (nodeUrl) => {
       const body = await this.request<TykApiResponse>(
         `/apis/${apiId}`,
         { method: 'PUT', body: JSON.stringify(tykDef) },
@@ -571,7 +590,7 @@ export class TykClientService {
   async deleteApi(apiId: string): Promise<NodeOutcome[]> {
     this.logger.debug(`Deleting API ${apiId} from Tyk`);
 
-    return this.fanOut(async (nodeUrl) => {
+    return this.fanOut('deleteApi', async (nodeUrl) => {
       const body = await this.request(`/apis/${apiId}`, { method: 'DELETE' }, nodeUrl);
       await this.reloadNode(nodeUrl);
       return body;
@@ -705,7 +724,7 @@ export class TykClientService {
   async upsertPolicy(policy: Record<string, unknown>): Promise<NodeOutcome[]> {
     this.logger.debug('Upserting policy in Tyk');
 
-    const outcomes = await this.fanOut(async (nodeUrl) => {
+    const outcomes = await this.fanOut('upsertPolicy', async (nodeUrl) => {
       const body = await this.request(
         '/policies',
         { method: 'POST', body: JSON.stringify(policy) },
@@ -740,7 +759,7 @@ export class TykClientService {
    */
   async setOrgSession(orgId: string, session: Record<string, unknown>): Promise<NodeOutcome[]> {
     this.logger.debug(`Setting org session for ${orgId}`);
-    return this.fanOut((nodeUrl) =>
+    return this.fanOut('setOrgSession', (nodeUrl) =>
       this.request(
         `/org/keys/${encodeURIComponent(orgId)}`,
         { method: 'POST', body: JSON.stringify({ ...session, org_id: orgId }) },
@@ -768,7 +787,7 @@ export class TykClientService {
    */
   async deleteOrgSession(orgId: string): Promise<NodeOutcome[]> {
     this.logger.debug(`Deleting org session for ${orgId}`);
-    return this.fanOut((nodeUrl) =>
+    return this.fanOut('deleteOrgSession', (nodeUrl) =>
       this.request(
         `/org/keys/${encodeURIComponent(orgId)}`,
         { method: 'DELETE' },
@@ -805,7 +824,7 @@ export class TykClientService {
       return [];
     }
 
-    const outcomes = await this.fanOut(async (nodeUrl) => {
+    const outcomes = await this.fanOut('deletePolicy', async (nodeUrl) => {
       const body = await this.request(path, { method: 'DELETE' }, nodeUrl);
       await this.reloadNode(nodeUrl);
       return body;
@@ -882,18 +901,23 @@ export class TykClientService {
    * Per-node `/hello`, for every entry in `TYK_ADMIN_URLS` (WP14's read-only node health list).
    * `nodes` carries the `/tyk` suffix (admin API shape); `/hello` is served at the control port's
    * ROOT, same reasoning as `TYK_GATEWAY_URL` being a separate, suffix-less var from `TYK_ADMIN_URL`.
+   *
+   * `failureLog: 'debug'` is for the `/api/metrics` scrape, which probes every 15 s and reports a dead
+   * node as a gauge; every other caller keeps the WARN.
    */
-  async nodeHealth(): Promise<{ nodeUrl: string; health: TykGatewayHealth }[]> {
+  async nodeHealth(
+    failureLog: 'warn' | 'debug' = 'warn',
+  ): Promise<{ nodeUrl: string; health: TykGatewayHealth }[]> {
     return Promise.all(
       this.nodeUrls.map(async (nodeUrl) => ({
         nodeUrl,
-        health: await this.probeHello(nodeUrl.replace(/\/tyk$/, '')),
+        health: await this.probeHello(nodeUrl.replace(/\/tyk$/, ''), failureLog),
       })),
     );
   }
 
   /** Shared `/hello` probe body for both `gatewayHealth()` (one URL) and `nodeHealth()` (every node). */
-  private async probeHello(baseUrl: string): Promise<TykGatewayHealth> {
+  private async probeHello(baseUrl: string, failureLog: 'warn' | 'debug' = 'warn'): Promise<TykGatewayHealth> {
     const startedAt = performance.now();
     try {
       const response = await fetch(`${baseUrl}/hello`, {
@@ -918,7 +942,7 @@ export class TykClientService {
       };
     } catch (err) {
       const timedOut = err instanceof Error && err.name === 'TimeoutError';
-      this.logger.warn(`Tyk gateway health probe failed: ${timedOut ? 'timeout' : 'unreachable'}`);
+      this.logger[failureLog](`Tyk gateway health probe failed: ${timedOut ? 'timeout' : 'unreachable'}`);
       return unreachableHealth(timedOut ? 'Gateway health check timed out' : 'Gateway unreachable');
     }
   }
@@ -937,7 +961,7 @@ export class TykClientService {
    * node failed, so this never throws — the caller reads `ok`/`error` per node instead.
    */
   async reloadAllNodes(): Promise<NodeOutcome<{ latencyMs: number }>[]> {
-    return this.forEachNode(async (nodeUrl) => {
+    return this.forEachNode('reloadAllNodes', async (nodeUrl) => {
       const startedAt = performance.now();
       await this.request('/reload/?block=true', {}, nodeUrl);
       return { latencyMs: Math.round(performance.now() - startedAt) };

@@ -15,6 +15,7 @@ import { DesignerTab } from '@/components/apis/designer/designer-tab';
 import { EndpointsTab } from '@/components/apis/endpoints/endpoints-tab';
 import { SpecUpdateBanner } from '@/components/apis/spec-source/spec-update-banner';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
+import { TrafficTab } from '@/components/apis/traffic-tab';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -223,6 +224,8 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
           {/* An OAUTH api authenticates JWTs, so a Tyk auth-token key could never work on it. */}
           {can('key:read') && !isOAuth && <TabsTrigger value="keys">{t('tabs.keys')}</TabsTrigger>}
           {can('key:read') && isOAuth && <TabsTrigger value="clients">{t('tabs.clients')}</TabsTrigger>}
+          {/* V1-LOG-02: reads back `detailedRecording` capture, same gate as the toggle that turns it on. */}
+          {can('api:update') && <TabsTrigger value="traffic">{t('tabs.traffic')}</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -306,6 +309,12 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
         {can('key:read') && isOAuth && (
           <TabsContent value="clients" className="mt-4">
             <ClientsTab apiId={apiDef.id} />
+          </TabsContent>
+        )}
+
+        {can('api:update') && (
+          <TabsContent value="traffic" className="mt-4">
+            <TrafficTab apiId={apiDef.id} />
           </TabsContent>
         )}
       </Tabs>

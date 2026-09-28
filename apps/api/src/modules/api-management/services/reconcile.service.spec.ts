@@ -1,7 +1,20 @@
 import 'reflect-metadata';
-import { computeInSync, definitionHash, nodesInSync, type NodeView, type SyncState } from './reconcile.service';
+import { Logger } from '@nestjs/common';
+import { prisma } from '@open-gateway/database';
+import { jobRunsTotal } from '../../../common/metrics/ops-metrics';
+import type { TykClientService } from '../../tyk-integration/services/tyk-client.service';
+import {
+  computeInSync,
+  definitionHash,
+  nodesInSync,
+  ReconcileService,
+  type NodeView,
+  type SyncState,
+} from './reconcile.service';
 
-jest.mock('@open-gateway/database', () => ({ prisma: {} }));
+jest.mock('@open-gateway/database', () => ({
+  prisma: { apiDefinition: { findMany: jest.fn(), update: jest.fn() } },
+}));
 
 const view = (hash: string | null, over: Partial<NodeView> = {}): NodeView => ({
   present: hash !== null,
@@ -102,5 +115,55 @@ describe('nodesInSync — the gauge R2 alerts on', () => {
 
   it('ignores a node that is no longer configured, so a removed node cannot pin the gauge low', () => {
     expect(nodesInSync([state({ n1: view('a'), retired: view(null, { error: 'gone' }) })], ['n1'])).toBe(1);
+  });
+});
+
+describe('reconcileAll — og_job_runs_total{task="reconcile"} (APP-06)', () => {
+  const db = prisma as unknown as { apiDefinition: { findMany: jest.Mock; update: jest.Mock } };
+  const service = new ReconcileService({
+    nodes: ['http://n1:8081/tyk'],
+    getApiFromNode: () => Promise.resolve({ name: 'x' }),
+  } as unknown as TykClientService);
+  const defs = [
+    { id: 'd1', tykApiId: 't1', defFormat: 'CLASSIC' },
+    { id: 'd2', tykApiId: 't2', defFormat: 'CLASSIC' },
+  ];
+  const runs = async () =>
+    Object.fromEntries(
+      (await jobRunsTotal.get()).values
+        .filter(({ labels }) => labels.task === 'reconcile')
+        .map(({ labels, value }) => [String(labels.outcome), value]),
+    );
+
+  beforeAll(() => {
+    Logger.overrideLogger(false);
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jobRunsTotal.reset();
+    db.apiDefinition.findMany.mockResolvedValue(defs);
+    db.apiDefinition.update.mockResolvedValue({});
+  });
+
+  it('counts a clean sweep as ok', async () => {
+    await service.reconcileAll();
+    expect(await runs()).toEqual({ ok: 1 });
+  });
+
+  it('counts a sweep with one failed definition as error, and still finishes the sweep', async () => {
+    db.apiDefinition.update.mockRejectedValueOnce(new Error('write failed'));
+
+    await service.reconcileAll();
+
+    expect(db.apiDefinition.update).toHaveBeenCalledTimes(2);
+    expect(await runs()).toEqual({ error: 1 });
+  });
+
+  it('counts a sweep that could not start as error and still throws, as before', async () => {
+    db.apiDefinition.findMany.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(service.reconcileAll()).rejects.toThrow('db down');
+    expect(await runs()).toEqual({ error: 1 });
   });
 });

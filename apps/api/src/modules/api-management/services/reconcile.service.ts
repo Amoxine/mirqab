@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { createHash } from 'node:crypto';
 import { prisma } from '@open-gateway/database';
 import { ApiDefFormat, AuditAction } from '@prisma/client';
+import { recordJobRun } from '../../../common/metrics/ops-metrics';
 import { TykClientService } from '../../tyk-integration/services/tyk-client.service';
 
 /** One node's view of a definition. `hash` is null when the node could not be read. */
@@ -110,6 +111,11 @@ export function computeInSync(nodes: Record<string, NodeView>): boolean {
  * low — an alert about a machine that is no longer part of the deployment.
  */
 export function nodesInSync(states: readonly SyncState[], nodes: readonly string[]): number {
+  return inSyncNodes(states, nodes).length;
+}
+
+/** The nodes `nodesInSync` counts, for the per-node `og_tyk_node_in_sync` gauge (TYK-04). */
+export function inSyncNodes(states: readonly SyncState[], nodes: readonly string[]): string[] {
   // A Map per state rather than `state.nodes[node]`: indexing a `Record<string, NodeView>` is typed
   // as always present, while a state written before this node joined `TYK_ADMIN_URLS` simply has no
   // entry for it. `Map.get` is the lookup whose type tells the truth.
@@ -126,7 +132,7 @@ export function nodesInSync(states: readonly SyncState[], nodes: readonly string
         return !other?.present || other.hash === null || other.hash === view.hash;
       });
     }),
-  ).length;
+  );
 }
 
 @Injectable()
@@ -228,21 +234,29 @@ export class ReconcileService implements OnModuleInit {
    */
   @Interval(RECONCILE_INTERVAL_MS)
   async reconcileAll(): Promise<void> {
-    const defs = await prisma.apiDefinition.findMany({
-      where: { tykApiId: { not: null } },
-      select: { id: true, tykApiId: true, defFormat: true },
-    });
+    // A throw leaves `ok` false, and so does one failed definition even though the sweep goes on.
+    let ok = false;
+    try {
+      const defs = await prisma.apiDefinition.findMany({
+        where: { tykApiId: { not: null } },
+        select: { id: true, tykApiId: true, defFormat: true },
+      });
+      ok = true;
 
-    for (const def of defs) {
-      if (!def.tykApiId) continue;
-      try {
-        await this.reconcileOne(def.id, def.tykApiId, def.defFormat);
-      } catch (err) {
-        // One bad definition must not stop the sweep.
-        this.logger.warn(
-          `Reconcile of ${def.id} failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      for (const def of defs) {
+        if (!def.tykApiId) continue;
+        try {
+          await this.reconcileOne(def.id, def.tykApiId, def.defFormat);
+        } catch (err) {
+          // One bad definition must not stop the sweep.
+          ok = false;
+          this.logger.warn(
+            `Reconcile of ${def.id} failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
+    } finally {
+      recordJobRun('reconcile', ok);
     }
   }
 }

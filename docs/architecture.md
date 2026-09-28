@@ -1,6 +1,6 @@
 # Architecture
 
-> System architecture decisions, module design, and technical rationale for Open Gateway
+> System architecture decisions, module design, and technical rationale for MIRQAB
 
 ## Table of Contents
 
@@ -89,6 +89,7 @@ KeysModule ────────────► TykIntegrationModule ──�
 QuotasModule ──────────► KeysModule
 AnalyticsModule ───────► TykIntegrationModule (analytics data)
 AuditModule ─────────────────────────────────────────────► All modules (interceptor)
+AuditModule ───────────► AnalyticsModule (audit-row-to-traffic link, v1)
 ```
 
 ### Module Details
@@ -101,8 +102,8 @@ AuditModule ──────────────────────�
 | **TykIntegrationModule** | TykClientService (create/update/delete APIs & keys) | Tyk Gateway REST API (HTTP) | CircuitBreaker |
 | **KeysModule** | API key lifecycle (create, revoke, expire) | TykIntegrationModule | Prisma, Auth guards |
 | **QuotasModule** | Per-key usage limits | - | Prisma |
-| **AnalyticsModule** | Usage metrics, time-series | TykIntegrationModule | Prisma |
-| **AuditModule** | Append-only audit log | - | Prisma, Interceptors |
+| **AnalyticsModule** | Usage metrics, time-series, captured request/response traffic (redacted) | TykIntegrationModule | Prisma |
+| **AuditModule** | Append-only audit log; an audit row for an API can show that API's rolled-up traffic (v1) | - | Prisma, Interceptors, AnalyticsModule |
 
 ---
 
@@ -613,7 +614,7 @@ Each NestJS module follows **hexagonal architecture** (ports & adapters):
 
 **Status:** Accepted
 
-**Decision:** Only the NestJS backend accesses Tyk Admin APIs.
+**Decision:** Only the NestJS backend accesses Tyk's Admin (control-plane) API. This does not cover the gateway's own data plane: a developer-portal client calls that directly from the browser with their own subscription key (`apps/web/src/components/portal/try-it-console.tsx`), the same way any external API consumer would — no platform credential is ever involved in that call.
 
 **Rationale:**
 - Tyk credentials must **never** reach the browser

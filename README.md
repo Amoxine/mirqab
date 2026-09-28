@@ -1,4 +1,4 @@
-# Open Gateway — SaaS Admin Dashboard for Tyk OSS
+# MIRQAB — SaaS Admin Dashboard for Tyk OSS
 
 > Production-ready monorepo for managing Tyk API Gateway instances through a modern admin dashboard.
 
@@ -7,9 +7,9 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.0-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.4-f69220)](https://pnpm.io/)
 
-## What is Open Gateway?
+## What is MIRQAB?
 
-Open Gateway is a **production-grade SaaS admin dashboard** built as a monorepo, designed to manage [Tyk OSS](https://tyk.io/) API Gateway instances. It provides a modern web interface for:
+MIRQAB is a **production-grade SaaS admin dashboard** built as a monorepo, designed to manage [Tyk OSS](https://tyk.io/) API Gateway instances. It provides a modern web interface for:
 
 - **Multi-tenant API management** — Create, update, and sync API definitions to Tyk Gateway
 - **API key lifecycle** — Generate, assign, revoke keys with per-key quotas
@@ -600,7 +600,7 @@ points at a denylisted host (loopback, link-local / cloud metadata, a platform s
 
 ## Database Models Overview
 
-Open Gateway uses **Prisma 6** with **PostgreSQL 16**. The schema defines **10 models**:
+MIRQAB uses **Prisma 6** with **PostgreSQL 16**. The schema defines **10 models**:
 
 | Model | Description | Key Fields |
 |-------|-------------|------------|
@@ -685,7 +685,7 @@ pnpm test -- --coverage
 
 ## Security
 
-Open Gateway implements **5-layer defense-in-depth**:
+MIRQAB implements **5-layer defense-in-depth**:
 
 1. **Network Isolation** — Private subnets, Tyk gateway REST API (`/tyk`) only reachable from NestJS pods
 2. **AuthN/AuthZ** — Ory Hydra (OAuth2/OIDC, 1h access / 720h refresh) + Ory Kratos (login/registration/recovery) + Ory Keto (tenant membership), httpOnly cookies, RBAC + ABAC
@@ -714,7 +714,7 @@ See [Security Documentation](docs/security.md) for details.
 
 ## License
 
-[MIT License](LICENSE) — Open Gateway is free and open source.
+[MIT License](LICENSE) — MIRQAB is free and open source.
 
 ---
 

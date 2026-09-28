@@ -10,6 +10,7 @@ import {
 import { Download, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
+import { AuditTrafficAction } from '@/components/audit/audit-traffic-action';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -102,6 +103,10 @@ function useAuditLogColumns(): ColumnDef<AuditLog>[] {
         accessorKey: 'ipAddress',
         header: t('auditLogs.columns.ipAddress'),
         cell: ({ row }) => (row.original.ipAddress ? <span dir="ltr">{row.original.ipAddress}</span> : '—'),
+      },
+      {
+        id: 'actions',
+        cell: ({ row }) => <AuditTrafficAction row={row.original} />,
       },
     ],
     [t, locale],

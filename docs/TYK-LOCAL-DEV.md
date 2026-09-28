@@ -1,10 +1,10 @@
 # Tyk Local Development
 
-> Run the open-source Tyk Gateway locally alongside the full Open Gateway stack.
+> Run the open-source Tyk Gateway locally alongside the full MIRQAB stack.
 
 ## Overview
 
-Open Gateway is a dashboard around the **open-source Tyk Gateway**. The **Tyk Dashboard is not used** (it is proprietary and needs a licence plus MongoDB/Postgres). The NestJS API manages the gateway through the Gateway REST API, and the Tyk gateway is part of the base Docker Compose stack.
+MIRQAB is a dashboard around the **open-source Tyk Gateway**. The **Tyk Dashboard is not used** (it is proprietary and needs a licence plus MongoDB/Postgres). The NestJS API manages the gateway through the Gateway REST API, and the Tyk gateway is part of the base Docker Compose stack.
 
 ## Architecture
 

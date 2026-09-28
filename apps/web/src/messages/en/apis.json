@@ -55,7 +55,8 @@
     "configuration": "Configuration",
     "designer": "Designer",
     "keys": "Keys",
-    "clients": "Clients"
+    "clients": "Clients",
+    "traffic": "Traffic"
   },
   "overview": {
     "syncAlert": "Gateway sync failed: {error}",
@@ -81,6 +82,34 @@
     "active": "Active",
     "revoked": "Revoked",
     "expired": "Expired"
+  },
+  "trafficTab": {
+    "description": "Full request and response detail captured while detailed recording was on.",
+    "empty": "No traffic has been captured for this API in this window.",
+    "notEnabledTitle": "Detailed recording is off",
+    "notEnabledMessage": "Turn on detailed recording in the Designer to start capturing full request and response detail for this API.",
+    "failedTitle": "Captured traffic can't be shown",
+    "failedMessage": "The analytics store is unavailable, or its redaction safeguard isn't active, so nothing is shown. Try again.",
+    "timestamp": "Timestamp",
+    "method": "Method",
+    "path": "Path",
+    "status": "Status",
+    "view": "View",
+    "rangeLabel": "Filter by time range",
+    "ranges": {
+      "1h": "Last hour",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days"
+    },
+    "pageLabel": "Page {page}",
+    "detailTitle": "Captured request",
+    "redactionNote": "Secrets are hidden by name: values of headers, query and form parameters, and JSON fields whose names look like credentials (tokens, passwords, keys, cookies) show as [REDACTED]. Some harmless fields with similar names may be hidden too. Multipart bodies and JSON embedded inside a string are shown as captured. A stray quote earlier in a non-JSON body can also throw off matching further in, so a later secret-looking field there may not be hidden.",
+    "request": "Request",
+    "response": "Response",
+    "noRequest": "No request captured",
+    "noResponse": "No response captured",
+    "truncated": "Body truncated"
   },
   "config": {
     "rateLimit": "Rate limit",
@@ -328,7 +357,8 @@
       "title": "Detailed recording",
       "description": "Full request/response detail for this API's analytics.",
       "enable": "Record full detail",
-      "enableDescription": "Off by default — detailed records carry headers and bodies."
+      "enableDescription": "Off by default — detailed records carry headers and bodies.",
+      "viewHint": "Once captured, this API's request and response detail appears in its Traffic tab."
     },
     "ipAccess": {
       "title": "IP access control",

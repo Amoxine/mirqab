@@ -8,8 +8,14 @@
  *
  * Idempotent: for each user, looks up an existing Kratos identity by email first and skips
  * creation if found — safe to re-run against partially-migrated state. Only queries users with
- * no `kratosIdentityId` yet (see migration 20260920120000_kratos_identity_id), so a re-run is
- * cheap once most rows are mapped.
+ * no `kratosIdentityId` yet (see migration 20260920120000_kratos_identity_id) AND a non-null
+ * `password` (`MIGRATION_CANDIDATE_WHERE`, in ./migration-candidate.ts) — an invite-pending row
+ * (`password: null`) was never a pre-Kratos account and must never reach the "bind to existing
+ * identity by email" branch below, which has no verified-address check. A re-run is cheap once
+ * most rows are mapped.
+ *
+ * This file runs `main()` on import. Never import it from a check or test; import the side-effect-free
+ * ./migration-candidate.ts instead.
  *
  * Rows whose `password` isn't a real hash (no `$` prefix — e.g. the random hex placeholder
  * apps/web/src/app/oauth2/login/route.ts assigns to web-provisioned users) are skipped with a
@@ -23,6 +29,7 @@
  *   KRATOS_ADMIN_URL   default http://127.0.0.1:33013 (loopback-only per infra/docker-compose.yml)
  */
 import { PrismaClient } from '@prisma/client';
+import { MIGRATION_CANDIDATE_WHERE } from './migration-candidate';
 
 const KRATOS_ADMIN_URL = process.env.KRATOS_ADMIN_URL ?? 'http://127.0.0.1:33013';
 const SCHEMA_ID = 'default'; // infra/ory/kratos/kratos.yml identity.default_schema_id
@@ -46,7 +53,7 @@ async function findExistingIdentity(email: string): Promise<KratosIdentity | nul
   const url = `${KRATOS_ADMIN_URL}/admin/identities?credentials_identifier=${encodeURIComponent(email)}`;
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Kratos lookup failed for ${email}: ${res.status} ${await res.text()}`);
+    throw new Error(`Kratos lookup failed for ${email}: ${String(res.status)} ${await res.text()}`);
   }
   const identities = (await res.json()) as KratosIdentity[];
   return identities[0] ?? null;
@@ -65,19 +72,18 @@ async function createIdentity(email: string, name: string, hashedPassword: strin
     }),
   });
   if (!res.ok) {
-    throw new Error(`Kratos create failed for ${email}: ${res.status} ${await res.text()}`);
+    throw new Error(`Kratos create failed for ${email}: ${String(res.status)} ${await res.text()}`);
   }
   return (await res.json()) as KratosIdentity;
 }
 
 async function main() {
-  // Only rows not yet mapped — cheap re-runs once most users are migrated.
   const users: MigrationUser[] = await prisma.user.findMany({
-    where: { kratosIdentityId: null },
+    where: MIGRATION_CANDIDATE_WHERE,
     select: { id: true, email: true, name: true, password: true },
   });
 
-  const mapping: Array<{ userId: string; email: string; kratosIdentityId: string; created: boolean }> = [];
+  const mapping: { userId: string; email: string; kratosIdentityId: string; created: boolean }[] = [];
 
   for (const user of users) {
     const existing = await findExistingIdentity(user.email);
@@ -87,7 +93,7 @@ async function main() {
       identity = existing;
     } else {
       const hashedPassword = user.password;
-      if (!hashedPassword || !hashedPassword.startsWith('$')) {
+      if (!hashedPassword?.startsWith('$')) {
         console.warn(
           `Skipping ${user.email}: no existing Kratos identity and password is not a real hash ` +
             '(likely the random placeholder web self-service signup assigns) — investigate before migrating this user.',
@@ -113,7 +119,7 @@ async function main() {
 }
 
 main()
-  .catch((err) => {
+  .catch((err: unknown) => {
     console.error(err);
     process.exitCode = 1;
   })

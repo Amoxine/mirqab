@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-gateway.internal/schemas/inventory-v1.json",
+  "title": "MIRQAB inventory (schema_version 1)",
+  "description": "Public, synthetic schema for the HA-observability inventory (docs/ha-observability/02 §2.1). The real inventory, and the restricted management-IP/rack/rack_unit values, live in a private repository (D-OBS-04) — this file only describes the shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sites", "failure_domains", "assets"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "sites": { "type": "array", "items": { "$ref": "#/$defs/site" } },
+    "failure_domains": { "type": "array", "items": { "$ref": "#/$defs/failure_domain" } },
+    "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" } }
+  },
+  "$defs": {
+    "unverified_string": {
+      "description": "Verified when known; the literal string \"unknown\" when it isn't (02 §2.1). Never guessed.",
+      "type": "string",
+      "minLength": 1
+    },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["site_id", "display_name", "country", "city", "provider", "datacenter", "last_verified_at", "verified_by"],
+      "properties": {
+        "site_id": { "type": "string" },
+        "display_name": { "type": "string" },
+        "country": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO 3166-1 alpha-2, or the user-assigned ZZ placeholder in synthetic/example data."
+        },
+        "city": { "$ref": "#/$defs/unverified_string" },
+        "provider": { "type": "string", "description": "Provider name, or \"on-prem\"." },
+        "region": { "type": ["string", "null"], "description": "Cloud only." },
+        "availability_zone": { "type": ["string", "null"], "description": "Cloud only." },
+        "datacenter": { "type": "string" },
+        "coordinates": {
+          "description": "Only from a verified contract/provider record or a site visit — never from IP geolocation (02 §1, §2.2).",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+            "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+          }
+        },
+        "last_verified_at": { "type": "string", "format": "date-time" },
+        "verified_by": { "type": "string" }
+      }
+    },
+    "failure_domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["failure_domain", "site_id", "scope"],
+      "properties": {
+        "failure_domain": { "type": "string" },
+        "site_id": { "type": "string" },
+        "scope": { "enum": ["host", "rack", "power_feed", "az", "site"] },
+        "description": { "type": "string" }
+      }
+    },
+    "scrape_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job", "target"],
+      "properties": {
+        "job": { "type": "string" },
+        "target": { "type": "string" }
+      }
+    },
+    "probe_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "target"],
+      "properties": {
+        "module": { "type": "string" },
+        "target": { "type": "string" },
+        "job": {
+          "type": "string",
+          "description": "Optional file_sd job name. Defaults to \"probe-<module>\" when omitted. Set this to feed a per-purpose blackbox job in prometheus.yml (e.g. api-health, ory-ready)."
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "kind", "criticality", "exposure", "owner", "last_verified_at"],
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "description": "The stable key. Never reused, never derived from an IP, survives a re-IP or rename (02 §1)."
+        },
+        "kind": { "enum": ["physical_host", "vm", "container", "endpoint"] },
+        "hostname": { "type": "string" },
+        "fqdn": { "type": "string" },
+        "dns_names": { "type": "array", "items": { "type": "string" } },
+        "ip": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "service": { "type": "array", "items": { "type": "string", "format": "ipv4" } },
+            "management": {
+              "type": "array",
+              "items": { "type": "string", "format": "ipv4" },
+              "description": "RESTRICTED view only (02 §2.1)."
+            },
+            "public": { "type": "array", "items": { "type": "string", "format": "ipv4" } }
+          }
+        },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "serial": { "$ref": "#/$defs/unverified_string" },
+            "vm_uuid": { "$ref": "#/$defs/unverified_string" },
+            "hypervisor": { "$ref": "#/$defs/unverified_string" }
+          }
+        },
+        "os": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "#/$defs/unverified_string" },
+            "version": { "$ref": "#/$defs/unverified_string" }
+          }
+        },
+        "site_id": { "type": "string" },
+        "rack": {
+          "allOf": [{ "$ref": "#/$defs/unverified_string" }],
+          "description": "RESTRICTED (02 §2.1)."
+        },
+        "rack_unit": {
+          "allOf": [{ "$ref": "#/$defs/unverified_string" }],
+          "description": "RESTRICTED (02 §2.1)."
+        },
+        "environment": { "enum": ["prod", "staging", "dev"] },
+        "cluster": { "type": "string" },
+        "failure_domain": { "type": "string" },
+        "roles": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "owner": { "type": "string" },
+        "oncall": { "type": "string" },
+        "criticality": { "enum": ["tier-0", "tier-1", "tier-2", "tier-3"] },
+        "exposure": { "enum": ["public-edge", "lan", "loopback", "internal-network"] },
+        "scrape_targets": { "type": "array", "items": { "$ref": "#/$defs/scrape_target" } },
+        "probe_targets": { "type": "array", "items": { "$ref": "#/$defs/probe_target" } },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "parent_asset_id": { "type": "string" },
+        "compose_project": { "type": "string" },
+        "compose_service": { "type": "string" },
+        "container_name": { "type": "string" },
+        "node": {
+          "type": "string",
+          "pattern": "^tyk-[0-9]+$",
+          "description": "Bounded gateway-node alias used as a metric label — never a URL (02 §2.1, §4)."
+        },
+        "control_url_ref": { "type": "string", "description": "A reference, never the URL itself." },
+        "image": { "type": "string" },
+        "image_digest": { "type": "string", "pattern": "^sha256:(unknown|[0-9a-f]{64})$" },
+        "last_verified_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "physical_host" } } },
+          "then": { "required": ["hostname", "site_id", "environment", "cluster", "failure_domain", "roles"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "vm" } } },
+          "then": { "required": ["hostname", "site_id", "environment", "cluster", "failure_domain", "roles"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "container" } } },
+          "then": { "required": ["parent_asset_id", "compose_project", "compose_service", "container_name", "image"] }
+        }
+      ]
+    }
+  }
+}

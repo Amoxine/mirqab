@@ -104,7 +104,7 @@ courier:
   smtp:
     connection_uri: smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true
     from_address: no-reply@open-gateway.local
-    from_name: Open Gateway
+    from_name: MIRQAB
 
 log:
   level: info

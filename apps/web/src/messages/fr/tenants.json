@@ -45,12 +45,19 @@
     "title": "Membres",
     "invite": "Inviter",
     "empty": "Aucun membre pour le moment.",
+    "noSearchResults": "Aucun membre ne correspond à votre recherche.",
+    "searchPlaceholder": "Rechercher par nom ou e-mail",
+    "searchAriaLabel": "Rechercher des membres",
     "columnUser": "Utilisateur",
     "columnJoined": "Rejoint le",
     "roleAriaLabel": "Rôle de {email}",
     "removeAriaLabel": "Retirer {email}",
     "roleUpdatedToast": "{email} est désormais {role}",
-    "roleUpdateError": "Impossible de modifier le rôle"
+    "roleUpdateError": "Impossible de modifier le rôle",
+    "pendingBadge": "En attente",
+    "pendingInstructionsText": "Pas encore connecté(e). Demandez à {email} de s’inscrire avec cette adresse e-mail exacte, puis de consulter sa boîte pour l’e-mail de vérification avant de se connecter — cette application ne lui a rien envoyé.",
+    "pendingCopyAriaLabel": "Copier les instructions d’invitation",
+    "pendingCopyFailed": "Impossible de copier dans le presse-papiers"
   },
   "form": {
     "createTitle": "Créer une organisation",
@@ -74,7 +81,7 @@
   },
   "invite": {
     "title": "Inviter un membre",
-    "description": "Ajoutez un utilisateur Open Gateway existant à cette organisation par e-mail.",
+    "description": "Ajoutez un utilisateur MIRQAB existant à cette organisation par e-mail.",
     "emailPlaceholder": "personne@exemple.com",
     "rolePlaceholder": "Sélectionner un rôle",
     "submit": "Inviter",
@@ -83,6 +90,11 @@
     "errorToast": "Impossible d’inviter cet utilisateur",
     "notFoundError": "Aucun utilisateur ne s’est encore connecté avec cette adresse e-mail. Il doit d’abord s’inscrire et se connecter une fois avant de pouvoir être invité.",
     "alreadyMemberError": "Cet utilisateur est déjà membre de cette organisation.",
+    "alreadyInvitedError": "Cette adresse e-mail a déjà été invitée ou est déjà membre.",
+    "offerText": "Aucun compte n’existe encore pour {email}. Vous pouvez l’inviter par e-mail à la place — cette application ne lui enverra rien : demandez-lui de s’inscrire avec cette adresse e-mail exacte, puis de consulter sa boîte pour l’e-mail de vérification avant de se connecter.",
+    "inviteSubmit": "Inviter par e-mail",
+    "inviteSubmitting": "Invitation en cours...",
+    "inviteSuccessToast": "{email} invité(e) par e-mail — demandez-lui de s’inscrire avec cette adresse avant de se connecter.",
     "errors": {
       "emailRequired": "Obligatoire",
       "emailInvalid": "Saisissez une adresse e-mail valide"

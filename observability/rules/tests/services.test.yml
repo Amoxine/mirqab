@@ -1,0 +1,637 @@
+rule_files:
+  - ../services.yml
+
+evaluation_interval: 1m
+
+tests:
+  # EdgeUpstreamUnhealthy
+  - interval: 1m
+    input_series:
+      - series: 'caddy_reverse_proxy_upstreams_healthy{upstream="tyk-gateway:8080"}'
+        values: '0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EdgeUpstreamUnhealthy
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: gateway
+              upstream: 'tyk-gateway:8080'
+            exp_annotations:
+              summary: 'Edge upstream tyk-gateway:8080 is unhealthy'
+              description: "Caddy's own health check has taken this upstream out of rotation."
+              runbook: RB-06
+
+  - interval: 1m
+    input_series:
+      - series: 'caddy_reverse_proxy_upstreams_healthy{upstream="tyk-gateway:8080"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EdgeUpstreamUnhealthy
+        exp_alerts: []
+
+  # TykNodeDown: one target down. Both the per-node (warning) and the "every node" (critical) rule
+  # fire from the same single-target fixture, because sum() over one down series is also 0 —
+  # accurately reflecting today's single-node default deployment.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="tyk-hello", node="tyk-1"}'
+        values: '0 0'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TykNodeDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: gateway
+              job: tyk-hello
+              node: tyk-1
+            exp_annotations:
+              summary: 'Tyk node tyk-1 failed its /hello probe'
+              description: '/hello answers HTTP 200 either way, but its body''s top-level `status` goes to "fail" for ANY dependency problem this node has, Redis included — see TykNodeRedisFailing to tell whether Redis specifically is the cause.'
+              runbook: RB-09
+          - exp_labels:
+              severity: critical
+              owner: gateway
+            exp_annotations:
+              summary: 'Every Tyk node is failing its /hello probe'
+              description: 'No node in TYK_ADMIN_URLS answers healthy — the data plane is down, not degraded.'
+              runbook: RB-09
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="tyk-hello", node="tyk-1"}'
+        values: '1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TykNodeDown
+        exp_alerts: []
+
+  # TykNodeRedisFailing (description corrected this round to match the lab-observed body shape)
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="tyk-hello-redis", node="tyk-1"}'
+        values: '0 0'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TykNodeRedisFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: gateway
+              job: tyk-hello-redis
+              node: tyk-1
+            exp_annotations:
+              summary: 'Tyk node tyk-1 reports Redis as failing'
+              description: "/hello's own body says this node cannot reach Redis. TykNodeDown fires at the same time on this build (Redis-down flips the top-level status too, verify-round lab finding) — this rule's job is to say WHY, not to catch something TykNodeDown missed."
+              runbook: RB-09
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="tyk-hello-redis", node="tyk-1"}'
+        values: '1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TykNodeRedisFailing
+        exp_alerts: []
+
+  # PumpHealthFailing
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="pump-health"}'
+        values: '0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PumpHealthFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: gateway
+              job: pump-health
+            exp_annotations:
+              summary: "Pump's :8083/health is failing"
+              description: 'A stuck-but-"healthy" purge loop (PUMP-03''s own 2026-09-27 incident) does not fail this probe — see AnalyticsStale for that case.'
+              runbook: RB-15
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="pump-health"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PumpHealthFailing
+        exp_alerts: []
+
+  # RedactionTriggerMissing
+  - interval: 1m
+    input_series:
+      - series: 'og_analytics_redaction_trigger_present'
+        values: '0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RedactionTriggerMissing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: security
+            exp_annotations:
+              summary: 'The analytics redaction trigger is missing'
+              description: "The traffic view already fails closed without it (RB-15) — this is a security incident, not a data-quality one. Check the retention job's reinstall."
+              runbook: RB-15
+
+  - interval: 1m
+    input_series:
+      - series: 'og_analytics_redaction_trigger_present'
+        values: '1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RedactionTriggerMissing
+        exp_alerts: []
+
+  # Edge5xxRatioHigh: 5xx at ~10% of total (corrected metric, F §9).
+  - interval: 1m
+    input_series:
+      - series: 'caddy_http_request_duration_seconds_count{server="s1", code="500"}'
+        values: '0+10x15'
+      - series: 'caddy_http_request_duration_seconds_count{server="s1", code="200"}'
+        values: '0+90x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: Edge5xxRatioHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: gateway
+              server: s1
+            exp_annotations:
+              summary: '5xx ratio above 5% on edge server s1'
+              description: '10% of edge responses are 5xx, sustained for 10m. Baseline threshold (03 §3.5) — not yet measured against real traffic.'
+              runbook: RB-06
+
+  - interval: 1m
+    input_series:
+      - series: 'caddy_http_request_duration_seconds_count{server="s1", code="500"}'
+        values: '0+1x15'
+      - series: 'caddy_http_request_duration_seconds_count{server="s1", code="200"}'
+        values: '0+99x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: Edge5xxRatioHigh
+        exp_alerts: []
+
+  # EdgeLatencyHigh: p95 ~0.97s (most requests land in the (0.5,1] bucket).
+  - interval: 1m
+    input_series:
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="0.1"}'
+        values: '0+1x15'
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="0.5"}'
+        values: '0+2x15'
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="1"}'
+        values: '0+100x15'
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="+Inf"}'
+        values: '0+100x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: EdgeLatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: gateway
+              server: s1
+            exp_annotations:
+              summary: 'Edge p95 latency above 500ms on server s1'
+              description: '974.5ms sustained for 10m. PLACEHOLDER threshold — no baseline yet.'
+              runbook: RB-06
+
+  - interval: 1m
+    input_series:
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="0.1"}'
+        values: '0+95x15'
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="0.5"}'
+        values: '0+99x15'
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="1"}'
+        values: '0+100x15'
+      - series: 'caddy_http_request_duration_seconds_bucket{server="s1", le="+Inf"}'
+        values: '0+100x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: EdgeLatencyHigh
+        exp_alerts: []
+
+  # PostgresConnectionsHigh
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_activity_count{datname="opengateway", state="active"}'
+        values: '90x12'
+      - series: 'pg_settings_max_connections'
+        values: '100x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PostgresConnectionsHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: data
+            exp_annotations:
+              summary: 'Postgres connections above 80% of max_connections'
+              description: '90% of max_connections in use, sustained for 10m.'
+              runbook: RB-12
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_activity_count{datname="opengateway", state="active"}'
+        values: '10x12'
+      - series: 'pg_settings_max_connections'
+        values: '100x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PostgresConnectionsHigh
+        exp_alerts: []
+
+  # PostgresDeadlocksOrRollbacks (deadlocks half)
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_database_deadlocks{datname="opengateway"}'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PostgresDeadlocksOrRollbacks
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: data
+              datname: opengateway
+            exp_annotations:
+              summary: 'Postgres deadlock(s) on opengateway'
+              description: '5 deadlock(s) in 10m.'
+              runbook: RB-12
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_database_deadlocks{datname="opengateway"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PostgresDeadlocksOrRollbacks
+        exp_alerts: []
+
+  # PostgresLockContention. `mode` is lowercase — this is what Postgres itself reports
+  # (pg_locks.mode), verify-phase fix.
+  - interval: 1m
+    input_series:
+      - series: 'pg_locks_count{datname="opengateway", mode="accessexclusivelock"}'
+        values: '1x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PostgresLockContention
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: data
+              datname: opengateway
+              mode: accessexclusivelock
+            exp_annotations:
+              summary: 'AccessExclusiveLock held on opengateway for 5m+'
+              description: 'This lock mode blocks every other query against the table. Sustained holding usually means a stuck migration or a long-running DDL statement.'
+              runbook: RB-12
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_locks_count{datname="opengateway", mode="accessexclusivelock"}'
+        values: '0x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PostgresLockContention
+        exp_alerts: []
+
+  # RedisRejectingWrites. Rate-based (0.5/s), sustained past `for: 5m` — verify-phase fix.
+  - interval: 1m
+    input_series:
+      - series: 'redis_commands_rejected_calls_total{cmd="set"}'
+        values: '0+30x10'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: RedisRejectingWrites
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: data
+              cmd: set
+            exp_annotations:
+              summary: 'Redis is rejecting commands (set)'
+              description: '500m/s rejected calls, sustained for 5m. Cannot confirm this is OOM-specific — redis_exporter does not surface that detail, and this counter also covers ACL/arity errors; check `docker compose logs redis` for the actual error.'
+              runbook: RB-14
+
+  # A single stray rejection (e.g. one ACL/arity error) that never recurs must not fire.
+  - interval: 1m
+    input_series:
+      - series: 'redis_commands_rejected_calls_total{cmd="set"}'
+        values: '1 1x9'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: RedisRejectingWrites
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'redis_commands_rejected_calls_total{cmd="set"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: RedisRejectingWrites
+        exp_alerts: []
+
+  # RedisPersistenceFailing
+  - interval: 1m
+    input_series:
+      - series: 'redis_aof_last_write_status{instance="redis-exporter:9121"}'
+        values: '0x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: RedisPersistenceFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: data
+              instance: 'redis-exporter:9121'
+            exp_annotations:
+              summary: 'Redis persistence (AOF write, AOF rewrite or RDB bgsave) is failing on redis-exporter:9121'
+              runbook: RB-14
+
+  - interval: 1m
+    input_series:
+      - series: 'redis_aof_last_write_status{instance="redis-exporter:9121"}'
+        values: '1x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: RedisPersistenceFailing
+        exp_alerts: []
+
+  # Ory5xxRatioHigh
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_statuses_total{job="ory-hydra", endpoint="/oauth2/token", status_bucket="5xx"}'
+        values: '0+10x15'
+      - series: 'http_requests_statuses_total{job="ory-hydra", endpoint="/oauth2/token", status_bucket="2xx"}'
+        values: '0+90x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: Ory5xxRatioHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: identity
+              job: ory-hydra
+              endpoint: '/oauth2/token'
+            exp_annotations:
+              summary: '5xx ratio above 5% on ory-hydra /oauth2/token'
+              description: '10% of responses are 5xx, sustained for 10m.'
+              runbook: RB-16
+
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_statuses_total{job="ory-hydra", endpoint="/oauth2/token", status_bucket="5xx"}'
+        values: '0+1x15'
+      - series: 'http_requests_statuses_total{job="ory-hydra", endpoint="/oauth2/token", status_bucket="2xx"}'
+        values: '0+99x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: Ory5xxRatioHigh
+        exp_alerts: []
+
+  # KetoCheckLatencyHigh: p95 ~0.48s (most calls land in the (0.1,0.5] bucket).
+  - interval: 1m
+    input_series:
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="0.05"}'
+        values: '0+1x15'
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="0.1"}'
+        values: '0+2x15'
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="0.5"}'
+        values: '0+100x15'
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="+Inf"}'
+        values: '0+100x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: KetoCheckLatencyHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: identity
+              grpc_method: Check
+            exp_annotations:
+              summary: 'Keto Check p95 latency above 100ms'
+              description: '479.6ms sustained for 10m. PLACEHOLDER threshold — no baseline yet.'
+              runbook: RB-16
+
+  - interval: 1m
+    input_series:
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="0.05"}'
+        values: '0+98x15'
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="0.1"}'
+        values: '0+99x15'
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="0.5"}'
+        values: '0+100x15'
+      - series: 'grpc_server_handling_seconds_bucket{job="ory-keto", grpc_method="Check", le="+Inf"}'
+        values: '0+100x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: KetoCheckLatencyHigh
+        exp_alerts: []
+
+  # OtelExporterFailing
+  - interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_send_failed_spans{exporter="otlphttp/deadend"}'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OtelExporterFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+              exporter: 'otlphttp/deadend'
+            exp_annotations:
+              summary: 'OTel collector exporter otlphttp/deadend is failing to send spans'
+              description: '5 failed send(s) in 10m.'
+              runbook: RB-18
+
+  - interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_send_failed_spans{exporter="otlphttp/deadend"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OtelExporterFailing
+        exp_alerts: []
+
+  # BackupMetricAbsent (verify-phase fix: for: 26h, matching AL-BKP-01's own staleness window, so
+  # a fresh day-1 deploy doesn't warn before the first backup was even due).
+  - interval: 1h
+    input_series: []
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: BackupMetricAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: data
+            exp_annotations:
+              summary: 'og_backup_last_success_timestamp_seconds has no series at all'
+              description: 'PostgresBackupStale cannot fire while this is true — either pg-backup.sh has never written its textfile, or node-exporter is not reading the og_textfile volume.'
+              runbook: RB-13
+
+      # Under 26h (e.g. a fresh deploy 2h old): must NOT fire yet.
+      - eval_time: 2h
+        alertname: BackupMetricAbsent
+        exp_alerts: []
+
+  - interval: 1h
+    input_series:
+      - series: 'og_backup_last_success_timestamp_seconds{kind="pg_base"}'
+        values: '0x28'
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: BackupMetricAbsent
+        exp_alerts: []
+
+  # BackgroundJobFailing. Label renamed job -> task (blocker B2, avoids the Prometheus `job`
+  # target-label collision).
+  - interval: 1m
+    input_series:
+      - series: 'og_job_runs_total{task="reconcile", outcome="error"}'
+        values: '0+1x70'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: BackgroundJobFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: app
+              task: reconcile
+              outcome: error
+            exp_annotations:
+              summary: 'Background job reconcile failed'
+              description: '60 error outcome(s) in the last hour.'
+              runbook: RB-17
+
+  - interval: 1m
+    input_series:
+      - series: 'og_job_runs_total{task="reconcile", outcome="error"}'
+        values: '0x70'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: BackgroundJobFailing
+        exp_alerts: []
+
+  # TykFanoutPartialFailure. `operation` value from the real closed list, TYK_FANOUT_OPERATIONS
+  # (apps/api/src/common/metrics/ops-metrics.ts) — not an invented one.
+  - interval: 1m
+    input_series:
+      - series: 'og_tyk_fanout_total{node="tyk-1", operation="upsertOasApi", outcome="error"}'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TykFanoutPartialFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: gateway
+              node: tyk-1
+              operation: upsertOasApi
+              outcome: error
+            exp_annotations:
+              summary: 'A config fan-out to node tyk-1 did not reach every node cleanly'
+              description: 'upsertOasApi outcome=error. RB-10: read back GET /apis/:id/drift before re-syncing.'
+              runbook: RB-10
+
+  - interval: 1m
+    input_series:
+      - series: 'og_tyk_fanout_total{node="tyk-1", operation="upsertOasApi", outcome="ok"}'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: TykFanoutPartialFailure
+        exp_alerts: []
+
+  # AnalyticsStale (downgraded to info, major M6)
+  - interval: 1m
+    input_series:
+      - series: 'og_analytics_newest_record_age_seconds'
+        values: '400x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: AnalyticsStale
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              owner: gateway
+            exp_annotations:
+              summary: 'Newest analytics record is over 5 minutes old'
+              description: "The 2026-09-27 incident: Pump stuck on a Redis timeout for ~11.5h while /health stayed OK. Downgraded to info: analytics default to OFF, so a quiet record age is normal on an install where nothing has opted in yet — this has no traffic gate to tell the two cases apart. Do not page on it alone until AL-PUMP-02's gate exists."
+              runbook: RB-15
+
+  - interval: 1m
+    input_series:
+      - series: 'og_analytics_newest_record_age_seconds'
+        values: '100x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: AnalyticsStale
+        exp_alerts: []
+
+  # ApiProposedMetricsAbsent
+  - interval: 1m
+    input_series:
+      - series: 'up{job="open-gateway-api"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ApiProposedMetricsAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: platform
+            exp_annotations:
+              summary: 'og_job_runs_total is absent even though the api is up'
+              description: 'BackgroundJobFailing (and, by the same deploy, TykFanoutPartialFailure) cannot fire while this is true.'
+              runbook: RB-17
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="open-gateway-api"}'
+        values: '1x12'
+      - series: 'og_job_runs_total{task="reconcile", outcome="ok"}'
+        values: '0+1x12'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ApiProposedMetricsAbsent
+        exp_alerts: []
+
+  # OidcDiscoveryOrJwksFailing now reads oidc-availability, not oidc (major M4)
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="oidc-availability"}'
+        values: '0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: OidcDiscoveryOrJwksFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              owner: identity
+              job: oidc-availability
+            exp_annotations:
+              summary: "Hydra's OIDC discovery document is not being served"
+              description: 'Token issuance depends on this document and the JWKS it points at (IDP-04). This checks availability only (insecure_skip_verify) — a certificate-trust problem alone will not fire this.'
+              runbook: RB-16
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="oidc-availability"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: OidcDiscoveryOrJwksFailing
+        exp_alerts: []

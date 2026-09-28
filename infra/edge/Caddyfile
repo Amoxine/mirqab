@@ -1,4 +1,4 @@
-# Open Gateway edge — TLS termination + WAF (WP26b).
+# MIRQAB edge — TLS termination + WAF (WP26b).
 #
 # One Caddy, five HTTPS listeners on the port numbers the stack already published. Nothing else
 # publishes any more (`expose:` in docker-compose.yml), which is what closes the bypass where a LAN
@@ -23,6 +23,13 @@
 {
 	# Mandatory for coraza-caddy: the WAF must evaluate before any other handler runs.
 	order coraza_waf first
+
+	# OG-OBS-02: turns on Caddy's built-in HTTP request-metrics collection (duration, size, status
+	# code, per-server totals). This only enables collection — nothing is published anywhere until a
+	# site declares its own `metrics` handler, which the internal listener below does. `per_host` is
+	# deliberately NOT set: with 5 TLS sites plus the catch-all, a per-host label would multiply every
+	# series 6x for no operational reason at this scale.
+	metrics
 
 	# What makes https://<lan-ip>:<port> work at all. A client dialling an IP literal sends NO SNI
 	# (RFC 6066 allows host names only — curl, openssl and browsers all omit it), and without a
@@ -56,6 +63,8 @@
 		include http.handlers.waf
 		output file /var/log/caddy/waf.log {
 			mode 0644
+			roll_size 50MiB
+			roll_keep 5
 		}
 		format json
 	}
@@ -174,6 +183,70 @@
 			# the default `add`. Deleting it restores the append and reopens the spoof.
 			header_up X-Forwarded-For {remote_host}
 		}
+	}
+}
+
+# ── Internal listener (OG-OBS-02) ───────────────────────────────────────────────
+# Unpublished: obs-w2's compose change is `expose: 9180`, never `ports:`. That means it is reachable
+# only from containers on this edge's own Docker networks (open-gateway-network, ory-internal) —
+# never from the LAN or the host. No `tls internal` and no `coraza_waf` here, unlike every site
+# above: this is not a client-facing surface, so terminating TLS and running the WAF on it would add
+# attack surface without protecting anything. `:2019` (the Caddy admin API) is untouched by this
+# block and stays in-container, loopback-only, exactly as before.
+#
+# This is the ONLY place Caddy's request metrics and the Ory admin metrics/health routes are
+# reachable from — which makes the allowlist below the actual security boundary between Prometheus
+# and the unauthenticated Hydra/Kratos/Keto admin APIs on `ory-internal` (ADR-OBS-04). The
+# alternative — Prometheus joining `ory-internal` directly — would hand it those APIs whole; this
+# listener hands it six fixed paths instead. Read top to bottom:
+#   1. Any method other than GET/HEAD is refused, unconditionally, before anything else runs: 405.
+#   2. Exactly six proxied paths are recognised, each pinned to one upstream host:port and rewritten
+#      to that service's own fixed metrics/health path. No wildcard, no prefix match.
+#   3. Everything else — any other path, including the Ory admin APIs' real routes such as
+#      `/admin/clients` — falls through to the unconditional `respond 404` at the end.
+http://:9180 {
+	route {
+		@not_get_head {
+			not method GET HEAD
+		}
+		respond @not_get_head 405
+
+		# Caddy's own request metrics — fed by the `metrics` global option set above.
+		metrics /metrics
+
+		# Hydra admin API, :4445 (loopback-only on the host; reachable here because this container
+		# shares `ory-internal` with hydra). Hydra is the one Ory service here whose metrics path
+		# keeps an `/admin` prefix — verified against Ory's docs, 2026-09-27.
+		reverse_proxy /ory/hydra/metrics hydra:4445 {
+			rewrite /admin/metrics/prometheus
+		}
+		reverse_proxy /ory/hydra/health hydra:4445 {
+			rewrite /health/ready
+		}
+
+		# Kratos admin API, :4434. Its metrics path has NO `/admin` prefix, unlike Hydra's — verified
+		# against Ory's docs, 2026-09-27. This differs from an earlier draft of this contract; see
+		# the worker report for the correction.
+		reverse_proxy /ory/kratos/metrics kratos:4434 {
+			rewrite /metrics/prometheus
+		}
+		reverse_proxy /ory/kratos/health kratos:4434 {
+			rewrite /health/ready
+		}
+
+		# Keto health lives on the read API (:4466 — matches Keto's own compose healthcheck), but its
+		# Prometheus metrics do not: Keto splits metrics onto their own port, :4468, configured in
+		# `infra/ory/keto/keto.yml`'s `serve.metrics` block. Verified against that file plus Ory's
+		# docs, 2026-09-27; :4466 would 404 for `/metrics/prometheus` against the real service. This
+		# also differs from an earlier draft of this contract; see the worker report.
+		reverse_proxy /ory/keto/metrics keto:4468 {
+			rewrite /metrics/prometheus
+		}
+		reverse_proxy /ory/keto/health keto:4466 {
+			rewrite /health/ready
+		}
+
+		respond 404
 	}
 }
 

@@ -1,4 +1,4 @@
-# Open Gateway edge — Caddy + OWASP Coraza WAF (WP26b, pinned by WP29b).
+# MIRQAB edge — Caddy + OWASP Coraza WAF (WP26b, pinned by WP29b).
 #
 # The only self-compiled artifact in the stack: coraza-caddy is a Go module, so the WAF has to be
 # linked into the Caddy binary (`xcaddy build`), not loaded at runtime. Everything else in compose

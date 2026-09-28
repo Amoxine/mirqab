@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { Gauge } from 'prom-client';
+import { countJobRun } from '../../../common/metrics/ops-metrics';
 import { MetricsService } from '../../observability/metrics.service';
 import { SpecSourceService } from './spec-source.service';
 
@@ -66,7 +67,7 @@ export class SpecSourceScheduler {
     if (this.running) return;
     this.running = true;
     try {
-      await this.sweep();
+      await countJobRun('spec_source_fetch', () => this.sweep());
     } catch (err) {
       this.logger.error(`Spec source sweep failed: ${err instanceof Error ? err.name : 'unknown error'}`);
     } finally {

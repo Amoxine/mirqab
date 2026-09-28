@@ -1,10 +1,10 @@
-# Open Gateway API
+# MIRQAB API
 
-> NestJS 11 backend server for the Open Gateway SaaS Admin Dashboard
+> NestJS 11 backend server for the MIRQAB SaaS Admin Dashboard
 
 ## Overview
 
-The API server is a NestJS 11 application that serves as the backend for the Open Gateway admin dashboard. It manages API definitions, API keys, tenants, quotas, and analytics — syncing all resources to a Tyk OSS Gateway instance.
+The API server is a NestJS 11 application that serves as the backend for the MIRQAB admin dashboard. It manages API definitions, API keys, tenants, quotas, and analytics — syncing all resources to a Tyk OSS Gateway instance.
 
 **Port:** 33001 (default) (default)
 **Base path:** `/api` (global prefix)

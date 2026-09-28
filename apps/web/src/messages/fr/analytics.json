@@ -98,6 +98,10 @@
     "clearAll": "Tout effacer",
     "empty": "Aucun journal d'audit trouvé.",
     "systemUser": "Système",
+    "viewTraffic": "Voir le trafic sur cette période",
+    "viewTrafficTitle": "Trafic de cette API",
+    "trafficLoading": "Chargement du trafic…",
+    "trafficError": "Échec du chargement du trafic.",
     "columns": {
       "timestamp": "Horodatage",
       "user": "Utilisateur",

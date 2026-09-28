@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePortalApiDoc } from '@/hooks/use-portal';
@@ -79,9 +79,7 @@ export function ApiDocsSection({ apiId }: { apiId: string }) {
           <ul className="space-y-1">
             {rows.map((row) => (
               <li key={`${row.method}-${row.path}`} className="flex items-center gap-2 text-sm">
-                <Badge variant="outline" className="min-w-16 justify-center font-mono">
-                  {row.method}
-                </Badge>
+                <MethodBadge method={row.method} />
                 <span className="break-all font-mono text-xs">{row.path}</span>
               </li>
             ))}

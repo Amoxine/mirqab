@@ -19,6 +19,37 @@ and the Ory admin APIs (`33011` / `33013`). The Ory admin APIs are unauthenticat
 `127.0.0.1`; the control API is not published at all. A request for any of them through the edge
 gets a 404 from Caddy's default handler. Do not add a site for one.
 
+## Internal listener (`:9180`, OG-OBS-02)
+
+A second, unpublished listener, `http://:9180` — no `ports:` entry, only `expose: 9180` in
+`docker-compose.yml`. Reachable only from other containers on this edge's own Docker networks
+(`open-gateway-network`, `ory-internal`); never from the LAN, never from the host, and never through
+the five HTTPS sites above. No TLS and no WAF on it — it is not a client-facing surface.
+
+It exists so Prometheus can scrape Caddy's own request metrics and the Ory admin services' metrics
+and health checks **without** joining `ory-internal` itself, which would otherwise hand it Hydra's,
+Kratos's and Keto's unauthenticated admin APIs whole (ADR-OBS-04, `docs/ha-observability/04`). This
+listener is the allowlist that keeps that from happening:
+
+| Path | Proxies to | Rewritten to |
+|---|---|---|
+| `/metrics` | Caddy's own `metrics` handler | — |
+| `/ory/hydra/metrics` | `hydra:4445` | `/admin/metrics/prometheus` |
+| `/ory/hydra/health` | `hydra:4445` | `/health/ready` |
+| `/ory/kratos/metrics` | `kratos:4434` | `/metrics/prometheus` |
+| `/ory/kratos/health` | `kratos:4434` | `/health/ready` |
+| `/ory/keto/metrics` | `keto:4468` | `/metrics/prometheus` |
+| `/ory/keto/health` | `keto:4466` | `/health/ready` |
+
+Nothing else is reachable through it: any method other than `GET`/`HEAD` gets `405`, and any path
+other than the seven above (`/metrics` plus the six `/ory/*` routes) gets `404` — including the real
+admin routes on those same upstreams, such as Hydra's `/admin/clients`. `:2019` (the Caddy admin API)
+is untouched by this listener and stays in-container, loopback-only, exactly as before.
+
+Kratos's metrics path has no `/admin` prefix, unlike Hydra's, and Keto serves its metrics on a
+dedicated port (`:4468`, `infra/ory/keto/keto.yml`'s `serve.metrics` block) rather than its read API
+port (`:4466`, which is where its health check still lives) — both verified against Ory's own docs.
+
 `Caddyfile` is operator configuration — there is no UI, no API route and no permission for it.
 
 ## Single-edge contract (WP29a)

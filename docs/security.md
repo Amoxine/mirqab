@@ -1,6 +1,6 @@
 # Security Documentation
 
-> Security architecture, threat model, and hardening procedures for Open Gateway
+> Security architecture, threat model, and hardening procedures for MIRQAB
 
 ## ⚠️ Implementation status — read this first
 
@@ -28,6 +28,8 @@ what the current build actually enforces:
 | Webhook receiver URLs reuse the `proxyUrl` denylist above — no second SSRF check | Implemented (WP27) | `webhooks/dto/create-webhook-subscription.dto.ts` |
 | Webhook relay (`POST /webhooks/relay/:apiId`, `@Public()` — Tyk's own event handler calls it, carrying no dashboard session): a shared secret Tyk's config embeds as a header, checked with a constant-time compare, `TYK_WEBHOOK_RELAY_SECRET` with no default. The endpoint is served by this same process, so it is reachable through the edge's published API port too, not only from Tyk in-network — the secret is what stops an outside caller from forging a Tyk event, not network placement | Implemented (WP27) | `webhooks/controllers/webhook-relay.controller.ts` |
 | The live Tyk key in a webhook's default payload is redacted before the signed, forwarded copy ever reaches a tenant's `receiverUrl` | Implemented (WP27) | `webhooks/services/webhook-relay.service.ts` |
+| Captured request/response traffic (`detailedRecording`): tenant-scoped `apiDefId` → `tykApiId` resolution server-side only, gated on `api:update`/`analytics:read`; a second, name-pattern redaction pass on top of the Postgres trigger (headers, query/form params, JSON fields); the traffic view fails closed (`FAILED`, never `OK`) if the redaction trigger is missing or disabled | Implemented (v1) | `analytics/services/traffic-inspector.service.ts`, `http-dump-parser.ts`, `pump-query.builder.ts` |
+| Invite-by-email (`POST :id/users/invite`) ships **disabled by default** behind `FEATURE_INVITE_BY_EMAIL` — the route isn't registered when unset, a real 404 before any guard runs, not an in-handler check. Security review found an attacker who pre-registers the invitee's email can take over the pending row once the real owner verifies or recovers that identity, because `kratos.yml` has no session-revocation hooks on recovery/settings and no verified-address requirement on login. Turning it on needs those two `kratos.yml` hooks plus an "identity created after the invite" ordering check | **Implemented, held back pending the above** | `tenants/controllers/tenant.controller.ts`, `infra/ory/kratos/kratos.yml` |
 
 **Dead but deliberately kept (WP7 decision, not deleted this pass):** `modules/auth/services/token.service.ts`, `modules/auth/jwt-secret.ts`, `modules/auth/dto/login.dto.ts`, `modules/auth/dto/register.dto.ts`, `modules/auth/types/auth.types.ts` and their `.spec.ts` files each carry a `DEPRECATED —` header and have no live caller. `JWT_SECRET`, `JWT_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN` likewise still appear in `infra/docker-compose.yml` / `install.sh` / `.env.example` with no reader in the API. `COOKIE_SECURE` is *not* dead — it moved: `apps/web` now reads it to flag its own session cookies `Secure`, the API no longer does. `TRUST_PROXY_HOPS` is unrelated to this migration and still works as before (Express `trust proxy` hop count for rate limiting).
 
@@ -53,7 +55,7 @@ is not published, and it must be set for any shared or exposed deployment.
 
 ## Security Architecture
 
-Open Gateway **targets** defense in depth with 5 independent security layers. The diagram below is the
+MIRQAB **targets** defense in depth with 5 independent security layers. The diagram below is the
 target design, not an inventory of the current build: network policies, mTLS, RLS, Vault-backed
 secrets and asymmetric JWT signing are **PLANNED**. See [Implementation status](#️-implementation-status--read-this-first).
 
@@ -130,7 +132,7 @@ secrets and asymmetric JWT signing are **PLANNED**. See [Implementation status](
 
 ## Tyk Credential Isolation (CRITICAL)
 
-**This is the most critical security requirement in Open Gateway.** Tyk Admin credentials must **NEVER** be exposed to the frontend or logged.
+**This is the most critical security requirement in MIRQAB.** Tyk Admin credentials must **NEVER** be exposed to the frontend or logged.
 
 ### Threat Model
 
@@ -724,7 +726,7 @@ Audit logs are exported weekly to cold storage (S3 Glacier) for long-term retent
 
 ### Responsible Disclosure
 
-If you discover a security vulnerability in Open Gateway:
+If you discover a security vulnerability in MIRQAB:
 
 1. **DO NOT** open a public GitHub issue
 2. **DO NOT** disclose the vulnerability publicly

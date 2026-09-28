@@ -183,8 +183,10 @@ export function KratosFlowForm({ ui, onSuccess, onFlowUpdate, onError }: KratosF
           );
         }
         if (node.type === 'img' && node.attributes.node_type === 'img') {
+          // Always on white: authenticator apps need dark-on-light with a quiet zone, and a
+          // transparent QR on the dark theme's card would not scan.
           // eslint-disable-next-line @next/next/no-img-element -- a Kratos-hosted QR/TOTP image, not a static asset Next can optimise.
-          return <img key={`img-${String(index)}`} src={node.attributes.src} alt="" className="mx-auto" />;
+          return <img key={`img-${String(index)}`} src={node.attributes.src} alt="" className="mx-auto rounded-md bg-white p-2" />;
         }
         // `a`, `script` and `div` nodes are unreachable while only `password` + `code` are enabled
         // (kratos.yml `selfservice.methods`) — but enabling oidc/passkey/webauthn/totp would make

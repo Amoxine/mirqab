@@ -3,6 +3,7 @@ import type { ConfigService } from '@nestjs/config';
 import { TykClientService } from './tyk-client.service';
 import type { CircuitBreakerService } from '../../../common/circuit-breaker/circuit-breaker.service';
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
+import { tykFanoutTotal } from '../../../common/metrics/ops-metrics';
 
 jest.mock('@open-gateway/database', () => ({ prisma: {} }));
 
@@ -58,7 +59,7 @@ describe('WP13a fan-out and the per-node circuit breaker', () => {
     const client = makeClient(breaker);
 
     return client
-      .forEachNode((nodeUrl) => Promise.resolve(nodeUrl))
+      .forEachNode('reloadAllNodes', (nodeUrl) => Promise.resolve(nodeUrl))
       .then(() => {
         // The fan-out itself does not call the breaker; the per-node request does. Drive one.
         return client.getApiFromNode('og-1', 'http://n2:8081/tyk').catch(() => undefined);
@@ -80,7 +81,7 @@ describe('WP13a fan-out and the per-node circuit breaker', () => {
 
   it('forEachNode returns one outcome per node and never throws when a node fails', async () => {
     const client = makeClient(fakeBreaker());
-    const outcomes = await client.forEachNode((nodeUrl) => {
+    const outcomes = await client.forEachNode('reloadAllNodes', (nodeUrl) => {
       if (nodeUrl.includes('n3')) throw new Error('connect ECONNREFUSED');
       return Promise.resolve('ok');
     });
@@ -98,7 +99,7 @@ describe('WP13a fan-out and the per-node circuit breaker', () => {
     const breaker = fakeBreaker(['n3']);
     const client = makeClient(breaker);
 
-    const outcomes = await client.forEachNode((nodeUrl) =>
+    const outcomes = await client.forEachNode('reloadAllNodes', (nodeUrl) =>
       client.getApiFromNode('og-1', nodeUrl).then(
         () => 'written',
         (err: unknown) => {
@@ -116,6 +117,24 @@ describe('WP13a fan-out and the per-node circuit breaker', () => {
     // Nodes 1 and 2 were still attempted under their OWN circuit names.
     expect(breaker.names).toContain('tyk:http://n1:8081/tyk');
     expect(breaker.names).toContain('tyk:http://n2:8081/tyk');
+  });
+
+  it('counts every node attempt as og_tyk_fanout_total{node="tyk-N"}, never by URL (TYK-04)', async () => {
+    tykFanoutTotal.reset();
+    const breaker = fakeBreaker(['n3']);
+    const client = makeClient(breaker, 'http://user:pw@n1:8081/tyk,http://n2:8081/tyk,http://n3:8081/tyk');
+
+    await client.forEachNode('reloadAllNodes', (nodeUrl) =>
+      nodeUrl.includes('n2') ? Promise.reject(new Error('boom')) : client.getApiFromNode('og-1', nodeUrl),
+    );
+
+    const { values } = await tykFanoutTotal.get();
+    expect(values.map(({ labels, value }) => [labels.node, labels.operation, labels.outcome, value])).toEqual([
+      ['tyk-1', 'reloadAllNodes', 'ok', 1],
+      ['tyk-2', 'reloadAllNodes', 'error', 1],
+      ['tyk-3', 'reloadAllNodes', 'circuit_open', 1],
+    ]);
+    for (const { labels } of values) expect(String(labels.node)).not.toContain('://');
   });
 
   it('a single-node stack still produces exactly one node and one circuit', async () => {

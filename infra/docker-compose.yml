@@ -17,6 +17,10 @@ name: Open Gateway Infrastructure
 #   TYK_WEBHOOK_RELAY_SECRET required — the api; Tyk's event handler presents it to the @Public()
 #                            relay endpoint, which is what separates a real Tyk event from a forged
 #                            one (the endpoint is reachable through the edge, not only in-network)
+#   PG_EXPORTER_PASSWORD     the og_monitor role postgres-exporter logs in as (OG-OBS-02). NOT `:?`
+#                            here, on purpose: unset, pg-monitoring-init exits 1 and the exporter
+#                            reports pg_up 0, and NOTHING waits on either, so the rest of the stack
+#                            starts normally (see pg-monitoring-init); the prod overlay requires it
 #   TYK_GW_SECRET            falls back to a well-known dev value below; that default is only safe
 #                            because the gateway's control API (/tyk/*) is NOT published to the host
 #                            (see TYK_GW_CONTROLAPIPORT). Set it for anything reachable by someone else.
@@ -29,7 +33,9 @@ name: Open Gateway Infrastructure
 # per-client rate limits and (WP15c) the IP deny list. Postgres (33002), Redis (33003), Hydra admin
 # (33011), Kratos admin (33013) and Keto read/write (33014/33015) are bound to 127.0.0.1 — every one
 # of those Ory admin APIs is UNAUTHENTICATED and none of them is routed through the edge. The gateway
-# control API (8081) and pump health (8083) are not published at all.
+# control API (8081) and pump health (8083) are not published at all. node-exporter (OG-OBS-01) is
+# the one listener outside compose networking: it runs in the host network namespace and binds the
+# docker0 gateway address only, never the LAN — see that service.
 #
 # Ory (Hydra/Kratos/Keto) is the auth system: the API's JwtStrategy validates only Hydra-issued
 # JWTs, and the old local login/register/refresh routes are gone. WP7 owns removing the now-dead
@@ -53,6 +59,19 @@ name: Open Gateway Infrastructure
 # actually rests on: never add a service to `open-gateway-network` that is unauthenticated OR
 # trusts which network a request came from — that's what put Hydra/Kratos/Keto here in the first
 # place, and the SSRF denylist can catch a stale hostname but structurally cannot catch this.
+# The monitoring services are the accepted exception: unauthenticated, reachable by raw IP (a tenant
+# proxyUrl through the gateway included), and each deliberately limited to what is listed here —
+# none can write to, mint in or reconfigure the stack:
+#   prometheus         the query API reads every stored metric; no admin or lifecycle API is enabled.
+#   node-exporter      host metrics (on the docker0 address, not this network — see that service).
+#   cadvisor           per-container metrics plus its read-only container-inventory API.
+#   redis-exporter     /metrics only: /scrape is disabled and key VALUES are never exported, so no
+#                      request can make it read a key with its stored password (review H1).
+#   postgres-exporter  /metrics, plus /probe, which v0.20.1 cannot disable: it opens a Postgres
+#                      connection to ANY host the caller names — with the caller's own credentials
+#                      only; og_monitor's are never sent (lab-verified against a fake server, M2).
+#   blackbox           GET/TCP probes to any target the caller names, from inside this network.
+# A separate `monitoring` network (or a scrape-side proxy) is the upgrade if any of that is too much.
 #
 # Shared gateway configuration (WP13a). Every node — the default one and the two the `multinode`
 # profile adds — runs byte-identical config, because a per-node difference would show up as
@@ -119,6 +138,19 @@ x-tyk-gateway-env: &tyk-gateway-env
     TYK_GW_OPENTELEMETRY_SAMPLING_TYPE: AlwaysOn
     TYK_GW_OPENTELEMETRY_RESOURCENAME: open-gateway-tyk
 
+# Log cap for EVERY service (OG-OBS-01, ADR-OBS-07 in docs/ha-observability/04 §5). Docker's json-file
+# driver is unbounded by default, so one chatty container (a WAF storm, a debug exporter, a crash
+# loop) fills the host disk and takes Postgres down with it. 5 × 50 MB per container is sized
+# generously on purpose: `docker logs` is the only log store this stack has (L0, no Loki), so the cap
+# is also how much forensic history survives. `docker inspect <c> --format '{{.HostConfig.LogConfig}}'`
+# must show it on every container (AT-4). The prod overlay repeats this anchor — YAML anchors do not
+# cross files — for the one service it defines itself.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   # ─── Edge: TLS termination + WAF (WP26b) ───────────────
   # The only service that publishes an application port. Custom Caddy build (infra/edge/Dockerfile)
@@ -133,6 +165,7 @@ services:
       context: ./edge
     image: open-gateway-edge:wp26b
     container_name: open-gateway-edge
+    logging: *default-logging
     restart: unless-stopped
     environment:
       # The host's LAN address, so `tls internal` also issues for https://<lan-ip>:<port>. Unset,
@@ -154,6 +187,12 @@ services:
       - "33005:33005"
       - "33010:33010"
       - "33012:33012"
+    expose:
+      # OG-OBS-02 (ADR-OBS-04 in docs/ha-observability/04 §5): the internal metrics listener — Caddy's
+      # own metrics plus a GET-only, path-allowlisted proxy to the Ory admin metrics. Plain HTTP, no
+      # WAF, and NEVER in `ports:` above: it exists so Prometheus can read the Ory admin metrics
+      # without joining `ory-internal`, and publishing it would hand those to the LAN instead.
+      - "9180"
     volumes:
       - ./edge/Caddyfile:/etc/caddy/Caddyfile:ro
       # Named volume, not bind mount: it holds the internal CA's private key, and losing it mints a
@@ -196,6 +235,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: open-gateway-postgres
+    logging: *default-logging
     restart: unless-stopped
     command:
       - postgres
@@ -243,6 +283,7 @@ services:
   pg-archive-init:
     image: postgres:16-alpine
     container_name: open-gateway-pg-archive-init
+    logging: *default-logging
     command: ["sh", "-c", "chown 70:70 /wal_archive && chmod 0750 /wal_archive"]
     user: root
     volumes:
@@ -257,6 +298,7 @@ services:
   postgres-backup:
     image: postgres:16-alpine
     container_name: open-gateway-postgres-backup
+    logging: *default-logging
     restart: unless-stopped
     environment:
       PGHOST: postgres
@@ -272,6 +314,9 @@ services:
       - ./scripts/pg-backup.sh:/usr/local/bin/pg-backup.sh:ro
       - pg_backups:/backups
       - pg_wal_archive:/wal_archive
+      # OG-OBS-02: `og_backup.prom` for node-exporter's textfile collector (read-only there). Files
+      # must be 0644 — node-exporter runs as `nobody` — and land by rename, never a partial write.
+      - og_textfile:/textfile
     healthcheck:
       # The marker the script writes after each successful run. Stale marker = backups have stopped,
       # which is otherwise invisible until the day someone needs one.
@@ -313,6 +358,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: open-gateway-redis
+    logging: *default-logging
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
     ports:
@@ -341,6 +387,7 @@ services:
   tyk-gateway-init:
     image: alpine:3
     container_name: open-gateway-tyk-init
+    logging: *default-logging
     command: ["sh", "-c", "for d in /apps /policies; do chown -R 65532:65532 $$d && chmod 0755 $$d && touch $$d/.keep && chown 65532:65532 $$d/.keep; done"]
     volumes:
       - tyk_apps:/apps
@@ -353,6 +400,7 @@ services:
   tyk-gateway:
     image: tykio/tyk-gateway:v5.15.0
     container_name: open-gateway-tyk-gateway
+    logging: *default-logging
     restart: unless-stopped
     environment:
       <<: *tyk-gateway-env
@@ -405,6 +453,7 @@ services:
   tyk-gateway-multinode-init:
     image: alpine:3
     container_name: open-gateway-tyk-init-multinode
+    logging: *default-logging
     profiles: ["multinode"]
     # Same chown + `.keep` dance as tyk-gateway-init, for the extra nodes' volumes — see the comment
     # there for why the `.keep` file is what makes the chown survive first boot.
@@ -420,6 +469,7 @@ services:
   tyk-gateway-2:
     image: tykio/tyk-gateway:v5.15.0
     container_name: open-gateway-tyk-gateway-2
+    logging: *default-logging
     profiles: ["multinode"]
     restart: unless-stopped
     environment:
@@ -440,6 +490,7 @@ services:
   tyk-gateway-3:
     image: tykio/tyk-gateway:v5.15.0
     container_name: open-gateway-tyk-gateway-3
+    logging: *default-logging
     profiles: ["multinode"]
     restart: unless-stopped
     environment:
@@ -461,6 +512,7 @@ services:
   tyk-pump:
     image: tykio/tyk-pump-docker-pub:v1.17.0
     container_name: open-gateway-tyk-pump
+    logging: *default-logging
     restart: unless-stopped
     environment:
       # Overrides pump.conf's connection_string (which carries no real password) with the actual
@@ -491,6 +543,7 @@ services:
   tyk-healthcheck:
     image: curlimages/curl:8.15.0
     container_name: open-gateway-tyk-healthcheck
+    logging: *default-logging
     entrypoint: ["sh", "-c", "sleep infinity"]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://tyk-gateway:8081/hello && curl -sf http://tyk-pump:8083/health"]
@@ -530,6 +583,7 @@ services:
   edge-healthcheck:
     image: curlimages/curl:8.15.0
     container_name: open-gateway-edge-healthcheck
+    logging: *default-logging
     entrypoint: ["sh", "-c", "sleep infinity"]
     volumes:
       - ./edge:/edge:ro
@@ -564,6 +618,8 @@ services:
       - "4317"
       - "4318"
       - "8889"
+      # OG-OBS-01: the collector's own telemetry, scraped as `otel-collector-self`.
+      - "8888"
     volumes:
       - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
       # Read-only: the collector tails the edge's WAF log, it never writes there.
@@ -573,12 +629,10 @@ services:
     # `docker logs open-gateway-otel-collector | grep <trace id>`. The cap is what makes that safe:
     # detailed span output on an unbounded json-file driver is a disk-filling accident waiting to
     # happen, and this is the whole reason a file-on-a-volume sink was not used instead (see
-    # observability/otel-collector.yaml).
-    logging:
-      driver: json-file
-      options:
-        max-size: "32m"
-        max-file: "3"
+    # observability/otel-collector.yaml). This service had its own 3 × 32 MB cap before OG-OBS-01;
+    # it now uses the shared anchor like everything else, because here the log IS the trace store and
+    # 250 MB of it is more trace history, not a risk — one cap, no exception to keep in sync.
+    logging: *default-logging
     networks:
       - open-gateway-network
 
@@ -590,20 +644,258 @@ services:
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: open-gateway-prometheus
+    logging: *default-logging
     restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       # 15d of a dev stack's series is well under a gigabyte and outlives any incident here.
       - --storage.tsdb.retention.time=15d
+      # OG-OBS-01: a size ceiling as well, whichever is hit first. The exporters below multiply the
+      # series count, and time-only retention lets a cardinality accident fill the host disk.
+      - --storage.tsdb.retention.size=${PROM_RETENTION_SIZE:-4GB}
     expose:
       - "9090"
+    # OG-OBS-01 (C6): node-exporter lives in the HOST network namespace, bound to the docker0
+    # gateway only; `host-gateway` resolves to that same address, so the scrape target is
+    # `host.docker.internal:9100` without hard-coding an IP in prometheus.yml. See node-exporter.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../observability/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
+    healthcheck:
+      # OG-OBS-01: the image is busybox-based, so it can probe itself. Until now a wedged Prometheus
+      # looked exactly like a healthy one to `docker compose ps` — and nothing else watches it.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       - otel-collector
+    networks:
+      - open-gateway-network
+
+  # ─── Host metrics: node-exporter (OG-OBS-01) ───────────
+  # ADR-OBS-01 in docs/ha-observability/04 §5; placement per 01 §6.
+  #
+  # HOST network namespace, because NIC metrics are per-netns: in a bridge network node-exporter
+  # sees only its own eth0 and lo (lab-verified), never the host's real interfaces. The price is that
+  # this is the one service whose listener is NOT behind compose networking, so it is bound to the
+  # docker0 gateway address and nothing else (C6, lab-verified):
+  #   - Prometheus reaches it as `host.docker.internal:9100` (its extra_hosts entry resolves
+  #     `host-gateway` to that same address);
+  #   - the host's LAN, loopback and VPN addresses refuse :9100 — binding 0.0.0.0 would have put
+  #     host metrics on the LAN, since Fedora Workstation's default firewalld zone opens every
+  #     port above 1024;
+  #   - residual, documented rather than hidden: any container on this host can reach the docker0
+  #     address (raw-IP, so the proxyUrl hostname denylist cannot catch it), and a LAN peer on the
+  #     same L2 that routes 172.17.0.0/16 via this host could too. Cross-host (scenario B) needs the
+  #     management IP plus TLS/basic auth and a host firewall rule, per 01 §6.
+  # A daemon with a non-default `bip` moves docker0: set NODE_EXPORTER_LISTEN_ADDRESS to match.
+  # Getting it wrong fails loudly — the scrape goes `up == 0` — never silently.
+  #
+  # `$$` is compose's escape for a literal `$` (regex end anchor), not a typo.
+  #
+  # Image pins for all six OG-OBS services (node-exporter … redis-exporter): tag@digest, resolved
+  # 2026-09-27 with `docker buildx imagetools inspect <image>:<tag> --format '{{.Manifest.Digest}}'`
+  # (the multi-arch index digest). The digest is what gets pulled; the tag is there for the reader.
+  # To bump one, resolve the new tag the same way and replace both halves together.
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    container_name: open-gateway-node-exporter
+    logging: *default-logging
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --path.udev.data=/host/run/udev/data
+      - --web.listen-address=${NODE_EXPORTER_LISTEN_ADDRESS:-172.17.0.1:9100}
+      # Cardinality (02 §5): no per-layer overlay mounts, no per-container veth devices.
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run|sys|var/lib/docker/.+|var/lib/containers/.+)($$|/)
+      - --collector.netdev.device-exclude=^(veth.*|br-.*|docker0|lo)$$
+      # C5: backup / restore-drill / deploy markers, written by the scripts into og_textfile.
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /:/host:ro,rslave
+      - og_textfile:/textfile:ro
+
+  # ─── Container metrics: cAdvisor (OG-OBS-01) ───────────
+  # ADR-OBS-01 in docs/ha-observability/04 §5. Mounts are the official Prometheus cAdvisor guide's.
+  # Not privileged, but not unprivileged either, and each grant was lab-proven necessary:
+  #   - `/var/run` rw contains docker.sock, which is ROOT-EQUIVALENT on this host (R-OBS-01): anything
+  #     that compromises this container owns the host. It is REQUIRED — without it the docker
+  #     factory never registers and there is not one `name="open-gateway-*"` series (lab: 0 vs 16).
+  #     `:ro` would not help — a read-only mount does not stop connect() on a unix socket.
+  #   - `/dev/kmsg` + CAP_SYSLOG is the only OOM source cAdvisor has. Without the device it logs
+  #     "disabling OOM events" and container_oom_events_total stays 0 through a real OOM kill; with
+  #     the device but no cap it fails the same way on hosts with kernel.dmesg_restrict=1 (Fedora's
+  #     default). Cost: it can read the kernel ring buffer.
+  # Expose-only (it serves a read-only UI and API on 8080 alongside /metrics).
+  #
+  # Cardinality: cAdvisor turns every container label into a Prometheus label by default (51 label
+  # names measured here, compose config hashes included), so only the compose project and service
+  # labels are kept. `--disable_metrics` keeps only cpu, memory, oom_event, network, disk and diskIO:
+  # 71 series per container vs 84 at cAdvisor's default and 230 unfiltered, measured on v0.60.6
+  # (.omc/research/ha-observability/F-lab-names.md §3).
+  cadvisor:
+    # ghcr.io, not gcr.io: the gcr.io repository stopped publishing at v0.55.1.
+    image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
+    container_name: open-gateway-cadvisor
+    logging: *default-logging
+    security_opt: ["no-new-privileges:true"]  # review L1: no setuid/file-cap escalation; lab-verified
+    restart: unless-stopped
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      - --disable_metrics=advtcp,app,cpuLoad,cpu_topology,cpuset,hugetlb,memory_numa,percpu,perf_event,pressure,process,referenced_memory,resctrl,sched,tcp,udp
+    devices:
+      - /dev/kmsg
+    cap_add:
+      - SYSLOG
+    # 01 §6: resource-capped, because it walks every cgroup on the host every 15 s. Measured ~30 MiB
+    # on a 45-container lab host; 04 §4 budgets 100–200 MB, so this leaves headroom over the budget.
+    # Raise it if cAdvisor restarts with `docker inspect … {{.State.OOMKilled}}` = true — it cannot
+    # report its own OOM, and a gap in every container_* series is what that looks like.
+    mem_limit: 256m
+    cpus: 0.5
+    expose:
+      - "8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks:
+      - open-gateway-network
+
+  # ─── Synthetic probes: internal blackbox (OG-OBS-02) ───
+  # ADR-OBS-02 in docs/ha-observability/04 §5. Outbound probes only, no secrets; modules in
+  # observability/blackbox.yml. The edge's exported root CA comes in as the `./edge` DIRECTORY, not
+  # the `root.crt` file, for the reason the api service spells out: that file is git-ignored and
+  # per-install, and a file bind-mount of a missing path makes Docker create a root-owned DIRECTORY
+  # at infra/edge/root.crt — which then breaks the README's export step and edge-healthcheck.
+  blackbox:
+    image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+    container_name: open-gateway-blackbox
+    logging: *default-logging
+    security_opt: ["no-new-privileges:true"]  # review L1: no setuid/file-cap escalation; lab-verified
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    expose:
+      - "9115"
+    volumes:
+      - ../observability/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+      - ./edge:/etc/blackbox/edge:ro
+    networks:
+      - open-gateway-network
+
+  # ─── Postgres monitoring role (one-shot, OG-OBS-02) ────
+  # Creates or updates `og_monitor` (LOGIN + pg_monitor, never superuser) from PG_EXPORTER_PASSWORD;
+  # the SQL and why it cannot leak the password are in infra/postgres/monitoring-role.sql. A job
+  # rather than docker-entrypoint-initdb.d for the reason ory-db-init gives: that directory only runs
+  # on a fresh volume. Idempotent, and it re-applies the password on every `up`, so rotating the
+  # value in infra/.env is one `up` rather than a manual ALTER ROLE.
+  #
+  # PG_EXPORTER_PASSWORD is soft (`:-`) in this file and FAILS CLOSED here instead (lead decision,
+  # OG-OBS-02 C1 amendment): a missing monitoring secret must not break `ps`/`logs`/`up` for the
+  # whole stack, so compose accepts it empty and this job refuses it — exit 1, no role touched. It
+  # then sits in `ps` as Exited (1), and postgres-exporter scrapes with pg_up 0 until the key exists.
+  # The prod overlay puts the `:?` back.
+  #
+  # NOTHING may wait on this job with `service_completed_successfully` (live incident, 2026-09-27).
+  # When an awaited dependency fails, compose stops SCHEDULING every service it has not reached yet:
+  # with postgres-exporter gated on this job, a missing key left hydra, kratos, keto, edge, api and
+  # web in `Created`, because they sit behind the slower ory-db-init -> *-migrate chain. A monitoring
+  # one-shot must never be able to hold the application's start hostage; see postgres-exporter.
+  pg-monitoring-init:
+    image: postgres:16-alpine
+    container_name: open-gateway-pg-monitoring-init
+    logging: *default-logging
+    security_opt: ["no-new-privileges:true"]  # review L1: no setuid/file-cap escalation; lab-verified
+    command:
+      - sh
+      - -c
+      - >-
+        if [ "$${#PG_EXPORTER_PASSWORD}" -lt 32 ]; then
+        echo "PG_EXPORTER_PASSWORD unset or shorter than 32 characters — run install.sh (or add it to infra/.env)" >&2;
+        exit 1; fi;
+        exec psql -v ON_ERROR_STOP=1 -f /monitoring-role.sql
+    environment:
+      PGHOST: postgres
+      PGUSER: opengateway
+      PGPASSWORD: ${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}
+      PGDATABASE: opengateway
+      PG_EXPORTER_PASSWORD: ${PG_EXPORTER_PASSWORD:-}
+    volumes:
+      - ./postgres/monitoring-role.sql:/monitoring-role.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - open-gateway-network
+
+  # ─── Postgres metrics (OG-OBS-02) ──────────────────────
+  # docs/ha-observability/01 §6. Logs in as og_monitor (pg_monitor only), NOT as the opengateway
+  # superuser every other client uses — an exporter is exactly the kind of long-lived, always-on
+  # credential that should be able to read statistics and nothing else. User and password are split
+  # out of the DSN so the password never sits inside a URL. Its multi-target `/probe` has no off
+  # switch in v0.20.1 but does not reuse these credentials (review M2, lab-verified; file header).
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    container_name: open-gateway-postgres-exporter
+    logging: *default-logging
+    security_opt: ["no-new-privileges:true"]  # review L1: no setuid/file-cap escalation; lab-verified
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: postgres:5432/opengateway?sslmode=disable
+      DATA_SOURCE_USER: og_monitor
+      # Soft on purpose — see pg-monitoring-init, which refuses an empty one.
+      DATA_SOURCE_PASS: ${PG_EXPORTER_PASSWORD:-}
+    expose:
+      - "9187"
+    # `service_started`, NOT `service_completed_successfully`, on the init job — see the incident note
+    # there. It keeps the ordering (and `up postgres-exporter` pulls the job in) without making the
+    # job's exit code a gate: the exporter connects per scrape, so a role that lands a few seconds
+    # later is simply picked up, and a role that never lands shows as pg_up 0 rather than a stuck stack.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pg-monitoring-init:
+        condition: service_started
+    networks:
+      - open-gateway-network
+
+  # ─── Redis metrics (OG-OBS-02) ─────────────────────────
+  # docs/ha-observability/01 §6. `--check-keys` is limited to the analytics buffer (`analytics-*`,
+  # the list tyk-pump drains): its length is the pump-backlog signal, and a wider pattern would SCAN
+  # and export every gateway key. The prod overlay adds REDIS_PASSWORD.
+  #
+  # The two `--disable-*` flags are security fixes (review H1), not tuning. Without them, anything
+  # that reaches this container by raw IP — a tenant proxyUrl through the gateway included — could
+  # call `/scrape?target=redis:6379&check-keys=apikey-*` and have the exporter read arbitrary keys
+  # with ITS stored REDIS_PASSWORD, key values exported as labels. `--disable-scrape-endpoint`
+  # removes /scrape (404); `--disable-exporting-key-values` keeps even the analytics keys to
+  # size/length, never content. `/metrics` takes no per-request key parameters (lab-verified).
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.92.0@sha256:ca3abd5f19da6c87e96038ba08aaa3dfaab34dc649834584c4d6880b05952fef
+    container_name: open-gateway-redis-exporter
+    logging: *default-logging
+    security_opt: ["no-new-privileges:true"]  # review L1: no setuid/file-cap escalation; lab-verified
+    restart: unless-stopped
+    command: ["--check-keys=analytics-*", "--disable-scrape-endpoint", "--disable-exporting-key-values"]
+    environment:
+      REDIS_ADDR: redis:6379
+    expose:
+      - "9121"
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - open-gateway-network
 
@@ -613,6 +905,7 @@ services:
       context: ..
       dockerfile: apps/api/Dockerfile
     container_name: open-gateway-api
+    logging: *default-logging
     restart: unless-stopped
     environment:
       NODE_ENV: development
@@ -738,6 +1031,7 @@ services:
         NEXT_PUBLIC_APP_URL: https://localhost:33000
         NEXT_PUBLIC_GATEWAY_URL: https://localhost:33005
     container_name: open-gateway-web
+    logging: *default-logging
     restart: unless-stopped
     environment:
       NODE_ENV: development
@@ -779,6 +1073,7 @@ services:
   ory-db-init:
     image: postgres:16-alpine
     container_name: open-gateway-ory-db-init
+    logging: *default-logging
     command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/init-db.sql"]
     environment:
       PGHOST: postgres
@@ -799,6 +1094,7 @@ services:
   hydra-migrate:
     image: oryd/hydra:v26.2.0
     container_name: open-gateway-hydra-migrate
+    logging: *default-logging
     command: migrate sql -e --yes
     environment:
       DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/hydra?sslmode=disable
@@ -811,6 +1107,7 @@ services:
   hydra:
     image: oryd/hydra:v26.2.0
     container_name: open-gateway-hydra
+    logging: *default-logging
     restart: unless-stopped
     # WP26b dropped `--dev`: the edge terminates TLS, so the issuer is https and Hydra no longer
     # needs the plain-HTTP escape hatch. Without --dev Hydra refuses any request that did not arrive
@@ -849,6 +1146,7 @@ services:
   kratos-migrate:
     image: oryd/kratos:v26.2.0
     container_name: open-gateway-kratos-migrate
+    logging: *default-logging
     command: migrate sql -e --yes
     environment:
       DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/kratos?sslmode=disable
@@ -869,6 +1167,7 @@ services:
   mailpit:
     image: axllent/mailpit:v1.21.3
     container_name: open-gateway-mailpit
+    logging: *default-logging
     restart: unless-stopped
     expose:
       - "1025"
@@ -887,6 +1186,7 @@ services:
   kratos:
     image: oryd/kratos:v26.2.0
     container_name: open-gateway-kratos
+    logging: *default-logging
     restart: unless-stopped
     # WP22: --watch-courier runs the courier's SMTP dispatch loop in-process. Without it, a
     # recovery/verification code is queued (courier_messages) and never actually sent — live-verified:
@@ -931,6 +1231,7 @@ services:
   keto-migrate:
     image: oryd/keto:v26.2.0
     container_name: open-gateway-keto-migrate
+    logging: *default-logging
     command: migrate up --yes -c /etc/config/keto/keto.yml
     environment:
       DSN: postgres://opengateway:${DB_PASS:?set DB_PASS (install.sh generates infra/.env; or openssl rand -hex 16)}@postgres:5432/keto?sslmode=disable
@@ -945,6 +1246,7 @@ services:
   keto:
     image: oryd/keto:v26.2.0
     container_name: open-gateway-keto
+    logging: *default-logging
     restart: unless-stopped
     command: serve -c /etc/config/keto/keto.yml
     environment:
@@ -995,6 +1297,10 @@ volumes:
   edge_logs:
     driver: local
   prometheus_data:
+    driver: local
+  # OG-OBS-02 (C5): node-exporter textfile markers (`*.prom`) — rw for postgres-backup and the
+  # scripts, ro for node-exporter. Scripts find it by the label com.docker.compose.volume=og_textfile.
+  og_textfile:
     driver: local
 
 networks:

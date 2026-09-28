@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> Production deployment for Open Gateway — SaaS Admin Dashboard for Tyk OSS
+> Production deployment for MIRQAB — SaaS Admin Dashboard for Tyk OSS
 
 ## Table of Contents
 
@@ -267,7 +267,7 @@ http {
 
 ## Tyk Gateway Integration
 
-Open Gateway manages the **open-source Tyk Gateway** through its REST API. The Tyk Dashboard is **not** used or supported (it is proprietary and needs a licence plus MongoDB/Postgres).
+MIRQAB manages the **open-source Tyk Gateway** through its REST API. The Tyk Dashboard is **not** used or supported (it is proprietary and needs a licence plus MongoDB/Postgres).
 
 ### Docker Compose
 

@@ -1,0 +1,164 @@
+# Monitoring-itself rules (OG-OBS-01/02, C7) — docs/ha-observability/02 §3.10 / 03 §3.2.
+# AlertmanagerClusterDegraded/NotificationsFailing stay OUT: there is no Alertmanager and no
+# `alerting:` block on purpose (OG-OBS-04 is out of scope for this team). OtelExporterFailing is
+# ACTIVE now that obs-w7's F-lab-names.md §6 settled the suffix question (no `_total`, at any
+# type) — it lives in rules/services.yml's new "OTel collector" section, not here, since it's
+# scoped to a specific collector config rather than to Prometheus's own health.
+#
+# MON-03/04/05 all need the self-scrape job this file assumes exists — see the new `prometheus`
+# job in prometheus.yml. Before that job existed none of prometheus_tsdb_head_series,
+# prometheus_rule_evaluation_failures_total or prometheus_notifications_dropped_total had anywhere
+# to be scraped from.
+
+groups:
+  - name: monitoring
+    rules:
+      # AL-MON-00. Never routed anywhere in this package (no Alertmanager), but it is the contract
+      # the catalog's own heartbeat design depends on later: this rule firing continuously is what
+      # "the pipeline is alive" looks like from the query API.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: heartbeat
+          owner: platform
+        annotations:
+          summary: 'This is a heartbeat, always firing by design'
+          description: 'Its absence — not its presence — is the alert (MON-01, RB-18).'
+          runbook: RB-18
+
+      # AL-MON-01, over every job in this file (`up == 0`, no job filter). Severity is warning
+      # uniformly: the catalog's critical-for-tier-0 split needs the inventory's `role` label,
+      # which does not exist without file_sd (OG-OBS-00).
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Scrape target {{ $labels.instance }} (job {{ $labels.job }}) is down'
+          description: 'Every rule reading this target is blind for as long as this lasts.'
+          runbook: RB-18
+
+      # AL-MON-02. Needs the `prometheus` self-scrape job.
+      - alert: RuleEvaluationFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Prometheus failed to evaluate one or more rules'
+          description: '{{ $value }} failure(s) in 10m — a rule is silently not running, which reads exactly like health.'
+          runbook: RB-18
+
+      # AL-MON-03. Re-baselined a third time (2026-09-27): obs-w7 measured actual per-exporter
+      # totals directly (not the docs 04 §4 model's generic tiers), which supersede this rule's
+      # own earlier ESTIMATED lines wherever they disagree — obs-w7's numbers were consistently
+      # higher than my estimates, in one case (Ory) by almost 10x. Container count for cAdvisor
+      # stays MY OWN count from infra/docker-compose.yml (21 steady-state `open-gateway-*`
+      # services — edge, postgres, postgres-backup, redis, tyk-gateway, tyk-pump, tyk-healthcheck,
+      # edge-healthcheck, otel-collector, prometheus, node-exporter, cadvisor, blackbox,
+      # postgres-exporter, redis-exporter, api, web, mailpit, hydra, kratos, keto — excluding 7
+      # one-shot init/migrate containers and the profile-gated tyk-gateway-2/3), since it is a
+      # real count against our actual compose file, not obs-w7's illustrative "~10".
+      #
+      # Expected total, one line per source, each marked measured or estimated:
+      #     255  baseline (pre-exporter, team-plan handoff, MEASURED)
+      #   2,700  node_exporter (obs-w7 F §2, MEASURED, 2,625–2,778 range — with the C1 excludes)
+      #   1,491  cAdvisor: 71 series/container (obs-w7 F §3, MEASURED, the RECOMMENDED
+      #          disable_metrics set) × 21 steady-state containers (MY OWN count, above). No
+      #          separate machine-level line (VERIFY-PHASE FIX, stale comment): the `keep` action
+      #          on `name=~"open-gateway-.*"` (prometheus.yml's cadvisor job) drops any series
+      #          whose `name` label doesn't match — which is exactly the machine_* family, since it
+      #          carries no `name` label at all. Those series never reach Prometheus, so they cost
+      #          nothing here; there is no "+30" to add.
+      #     120  blackbox (10 probe targets × ~12 series/probe — this one IS live, our own lab)
+      #     563  postgres_exporter (obs-w7 F §4, MEASURED — on a 4-database lab: labdb/postgres/
+      #          template0/template1. Our real stack has 6 databases (opengateway/hydra/kratos/
+      #          keto/template0/template1), so this line likely undercounts a bit; using the
+      #          measured figure as-is rather than guessing a scale-up)
+      #     241  redis_exporter (obs-w7 F §5, MEASURED at idle, default config)
+      #   1,475  Ory via the edge proxy, all three services (obs-w7 F §8, MEASURED: Kratos 251 +
+      #          Hydra 584 + Keto 640). Keto alone is 640 because its gRPC instrumentation
+      #          pre-registers the full method×service×code cross-product at zero traffic — a
+      #          real, mostly-static cost, not a traffic-driven one
+      #      19  otel-collector self-telemetry (obs-w7 F §6, MEASURED at idle — 6 otelcol_process_*
+      #          families)
+      #   -----
+      #   6,864 ≈ 6,900 expected total -> budget = 2 × 6,900 = 13,800, rounded to 14,000
+      #
+      # Still a PLACEHOLDER for the postgres_exporter database-count gap: re-baseline again from
+      # real prometheus_tsdb_head_series once every exporter is actually scraping in this stack
+      # specifically, the same way 255 and node_exporter's 2,700 were.
+      - alert: SeriesBudgetExceeded
+        expr: prometheus_tsdb_head_series > 14000
+        for: 30m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Prometheus head series above the 2x expected-total budget'
+          description: '{{ $value }} series, budget 14000 (2x the ~7,000 expected total once every exporter is live — see the rule comment for the per-source breakdown). Re-baseline again from the real number once that happens.'
+          runbook: RB-18
+
+      # AL-MON-04. VERIFY-PHASE FIX: the comment here used to claim this metric "stays at 0"
+      # without an Alertmanager configured — WRONG, proven on the live stack: with zero
+      # Alertmanagers discovered, Prometheus counts every notification it tries to send as
+      # dropped regardless, so `prometheus_notifications_dropped_total` climbs continuously (~700/h
+      # observed) while `prometheus_notifications_queue_length` stays 0 — this was firing
+      # CRITICAL, permanently, for no real fault. Gated on
+      # `prometheus_notifications_alertmanagers_discovered > 0` so the rule stays inert until
+      # OG-OBS-04 actually configures one; only once an Alertmanager exists does a rising
+      # dropped-count mean something is actually going wrong.
+      - alert: NotificationsDropped
+        expr: |
+          increase(prometheus_notifications_dropped_total[10m]) > 0
+            and on() prometheus_notifications_alertmanagers_discovered > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: platform
+        annotations:
+          summary: 'Prometheus dropped one or more notifications'
+          runbook: RB-18
+
+      # AL-MON-08, simplified to the 30d "automated fields" threshold only — the catalog's second,
+      # 180d "site fields" threshold needs a way to tell the two field classes apart in PromQL,
+      # which the single og_inventory_last_verified_timestamp_seconds gauge does not give. Silent
+      # until OG-OBS-00's renderer (worker-1) writes this metric.
+      - alert: InventoryDriftOrStale
+        expr: time() - og_inventory_last_verified_timestamp_seconds > 30 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Inventory entry {{ $labels.asset_id }} has not been verified in 30 days'
+          runbook: RB-18
+
+      # AL-MON-09. VERIFY-PHASE FIX: the original `node_filesystem_avail_bytes{mountpoint=~
+      # ".*prometheus.*"}` expr could never fire — `prometheus_data` is a Docker-managed volume
+      # under `/var/lib/docker/volumes/...`, and node-exporter's own C1 mount-exclude regex
+      # (`^/(dev|proc|run|sys|var/lib/docker/.+|var/lib/containers/.+)($|/)`) drops exactly that
+      # path on purpose (it's the "Docker overlay mount churn" exclusion HOST-06 calls out). The
+      # host-disk half of "is the volume that holds prometheus_data filling up" is already covered
+      # by HostDiskAlmostFull on whichever real filesystem `/var/lib/docker` sits on — this alert's
+      # job is the OTHER half: is Prometheus's own retention.size limit (4GB, docker-compose.yml)
+      # already cutting into the 15d retention.time plan, i.e. is the volume too small for what
+      # was promised, not merely "getting full". `prometheus_tsdb_size_retentions_total` is
+      # Prometheus's own counter for exactly that — verified present on the live stack (`docker
+      # run --rm --network opengatewayinfrastructure_open-gateway-network curlimages/curl
+      # -s http://prometheus:9090/api/v1/label/__name__/values`, read-only, no container touched).
+      # `prometheus_tsdb_time_retentions_total` (the 15d cuts) exists too but is expected/routine,
+      # not an alert condition — only a SIZE-forced cut means history is shorter than planned.
+      - alert: MonitoringDiskFillingUp
+        expr: increase(prometheus_tsdb_size_retentions_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: platform
+        annotations:
+          summary: 'Prometheus cut its own retention on size, not time'
+          description: '{{ $value }} size-forced retention cut(s) in the last hour — the 4GB `--storage.tsdb.retention.size` limit is now the binding constraint, not the 15d `--storage.tsdb.retention.time` plan. Some history is gone earlier than planned.'
+          runbook: RB-02

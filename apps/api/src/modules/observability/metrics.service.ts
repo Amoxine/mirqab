@@ -5,9 +5,16 @@ import { readFile } from 'node:fs/promises';
 import { connect as tlsConnect, type DetailedPeerCertificate } from 'node:tls';
 import { collectDefaultMetrics, Gauge, Registry } from 'prom-client';
 import { prisma } from '@open-gateway/database';
+import { registerOpsCounters, tykNodeLabel } from '../../common/metrics/ops-metrics';
 import { RedisService } from '../../common/redis/redis.service';
 import { TykClientService } from '../tyk-integration/services/tyk-client.service';
-import { nodesInSync, type SyncState } from '../api-management/services/reconcile.service';
+import { inSyncNodes, type SyncState } from '../api-management/services/reconcile.service';
+import {
+  newestRecordAgeQuery,
+  redactionTriggerQuery,
+  tablePresenceQuery,
+  type TablePresenceRow,
+} from '../analytics/services/pump-query.builder';
 
 /** Where the edge's exported root CA lands in the api container (`infra/docker-compose.yml`). */
 const DEFAULT_EDGE_ROOT_CERT = '/etc/open-gateway/edge-root.crt';
@@ -154,6 +161,33 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // `node` is `tyk-<n>`, the position in TYK_ADMIN_URLS — never the URL (TYK-04).
+  private readonly nodeInSync = new Gauge({
+    name: 'og_tyk_node_in_sync',
+    help: 'Whether this gateway node holds every reconciled definition identically to its peers (TYK-04)',
+    labelNames: ['node'],
+    registers: [this.registry],
+  });
+
+  private readonly nodeReachable = new Gauge({
+    name: 'og_tyk_node_reachable',
+    help: 'Whether this gateway node answers its /hello probe (TYK-04)',
+    labelNames: ['node'],
+    registers: [this.registry],
+  });
+
+  private readonly analyticsNewestAge = new Gauge({
+    name: 'og_analytics_newest_record_age_seconds',
+    help: 'Seconds since the newest row Pump wrote to tyk_analytics, platform-wide; absent while the table is absent or empty (PUMP-03)',
+    registers: [this.registry],
+  });
+
+  private readonly redactionTriggerPresent = new Gauge({
+    name: 'og_analytics_redaction_trigger_present',
+    help: 'Whether the insert-time redaction trigger is installed and enabled on tyk_analytics; absent while the table is absent (PUMP-05)',
+    registers: [this.registry],
+  });
+
   private readonly certExpiry = new Gauge({
     name: 'edge_certificate_expiry_timestamp_seconds',
     help: 'Unix time at which an edge certificate expires (R14)',
@@ -180,10 +214,17 @@ export class MetricsService {
     this.edgeRootCertPath = configService.get('EDGE_ROOT_CERT_PATH', DEFAULT_EDGE_ROOT_CERT);
     this.edgeTlsProbe = configService.get('EDGE_TLS_PROBE', DEFAULT_EDGE_TLS_PROBE);
     collectDefaultMetrics({ register: this.registry });
+    registerOpsCounters(this.registry, this.tykClient.nodes.length);
   }
 
   async refresh(): Promise<void> {
-    await Promise.all([this.refreshRedis(), this.refreshGatewaySync(), this.refreshCertificates()]);
+    await Promise.all([
+      this.refreshRedis(),
+      this.refreshGatewaySync(),
+      this.refreshNodeReachability(),
+      this.refreshAnalytics(),
+      this.refreshCertificates(),
+    ]);
   }
 
   /**
@@ -227,10 +268,62 @@ export class MetricsService {
       const states = rows
         .map((row) => row.syncState as unknown as SyncState | null)
         .filter((state): state is SyncState => state !== null);
-      this.gatewayNodesInSync.set(nodesInSync(states, nodes));
+      const synced = new Set(inSyncNodes(states, nodes));
+      this.gatewayNodesInSync.set(synced.size);
+      for (const [index, url] of nodes.entries()) {
+        this.nodeInSync.set({ node: tykNodeLabel(index) }, synced.has(url) ? 1 : 0);
+      }
     } catch (err) {
       this.gatewayNodesInSync.reset();
+      this.nodeInSync.reset();
       this.logger.debug(`Sync metrics unavailable: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * `nodeHealth()` answers in `TYK_ADMIN_URLS` order and never throws for a dead node. `debug`: a
+   * scrape every 15 s would otherwise log a WARN per dead node, which the gauge already says.
+   */
+  private async refreshNodeReachability(): Promise<void> {
+    try {
+      for (const [index, { health }] of (await this.tykClient.nodeHealth('debug')).entries()) {
+        this.nodeReachable.set({ node: tykNodeLabel(index) }, health.reachable ? 1 : 0);
+      }
+    } catch (err) {
+      this.nodeReachable.reset();
+      this.logger.debug(`Node reachability unavailable: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Pump freshness (PUMP-03) and the redaction trigger (PUMP-05). `tyk_analytics` is absent until
+   * Pump's first purge, and then neither has a sample: nothing is captured, so nothing is stale and
+   * nothing is unredacted.
+   *
+   * `remove()`, not `reset()`: on a gauge with no labels prom-client's `reset()` writes 0, which
+   * would read as "fresh" for the age and fire the security alert for the trigger on a DB blip.
+   */
+  private async refreshAnalytics(): Promise<void> {
+    try {
+      const presence = await prisma.$queryRaw<TablePresenceRow[]>(tablePresenceQuery());
+      if (presence.length === 0 || !presence[0].raw_present) {
+        this.analyticsNewestAge.remove();
+        this.redactionTriggerPresent.remove();
+        return;
+      }
+
+      const trigger = await prisma.$queryRaw<{ present: boolean }[]>(redactionTriggerQuery());
+      this.redactionTriggerPresent.set(trigger.length > 0 && trigger[0].present ? 1 : 0);
+
+      const newest = await prisma.$queryRaw<{ age_seconds: number | null }[]>(newestRecordAgeQuery());
+      const age = newest.length > 0 ? newest[0].age_seconds : null;
+      if (age === null) this.analyticsNewestAge.remove();
+      // Clamped: Pump stamps rows with the gateway's clock, which can run a little ahead of the DB's.
+      else this.analyticsNewestAge.set(Math.max(0, age));
+    } catch (err) {
+      this.analyticsNewestAge.remove();
+      this.redactionTriggerPresent.remove();
+      this.logger.debug(`Analytics metrics unavailable: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
