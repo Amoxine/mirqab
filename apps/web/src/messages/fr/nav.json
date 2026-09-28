@@ -11,5 +11,6 @@
   "expandSidebar": "Développer la barre latérale",
   "collapseSidebar": "Réduire la barre latérale",
   "brand": "MIRQAB",
-  "brandShort": "OG"
+  "brandShort": "OG",
+  "brandCaption": "Plan de contrôle de la passerelle"
 }

@@ -52,23 +52,23 @@ export function Header() {
     : 'U';
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:gap-4 md:px-6">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:gap-3 md:px-6 lg:h-[4.5rem] lg:border-b-0 lg:ps-2 lg:pe-7">
       <MobileNav />
 
       <div className="min-w-0 flex-1 overflow-hidden">
         <Breadcrumb />
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 md:gap-4">
+      <div className="flex shrink-0 items-center gap-2 md:gap-2.5">
         <ThemeSwitcher />
         <LocaleSwitcher />
 
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative rounded-full" aria-label={t('userMenu')}>
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+            <Button variant="ghost" size="icon" className="relative size-11 rounded-full p-0" aria-label={t('userMenu')}>
+              <Avatar className="size-11">
+                <AvatarFallback className="bg-secondary text-xs font-semibold text-secondary-foreground">
                   {initials}
                 </AvatarFallback>
               </Avatar>

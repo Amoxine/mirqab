@@ -11,5 +11,6 @@
   "expandSidebar": "Expand sidebar",
   "collapseSidebar": "Collapse sidebar",
   "brand": "MIRQAB",
-  "brandShort": "OG"
+  "brandShort": "OG",
+  "brandCaption": "Gateway control plane"
 }

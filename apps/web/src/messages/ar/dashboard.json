@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "لوحة التحكم",
-    "subtitle": "سلامة البوابة، حالة مزامنة واجهات البرمجة، والنشاط الأخير.",
+    "subtitle": "صحة البوابة وحركة المرور والنشاط الأخير.",
     "quickActions": "إجراءات سريعة",
     "manageApis": "إدارة واجهات البرمجة",
     "manageKeys": "إدارة المفاتيح",
@@ -19,6 +19,15 @@
       "upstreamDescription": "{ms} في الخادم الأصلي",
       "activeApis": "واجهات برمجة نشطة",
       "activeKeysDescription": "{count} مفاتيح نشطة"
+    },
+    "summary": "ملخص",
+    "requestLineHint": "طلب التحليلات الذي تستند إليه أرقام هذه الصفحة",
+    "openAnalytics": "فتح التحليلات لـ {title}",
+    "rangeShort": {
+      "1h": "1 س",
+      "24h": "24 س",
+      "7d": "7 أيام",
+      "30d": "30 يومًا"
     }
   },
   "gatewayHealth": {
@@ -102,5 +111,89 @@
   },
   "errorBoundary": {
     "home": "الذهاب إلى لوحة التحكم"
+  },
+  "frame": {
+    "caption": "مستوى التحكم في البوابة",
+    "pipeline": {
+      "live": "التحليلات مباشرة",
+      "stale": "التحليلات قديمة",
+      "off": "لا توجد تحليلات بعد",
+      "unknown": "حالة التحليلات غير معروفة"
+    }
+  },
+  "overview": {
+    "title": "نظرة عامة",
+    "totalRequests": "إجمالي الطلبات",
+    "successRate": "معدل النجاح",
+    "avgLatency": "متوسط زمن الاستجابة",
+    "errors": "{count} أخطاء",
+    "activeApis": "{count} واجهات نشطة",
+    "unavailable": "لم تُرجَع نظرة عامة.",
+    "statusMix": "الاستجابات حسب فئة الحالة",
+    "statusMixLabel": "الاستجابات حسب فئة الحالة: {breakdown}",
+    "statusMixEmpty": "لم تُسجَّل أي استجابات في هذه الفترة.",
+    "statusMixUnavailable": "رموز الحالة غير متاحة.",
+    "topError": "الخطأ الأكثر تكرارًا: {code} ({count})"
+  },
+  "latency": {
+    "title": "زمن الاستجابة",
+    "average": "متوسط",
+    "empty": "لا يوجد زمن استجابة دون حركة مرور في هذه الفترة.",
+    "split": "{upstream} في الخدمة · {overhead} في البوابة"
+  },
+  "errors": {
+    "title": "معدل الأخطاء",
+    "ofRequests": "من الطلبات",
+    "empty": "لا توجد أخطاء دون حركة مرور في هذه الفترة.",
+    "summary": "{count} أخطاء · الذروة {peak}",
+    "none": "لا توجد أخطاء في هذه الفترة."
+  },
+  "topology": {
+    "title": "عُقد البوابة",
+    "summary": "{up} من {total} متاحة",
+    "open": "فتح إعدادات البوابة",
+    "empty": "لم تُهيَّأ أي عُقد للبوابة.",
+    "more": "{count} أخرى في الإعدادات",
+    "controlPlane": "مستوى التحكم",
+    "reachable": "متاحة",
+    "unreachable": "غير متاحة",
+    "noResponse": "لا استجابة",
+    "probeLatency": "زمن ذهاب وإياب فحص الصحة من مستوى التحكم",
+    "redisShort": "Redis",
+    "redis": {
+      "pass": "سليم",
+      "fail": "متعطّل",
+      "unknown": "غير معروف"
+    }
+  },
+  "topApis": {
+    "title": "أكثر الواجهات استخدامًا",
+    "open": "فتح التحليلات",
+    "others": "أخرى",
+    "empty": "لا توجد حركة مرور للواجهات في هذه الفترة.",
+    "total": "<b>{count}</b> طلب في هذه الفترة"
+  },
+  "apiTraffic": {
+    "title": "حركة المرور حسب الواجهة",
+    "description": "الحجم ومعدل الأخطاء وزمن الاستجابة لأكثر الواجهات نشاطًا",
+    "status": "الحالة",
+    "highErrorRate": "معدل أخطاء مرتفع"
+  },
+  "trafficChart": {
+    "title": "حجم الطلبات",
+    "description": "الطلبات ومعدل الأخطاء عبر الزمن",
+    "viewLabel": "عرض كمخطط أو جدول",
+    "chartView": "عرض المخطط",
+    "tableView": "عرض الجدول",
+    "empty": "لم تُسجَّل أي طلبات في هذه الفترة.",
+    "totalCaption": "طلب",
+    "requests": "الطلبات",
+    "errorRate": "معدل الأخطاء",
+    "errorStrip": "معدل الأخطاء",
+    "peak": "الذروة {value}",
+    "readout": "{time}: {requests} طلب، معدل الأخطاء {rate}",
+    "roleDescription": "مخطط",
+    "ariaLabel": "الطلبات ومعدل الأخطاء حسب الفترة الزمنية. استخدم مفتاحي السهمين الأيمن والأيسر لقراءة القيم.",
+    "bucket": "الوقت (UTC)"
   }
 }

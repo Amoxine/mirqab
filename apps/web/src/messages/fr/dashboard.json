@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Tableau de bord",
-    "subtitle": "État de santé de la passerelle, synchronisation des API et activité récente.",
+    "subtitle": "Santé de la passerelle, trafic et activité récente.",
     "quickActions": "Actions rapides",
     "manageApis": "Gérer les API",
     "manageKeys": "Gérer les clés",
@@ -19,6 +19,15 @@
       "upstreamDescription": "{ms} en amont",
       "activeApis": "API actives",
       "activeKeysDescription": "{count} clés actives"
+    },
+    "summary": "Synthèse",
+    "requestLineHint": "La requête d’analytique derrière les chiffres de cette page",
+    "openAnalytics": "Ouvrir l’analytique pour {title}",
+    "rangeShort": {
+      "1h": "1 h",
+      "24h": "24 h",
+      "7d": "7 j",
+      "30d": "30 j"
     }
   },
   "gatewayHealth": {
@@ -102,5 +111,89 @@
   },
   "errorBoundary": {
     "home": "Aller au tableau de bord"
+  },
+  "frame": {
+    "caption": "plan de contrôle de la passerelle",
+    "pipeline": {
+      "live": "Analytique en direct",
+      "stale": "Analytique obsolète",
+      "off": "Pas encore d’analytique",
+      "unknown": "Analytique inconnue"
+    }
+  },
+  "overview": {
+    "title": "Vue d’ensemble",
+    "totalRequests": "Requêtes totales",
+    "successRate": "Taux de succès",
+    "avgLatency": "Latence moy.",
+    "errors": "{count} erreurs",
+    "activeApis": "{count} API actives",
+    "unavailable": "Aucune vue d’ensemble renvoyée.",
+    "statusMix": "Réponses par classe de statut",
+    "statusMixLabel": "Réponses par classe de statut : {breakdown}",
+    "statusMixEmpty": "Aucune réponse enregistrée sur cette période.",
+    "statusMixUnavailable": "Les codes de statut sont indisponibles.",
+    "topError": "Erreur la plus fréquente : {code} ({count})"
+  },
+  "latency": {
+    "title": "Latence",
+    "average": "moy.",
+    "empty": "Pas de latence sans trafic sur cette période.",
+    "split": "{upstream} en amont · {overhead} passerelle"
+  },
+  "errors": {
+    "title": "Taux d’erreur",
+    "ofRequests": "des requêtes",
+    "empty": "Pas d’erreurs sans trafic sur cette période.",
+    "summary": "{count} erreurs · pic {peak}",
+    "none": "Aucune erreur sur cette période."
+  },
+  "topology": {
+    "title": "Nœuds de passerelle",
+    "summary": "{up} sur {total} joignables",
+    "open": "Ouvrir les paramètres de la passerelle",
+    "empty": "Aucun nœud de passerelle n’est configuré.",
+    "more": "{count} de plus dans les paramètres",
+    "controlPlane": "plan de contrôle",
+    "reachable": "Joignable",
+    "unreachable": "Injoignable",
+    "noResponse": "Aucune réponse",
+    "probeLatency": "Aller-retour de la sonde de santé du plan de contrôle",
+    "redisShort": "Redis",
+    "redis": {
+      "pass": "sain",
+      "fail": "en échec",
+      "unknown": "inconnu"
+    }
+  },
+  "topApis": {
+    "title": "API principales",
+    "open": "Ouvrir l’analytique",
+    "others": "Autres",
+    "empty": "Aucun trafic d’API sur cette période.",
+    "total": "<b>{count}</b> requêtes sur cette période"
+  },
+  "apiTraffic": {
+    "title": "Trafic par API",
+    "description": "Volume, taux d’erreur et latence des API les plus sollicitées",
+    "status": "Statut",
+    "highErrorRate": "taux d’erreur élevé"
+  },
+  "trafficChart": {
+    "title": "Volume de requêtes",
+    "description": "Requêtes et taux d’erreur dans le temps",
+    "viewLabel": "Vue graphique ou tableau",
+    "chartView": "Vue graphique",
+    "tableView": "Vue tableau",
+    "empty": "Aucune requête enregistrée sur cette période.",
+    "totalCaption": "requêtes",
+    "requests": "Requêtes",
+    "errorRate": "Taux d’erreur",
+    "errorStrip": "Taux d’erreur",
+    "peak": "pic {value}",
+    "readout": "{time} : {requests} requêtes, taux d’erreur {rate}",
+    "roleDescription": "graphique",
+    "ariaLabel": "Requêtes et taux d’erreur par tranche de temps. Utilisez les flèches gauche et droite pour lire les valeurs.",
+    "bucket": "Heure (UTC)"
   }
 }

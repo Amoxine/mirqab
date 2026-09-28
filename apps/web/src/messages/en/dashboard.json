@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Dashboard",
-    "subtitle": "Gateway health, API sync state and recent activity.",
+    "subtitle": "Gateway health, traffic and recent activity.",
     "quickActions": "Quick actions",
     "manageApis": "Manage APIs",
     "manageKeys": "Manage Keys",
@@ -19,6 +19,15 @@
       "upstreamDescription": "{ms} upstream",
       "activeApis": "Active APIs",
       "activeKeysDescription": "{count} active keys"
+    },
+    "summary": "Summary",
+    "requestLineHint": "The analytics request behind the figures on this page",
+    "openAnalytics": "Open analytics for {title}",
+    "rangeShort": {
+      "1h": "1h",
+      "24h": "24h",
+      "7d": "7d",
+      "30d": "30d"
     }
   },
   "gatewayHealth": {
@@ -102,5 +111,89 @@
   },
   "errorBoundary": {
     "home": "Go to dashboard"
+  },
+  "frame": {
+    "caption": "gateway control plane",
+    "pipeline": {
+      "live": "Analytics live",
+      "stale": "Analytics stale",
+      "off": "No analytics yet",
+      "unknown": "Analytics unknown"
+    }
+  },
+  "overview": {
+    "title": "Overview",
+    "totalRequests": "Total requests",
+    "successRate": "Success rate",
+    "avgLatency": "Avg latency",
+    "errors": "{count} errors",
+    "activeApis": "{count} active APIs",
+    "unavailable": "No overview returned.",
+    "statusMix": "Responses by status class",
+    "statusMixLabel": "Responses by status class: {breakdown}",
+    "statusMixEmpty": "No responses were recorded in this range.",
+    "statusMixUnavailable": "Status codes are unavailable.",
+    "topError": "Most frequent error: {code} ({count})"
+  },
+  "latency": {
+    "title": "Latency",
+    "average": "avg",
+    "empty": "No latency without traffic in this range.",
+    "split": "{upstream} upstream · {overhead} gateway"
+  },
+  "errors": {
+    "title": "Error rate",
+    "ofRequests": "of requests",
+    "empty": "No errors without traffic in this range.",
+    "summary": "{count} errors · peak {peak}",
+    "none": "No errors in this range."
+  },
+  "topology": {
+    "title": "Gateway nodes",
+    "summary": "{up} of {total} reachable",
+    "open": "Open gateway settings",
+    "empty": "No gateway nodes are configured.",
+    "more": "{count} more in settings",
+    "controlPlane": "control plane",
+    "reachable": "Reachable",
+    "unreachable": "Unreachable",
+    "noResponse": "No response",
+    "probeLatency": "Round-trip of the control plane’s health probe",
+    "redisShort": "Redis",
+    "redis": {
+      "pass": "healthy",
+      "fail": "failing",
+      "unknown": "unknown"
+    }
+  },
+  "topApis": {
+    "title": "Top APIs",
+    "open": "Open analytics",
+    "others": "Others",
+    "empty": "No API traffic in this range.",
+    "total": "<b>{count}</b> requests in this range"
+  },
+  "apiTraffic": {
+    "title": "Traffic by API",
+    "description": "Volume, error rate and latency for the busiest APIs",
+    "status": "Status",
+    "highErrorRate": "high error rate"
+  },
+  "trafficChart": {
+    "title": "Request volume",
+    "description": "Requests and error rate over time",
+    "viewLabel": "Chart or table view",
+    "chartView": "Chart view",
+    "tableView": "Table view",
+    "empty": "No requests were recorded in this range.",
+    "totalCaption": "requests",
+    "requests": "Requests",
+    "errorRate": "Error rate",
+    "errorStrip": "Error rate",
+    "peak": "peak {value}",
+    "readout": "{time}: {requests} requests, error rate {rate}",
+    "roleDescription": "chart",
+    "ariaLabel": "Requests and error rate by time bucket. Use the left and right arrow keys to read values.",
+    "bucket": "Time (UTC)"
   }
 }

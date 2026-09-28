@@ -35,7 +35,7 @@ export function LocaleSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" disabled={isPending} aria-label={t('label')}>
+        <Button variant="ghost" size="icon" disabled={isPending} aria-label={t('label')} className="size-11 rounded-full bg-foreground/[0.06] hover:bg-foreground/[0.1]">
           <Languages className="h-4 w-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>

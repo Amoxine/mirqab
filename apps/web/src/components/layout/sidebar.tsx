@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { TenantSwitcher } from '@/components/layout/tenant-switcher';
 import { usePermissions } from '@/hooks/use-permissions';
 import { RTL_LOCALES } from '@/i18n/locales';
+import { BrandMark } from '@/components/layout/brand-mark';
 
 interface NavItem {
   /** Key into the `nav` message namespace. */
@@ -63,10 +64,18 @@ export function useNavItems() {
 export const navLinkClass = (active: boolean, options?: { collapsed?: boolean }) => {
   const collapsed = options?.collapsed ?? false;
   return cn(
-    'flex min-h-10 items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors duration-200 pointer-coarse:min-h-11',
-    collapsed && 'justify-center px-0',
-    !collapsed && (active ? 'border-s-2 border-primary ps-[calc(0.75rem-2px)] pe-3' : 'px-3'),
-    active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+    'flex items-center text-sm font-medium transition-colors duration-200',
+    collapsed
+      ? // The icon rail: round buttons on a soft fill; the current page is a filled accent circle.
+        'mx-auto size-11 justify-center rounded-full'
+      : 'min-h-10 gap-3 rounded-full px-3.5 py-2 pointer-coarse:min-h-11',
+    collapsed
+      ? active
+        ? 'bg-primary text-primary-foreground shadow-[0_6px_14px_-6px_var(--color-primary)]'
+        : 'bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.12]'
+      : active
+        ? 'bg-primary/10 text-primary'
+        : 'text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground',
   );
 };
 
@@ -86,28 +95,32 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          // ponytail: `start-0`/`border-e` (not `left-0`/`border-r`) so the sidebar mounts on the
-          // correct physical side and border in RTL — confirmed valid Tailwind v4.1 logical inset utility.
-          'fixed inset-y-0 start-0 z-50 flex flex-col border-e bg-background transition-[width] duration-300 ease-out lg:z-0',
-          collapsed ? 'w-16' : 'w-64'
+          // In the panel's flow (not fixed): sticky so it stays put while the page scrolls.
+          'sticky top-0 flex h-dvh max-h-[calc(100dvh-3.5rem)] flex-col transition-[width] duration-300 ease-out',
+          collapsed ? 'w-[5.25rem] items-center' : 'w-64 border-e'
         )}
       >
-        {/* Logo / Brand */}
-        <div className="flex h-16 items-center justify-between border-b px-4">
+        {/* Brand + collapse toggle */}
+        <div className={cn('flex gap-3 px-4 pb-4 pt-5', collapsed ? 'flex-col items-center' : 'items-center')}>
+          <Link
+            href="/"
+            aria-label={t('brand')}
+            className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[0_6px_16px_-6px_var(--color-primary)]"
+          >
+            <BrandMark className="size-7" />
+          </Link>
           {!collapsed && (
-            <Link href="/" className="text-lg font-bold tracking-tight">
-              {t('brand')}
-            </Link>
-          )}
-          {collapsed && (
-            <span className="mx-auto text-lg font-bold">{t('brandShort')}</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-bold leading-none tracking-[0.16em]">{t('brand')}</div>
+              <div className="mt-1.5 truncate font-mono text-[0.68rem] text-muted-foreground">{t('brandCaption')}</div>
+            </div>
           )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0"
+                className="size-10 shrink-0 rounded-full bg-foreground/[0.06] hover:bg-foreground/[0.12]"
                 onClick={onToggle}
               >
                 {/* Panel icons are drawn for a left-hand sidebar; mirror them when it sits on the right. */}
@@ -128,13 +141,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
 
         {/* Tenant context for everything below it (guidelines §8) — not in the top bar. */}
-        <div className="border-b p-2">
+        <div className={cn('pb-3', collapsed ? 'px-2' : 'border-b px-2')}>
           <TenantSwitcher collapsed={collapsed} />
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1 py-4">
-          <nav className="flex flex-col gap-1 px-2" aria-label={tDashboard('mobileNav.description')}>
+        <ScrollArea className="w-full flex-1 py-3">
+          <nav className={cn('flex flex-col px-2', collapsed ? 'gap-2' : 'gap-1')} aria-label={tDashboard('mobileNav.description')}>
             {items.map((item) => {
               const Icon = item.icon;
 
@@ -146,7 +159,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   // Collapsed, the icon is all that shows: the name still has to reach a screen reader.
                   aria-label={collapsed ? item.label : undefined}
                 >
-                  <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  <Icon className="h-[1.15rem] w-[1.15rem] shrink-0" aria-hidden="true" />
                   {!collapsed && <span>{item.label}</span>}
                 </Link>
               );

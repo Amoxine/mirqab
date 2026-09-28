@@ -27,10 +27,19 @@ export function ThemeSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t('label')}>
-          {/* Picked by the `.dark` class rather than `theme`, which is unknown until hydration. */}
-          <Sun className="h-4 w-4 dark:hidden" aria-hidden="true" />
-          <Moon className="hidden h-4 w-4 dark:block" aria-hidden="true" />
+        <Button
+          variant="ghost"
+          aria-label={t('label')}
+          className="h-11 gap-0.5 rounded-full bg-foreground/[0.06] p-1 hover:bg-foreground/[0.1]"
+        >
+          {/* Both icons show; the active one sits on a raised chip. Picked by the `.dark` class
+              rather than `theme`, which is unknown until hydration. */}
+          <span className="grid size-9 place-items-center rounded-full bg-card text-foreground shadow-sm transition-colors dark:bg-transparent dark:text-muted-foreground dark:shadow-none">
+            <Sun className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="grid size-9 place-items-center rounded-full text-muted-foreground transition-colors dark:bg-card dark:text-foreground dark:shadow-sm">
+            <Moon className="h-4 w-4" aria-hidden="true" />
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
