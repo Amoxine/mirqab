@@ -1,22 +1,27 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@open-gateway/ui';
 import type { ApiStatus } from '@/types';
 
-const VARIANT: Record<ApiStatus, 'default' | 'secondary' | 'destructive'> = {
+const VARIANTS = {
   ACTIVE: 'default',
   DRAFT: 'secondary',
   DISABLED: 'destructive',
-};
+} as const;
 
 /** Lifecycle status of an API (`DRAFT` / `ACTIVE` / `DISABLED`). */
 export function ApiStatusBadge({ status }: { status: ApiStatus }) {
   const t = useTranslations('apis');
-  const label: Record<ApiStatus, string> = {
-    ACTIVE: t('status.active'),
-    DRAFT: t('status.draft'),
-    DISABLED: t('status.disabled'),
-  };
-  return <Badge variant={VARIANT[status]}>{label[status]}</Badge>;
+  return (
+    <StatusBadge
+      status={status}
+      variants={VARIANTS}
+      labels={{
+        ACTIVE: t('status.active'),
+        DRAFT: t('status.draft'),
+        DISABLED: t('status.disabled'),
+      }}
+    />
+  );
 }

@@ -1,19 +1,10 @@
 'use client';
 
+import { ConfirmDialog } from '@open-gateway/ui';
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, KeyRound, Plus } from 'lucide-react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,9 +15,16 @@ import { StateCard } from '@/components/shared/state-card';
 import { KeyRevealDialog } from '@/components/portal/key-reveal-dialog';
 import { SubscribeSheet } from '@/components/portal/subscribe-sheet';
 import { SubscriptionUsage } from '@/components/portal/subscription-usage';
-import { useRevokePortalSubscription, usePortalSubscriptions, type PortalSubscription } from '@/hooks/use-portal';
+import {
+  useRevokePortalSubscription,
+  usePortalSubscriptions,
+  type PortalSubscription,
+} from '@/hooks/use-portal';
 
-const STATUS_VARIANT: Record<PortalSubscription['status'], 'default' | 'secondary' | 'destructive'> = {
+const STATUS_VARIANT: Record<
+  PortalSubscription['status'],
+  'default' | 'secondary' | 'destructive'
+> = {
   APPROVED: 'default',
   PENDING: 'secondary',
   REVOKED: 'destructive',
@@ -58,36 +56,17 @@ function RevokeDialog({
   };
 
   return (
-    <AlertDialog
+    <ConfirmDialog
       open={target !== null}
-      onOpenChange={(open) => {
-        if (!revokeMutation.isPending) onClose();
-        void open;
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t('subscription.revokeTitle')}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('subscription.revokeDescription', { product: target?.productName ?? '' })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={revokeMutation.isPending}>{tCommon('cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={revokeMutation.isPending}
-            aria-busy={revokeMutation.isPending || undefined}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={(event) => {
-              event.preventDefault();
-              void handleRevoke();
-            }}
-          >
-            {revokeMutation.isPending ? t('subscription.revoking') : t('subscription.revoke')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      onOpenChange={onClose}
+      title={t('subscription.revokeTitle')}
+      description={t('subscription.revokeDescription', { product: target?.productName ?? '' })}
+      confirmLabel={t('subscription.revoke')}
+      pendingLabel={t('subscription.revoking')}
+      cancelLabel={tCommon('cancel')}
+      isPending={revokeMutation.isPending}
+      onConfirm={handleRevoke}
+    />
   );
 }
 
@@ -129,7 +108,11 @@ export default function PortalApplicationPage() {
       )}
 
       {isError && (
-        <StateCard role="alert" icon={<AlertTriangle className="text-destructive" aria-hidden="true" />} message={error.message}>
+        <StateCard
+          role="alert"
+          icon={<AlertTriangle className="text-destructive" aria-hidden="true" />}
+          message={error.message}
+        >
           <Button
             type="button"
             variant="outline"
@@ -155,7 +138,9 @@ export default function PortalApplicationPage() {
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <CardTitle className="break-words text-base">{sub.productName}</CardTitle>
-                <Badge variant={STATUS_VARIANT[sub.status]}>{t(`subscription.status.${sub.status}`)}</Badge>
+                <Badge variant={STATUS_VARIANT[sub.status]}>
+                  {t(`subscription.status.${sub.status}`)}
+                </Badge>
               </div>
               {sub.status !== 'REVOKED' && (
                 <Button
@@ -171,10 +156,14 @@ export default function PortalApplicationPage() {
               )}
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">{t('subscription.plan', { plan: sub.planName })}</p>
-              {sub.status === 'APPROVED' && <SubscriptionUsage applicationId={id} subscriptionId={sub.id} />}
+              <p className="text-muted-foreground text-sm">
+                {t('subscription.plan', { plan: sub.planName })}
+              </p>
+              {sub.status === 'APPROVED' && (
+                <SubscriptionUsage applicationId={id} subscriptionId={sub.id} />
+              )}
               {sub.status === 'PENDING' && (
-                <p className="text-sm text-muted-foreground">{t('subscription.pendingApproval')}</p>
+                <p className="text-muted-foreground text-sm">{t('subscription.pendingApproval')}</p>
               )}
             </CardContent>
           </Card>

@@ -3,9 +3,9 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { PageFilter, type FilterField, type FilterValues } from '@open-gateway/ui';
-import { ANALYTICS_RANGES } from '@/hooks/use-analytics';
 import { useApis } from '@/hooks/use-apis';
 import { useKeys } from '@/hooks/use-keys';
+import { useRangeOptions } from '@/hooks/use-range-options';
 import type { TrafficFilters } from '@/types';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
@@ -27,7 +27,7 @@ export function TrafficFilterBar({ filters, onChange, onReset }: TrafficFilterBa
   const t = useTranslations('analytics.traffic.filters');
   const tClasses = useTranslations('analytics.traffic.statusClasses');
   const tAnalytics = useTranslations('analytics');
-  const tRange = useTranslations('dashboard.page');
+  const rangeOptions = useRangeOptions();
   const apis = useApis(1, 100);
   const keys = useKeys(1, 100, undefined, filters.apiId);
 
@@ -37,11 +37,7 @@ export function TrafficFilterBar({ filters, onChange, onReset }: TrafficFilterBa
         type: 'segmented',
         key: 'range',
         label: tAnalytics('rangeLabel'),
-        options: ANALYTICS_RANGES.map((range) => ({
-          value: range.value,
-          label: tRange(`rangeShort.${range.value}`),
-          title: tAnalytics(`ranges.${range.value}`),
-        })),
+        options: rangeOptions,
       },
       {
         type: 'select',
@@ -109,7 +105,7 @@ export function TrafficFilterBar({ filters, onChange, onReset }: TrafficFilterBa
         dir: 'ltr',
       },
     ],
-    [t, tClasses, tAnalytics, tRange, apis.data, keys.data],
+    [t, tClasses, tAnalytics, rangeOptions, apis.data, keys.data],
   );
 
   const values: FilterValues = { ...filters };

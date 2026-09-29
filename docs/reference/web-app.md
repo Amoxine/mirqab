@@ -5,7 +5,7 @@ Reference for the MIRQAB dashboard and developer portal: a Next.js 15 (App Route
 Key facts:
 
 - Package `@open-gateway/web` (`package.json`). `dev`/`start` bind port 3000 (`--port 3000`); the container also listens on 3000 (`Dockerfile`, `EXPOSE 3000`). The documented public URL `https://localhost:33000` is the Caddy edge in front of it (`.env.example`).
-- Server state is TanStack Query; there is no global client store. Forms are react-hook-form + zod. UI is shadcn-style primitives in `src/components/ui` re-exporting or wrapping `@open-gateway/ui` (`packages/ui`).
+- Server state is TanStack Query; there is no global client store. Forms are react-hook-form + zod. UI is shadcn-style primitives in `src/components/ui` re-exporting or wrapping `@open-gateway/ui` (`packages/ui`); see [Shared UI conventions](#shared-ui-conventions).
 - There is no i18n URL routing: the locale comes from a `locale` cookie (`src/i18n/request.ts`).
 - The browser calls the NestJS API **directly** (cross-origin, `credentials: 'include'`, `NEXT_PUBLIC_API_URL`); the Next server does not proxy API calls. The only Next-side server work is `src/app/oauth2/**`, `src/app/locale/route.ts` and `src/middleware.ts`.
 
@@ -86,13 +86,13 @@ Only the API paths a component reaches through its hooks are listed. "Hook" mean
 
 | Component | Purpose | Key props / hooks | API |
 |---|---|---|---|
-| `analytics-empty-state.tsx` (`AnalyticsEmptyState`, `AnalyticsStaleNotice`, `AnalyticsErrorState`, `ChartCard`, chart constants `AXIS_TICK`, `GRID_STROKE`, `TOOLTIP_STYLE`, `formatCount`, `formatBucket`) | Shared empty/stale/error states and the chart card shell | `health?`, `description?`; `message`, `onRetry`; `ChartCard{title,description,isLoading,error,onRetry,isEmpty,children}` | none |
+| `analytics-empty-state.tsx` (`AnalyticsEmptyState`, `AnalyticsStaleNotice`, `AnalyticsErrorState`, `ChartCard`, chart constants `AXIS_TICK`, `GRID_STROKE`, `TOOLTIP_STYLE`, `CHART_HEIGHT_CLASS`, `formatCount`, `formatBucket`) | Analytics-flavoured empty/stale/error states. `AnalyticsStaleNotice` uses `Notice`; `AnalyticsErrorState` wraps `ErrorState`; `ChartCard` is an adapter over the package `ChartCard` (maps `isLoading`/`error`/`isEmpty` to its `status`) | `health?`, `description?`; `message`, `onRetry`; `ChartCard{title,description,isLoading,error,onRetry,isEmpty,emptyMessage?,children}` | none |
 | `pipeline-status.ts` | `isPipelineStale(health)`, `pipelineHint(health)` helpers | takes `AnalyticsHealth` | none |
 | `requests-chart.tsx` `RequestsChart` | Requests time series | `range`; `useAnalyticsTimeSeries`, `usePrefersReducedMotion` | `GET /analytics/timeseries` |
 | `latency-chart.tsx` `LatencyChart` | Latency time series | `range`; same hooks | `GET /analytics/timeseries` |
 | `status-code-chart.tsx` `StatusCodeChart` | Status-code distribution | `range`; `useAnalyticsStatusCodes` | `GET /analytics/status-codes` |
 | `status-code-utils.ts` | `toStatusRows` grouping helper | pure | none |
-| `traffic/traffic-filter-bar.tsx` `TrafficFilterBar` | Filter controls (API, key, method, status, path, latency, auth) | `filters`, `onChange(patch)`, `onReset`; `useApis`, `useKeys` | `GET /apis`, `GET /keys` |
+| `traffic/traffic-filter-bar.tsx` `TrafficFilterBar` | The traffic page's `PageFilter` (card layout), nine fields as data; see [Filters](#filters-pagefilter-and-usepagefilterlabels) | `filters`, `onChange(patch)`, `onReset`; `useApis`, `useKeys` | `GET /apis`, `GET /keys` |
 | `traffic/traffic-kpis.tsx` `TrafficKpis` | KPI row for the traffic page | `data: AnalyticsTraffic \| undefined` | none (data from page) |
 | `traffic/traffic-charts.tsx` `TrafficVolumeChart`, `TrafficLatencyChart` | Volume and latency charts | `data` | none |
 | `traffic/traffic-breakdowns.tsx` `TrafficMix`, `EndpointTable` | Status mix and per-endpoint table | `data` | none |
@@ -105,9 +105,9 @@ The traffic page itself calls `useAnalyticsTraffic(filters)` (`GET /analytics/tr
 |---|---|---|---|
 | `api-form-sheet.tsx` `ApiFormSheet` | Create/edit API sheet (schema in `api-form-schema.ts`) | `mode`, `open`, `onOpenChange`; `useCreateApi`, `useUpdateApi` | `POST /apis`, `PATCH /apis/:id` |
 | `api-config-card.tsx` `ApiConfigCard` | Read-only config summary | `config`, `onEdit` | none |
-| `api-status-badge.tsx`, `sync-status-badge.tsx` | Status / sync badges; sync badge can retry | `status`; `apiId, syncStatus, syncError`; `useSyncApi` | `POST /apis/:id/sync` |
+| `api-status-badge.tsx` `ApiStatusBadge`, `sync-status-badge.tsx` | `ApiStatusBadge` = `StatusBadge` with `apis.status.*` labels (see [Status badges](#status-badges)); sync badge can retry | `status`; `apiId, syncStatus, syncError`; `useSyncApi` | `POST /apis/:id/sync` |
 | `sync-outcome-toast.ts` | `toastSyncOutcome` helper | pure | none |
-| `delete-api-dialog.tsx` `DeleteApiDialog` | Delete confirmation | `api`, `onClose`, `onDeleted`; `useDeleteApi` | `DELETE /apis/:id` |
+| `delete-api-dialog.tsx` `DeleteApiDialog` | Delete confirmation (`ConfirmDialog` + `confirmAction`) | `api`, `onClose`, `onDeleted`; `useDeleteApi` | `DELETE /apis/:id` |
 | `clients-tab.tsx` `ClientsTab` | OAuth clients of an OAuth API | `apiId`; `useOAuthClients`, `useCreateOAuthClient`, `useRotateOAuthClient`, `useRevokeOAuthClient` | `GET /oauth-clients?apiDefId=`, `POST /oauth-clients`, `POST /oauth-clients/:id/rotate`, `DELETE /oauth-clients/:id` |
 | `traffic-tab.tsx` `TrafficTab` | Captured request/response detail | `apiId`; `useApiTraffic` | `GET /apis/:id/traffic?range&page` |
 | `designer/designer-tab.tsx` `DesignerTab` | Middleware cards that open one sheet each (state `openSheet`) | `api`; `usePermissions` | none itself |
@@ -115,8 +115,8 @@ The traffic page itself calls `useAnalyticsTraffic(filters)` (`GET /analytics/tr
 | `designer/*-sheet.tsx`: `traffic-limits`, `load-balancing`, `uptime-tests`, `header-transform`, `url-rewrite`, `body-transform`, `mock-response`, `response-cache`, `detailed-recording`, `ip-access`, `request-validation`, `authentication`, `upstream-mtls` | One config sheet per gateway feature | `api`, `open`, `onOpenChange`; `useUpdateApi` (`upstream-mtls` also `useCertificates`; `response-cache` also `useInvalidateCache`) | `PATCH /apis/:id`; `GET /certificates`; `POST /apis/:id/cache/invalidate` |
 | `designer/test-request-sheet.tsx` `TestRequestSheet` | Send a debug request | same props; `useDebugApi` | `POST /apis/:id/debug` |
 | `designer/endpoint-list.tsx` `EndpointList` | Read-only endpoints from the OAS document, table/card toggle | `oasDocument`; `useViewMode` | none |
-| `endpoints/endpoints-tab.tsx` `EndpointsTab` | Endpoint governance table (rate limit, timeout, size, cache, mock, tags) | `api`; `useEndpointGovernance`, `useUpdateEndpoints`, `usePermissions`, `useMediaQuery`, `useViewMode` (`src/lib/api/openapi.ts`) | `GET/PATCH /apis/:id/endpoints` |
-| `endpoints/endpoint-governance-sheet.tsx`, `bulk-value-sheet.tsx`, `governance-form.ts`, `method-badge.tsx`, `unavailable-controls.tsx`, `api-error.tsx` | Per-endpoint / bulk edit sheets, form schema and limits, badges, API error text helpers | `useUpdateEndpoints` | `PATCH /apis/:id/endpoints` |
+| `endpoints/endpoints-tab.tsx` `EndpointsTab` | Endpoint governance table (rate limit, timeout, size, cache, mock, tags); client-side search + tag `PageFilter` | `api`; `useEndpointGovernance`, `useUpdateEndpoints`, `usePermissions`, `useMediaQuery`, `useViewMode` (`src/lib/api/openapi.ts`) | `GET/PATCH /apis/:id/endpoints` |
+| `endpoints/endpoint-governance-sheet.tsx`, `bulk-value-sheet.tsx`, `governance-form.ts`, `method-badge.tsx` (re-export of the package `MethodBadge`), `unavailable-controls.tsx`, `api-error.tsx` | Per-endpoint / bulk edit sheets, form schema and limits, badges, API error text helpers | `useUpdateEndpoints` | `PATCH /apis/:id/endpoints` |
 | `import/import-wizard-sheet.tsx` `ImportWizardSheet` | Import an OpenAPI document by paste/file or URL, preview then import | `open`, `onOpenChange`; `useImportApi`, `useImportUrl`, `previewImport`, `previewImportUrl` | `POST /apis/import/preview`, `POST /apis/import`, `POST /apis/import/url/preview`, `POST /apis/import/url` |
 | `import/spec-source-field.tsx`, `import/findings-list.tsx` | Watch-URL field with zod schema; lint findings | form field / `findings` | none |
 | `spec-update/spec-update-sheet.tsx` `SpecUpdateSheet` | Upload a new spec version (dry run then apply) | `apiId`, `versionNo`, `open`, `onOpenChange`; `useSpecUpdate` | `POST /apis/:id/spec/preview`, `POST /apis/:id/spec` (`expectedVersion`, `acknowledgeRemoved` query) |
@@ -148,12 +148,13 @@ The API detail page also defines a local keys tab that uses `useApiKeys` (`GET /
 | `certificates/certificate-upload-sheet.tsx` | Paste/upload PEM | `open`, `onOpenChange`; `useUploadCertificate` | `POST /certificates` |
 | `certificates/delete-certificate-dialog.tsx` | Confirm delete | `target{id,label}`, `onOpenChange`; `useDeleteCertificate` | `DELETE /certificates/:id` |
 | `keys/key-form-sheet.tsx` `KeyFormSheet` | Create/edit key | `mode`, `open`, `onOpenChange`, `apis?`, `plans?`, `keyData?`, `onCreated(keyValue)`; `useCreateKey`, `useUpdateKey` | `POST /keys`, `PATCH /keys/:id` |
-| `keys/key-created-dialog.tsx` | One-time reveal of a key value | `keyValue`, `onClose` | none |
-| `keys/rotate-key-dialog.tsx` | Rotate | `target`, `onRotated(keyValue)`; `useRotateKey` | `POST /keys/:id/rotate` |
+| `keys/key-created-dialog.tsx` | One-time reveal of a key value (`RevealDialog`) | `keyValue`, `onClose` | none |
+| `keys/key-status-badge.tsx` `KeyStatusBadge` | `StatusBadge` for `ACTIVE`/`REVOKED`/`EXPIRED` with `keys.status.*` labels | `status` | none |
+| `keys/rotate-key-dialog.tsx` | Rotate (`ConfirmDialog`) | `target`, `onRotated(keyValue)`; `useRotateKey` | `POST /keys/:id/rotate` |
 | `keys/revoke-key-dialog.tsx` | Revoke | `target`; `useRevokeKey` | `POST /keys/:id/revoke` |
 | `keys/delete-key-dialog.tsx` | Delete | `target`, `onDeleted?`; `useDeleteKey` | `DELETE /keys/:id` |
 | `keys/key-usage-card.tsx` | Usage over a range | `keyId`, `gatewayReachable`; `useKeyUsage` | `GET /keys/:id/usage?range=` |
-| `keys/key-utils.ts` | `keyStatusVariant`, quota/rate formatters | pure | none |
+| `keys/key-utils.ts` | Key form schemas (`makeKeyFormSchema`, `makeCreateKeyFormSchema`), payload mappers, `formatRate`, `formatQuotaPeriod`, `quotaUsedPercent`, `toDate`. The old `keyStatusVariant` is gone (replaced by `KeyStatusBadge`) | pure | none |
 | `plans/plan-form-sheet.tsx`, `delete-plan-dialog.tsx` | Plan create/edit, delete | `useCreatePlan`, `useUpdatePlan`, `useDeletePlan` | `POST/PATCH/DELETE /plans` |
 | `products/product-form-sheet.tsx`, `delete-product-dialog.tsx` | Product create/edit (picks APIs via `useApis`), delete | `useCreateProduct`, `useUpdateProduct`, `useDeleteProduct` | `POST/PATCH/DELETE /products` |
 | `roles/role-form-sheet.tsx`, `delete-role-dialog.tsx` | Role create/edit (permission catalog), delete | `useCreateRole`, `useUpdateRole`, `usePermissionCatalog`, `useDeleteRole` | `POST/PATCH/DELETE /roles`, `GET /roles/permissions` |
@@ -166,20 +167,19 @@ Other keys hooks not tied to a component listed here: `useResetKeyUsage` (`POST 
 |---|---|---|---|
 | `overview-panel.tsx` `OverviewPanel` | Dark "ink" card: headline figures + HTTP status mix | `range`; `useAnalyticsOverview`, `useAnalyticsStatusCodes` | `GET /analytics/overview`, `GET /analytics/status-codes` |
 | `kpi-strip.tsx` `KpiStrip` | Throughput, P95, P99, active APIs/keys, node health | `range`, `showNodes`; `useAnalyticsOverview`, `useNodeHealth` | `GET /analytics/overview`, `GET /gateway/nodes/health` |
-| `kpi-tile.tsx` `KpiTile`, `KpiTileSkeleton` | Compact tile shared by home and traffic pages | `icon`, `label`, `value`, `hint`, `tone` (props in `KpiTileProps`) | none |
-| `stat-card.tsx` `StatCard`, `StatCardSkeleton` | Tile used by `/analytics` | `title, value, icon, description` | none |
-| `figure.tsx` `Figure` | Number with small unit, locale formatted | `value`, `kind` (e.g. `ms`) | none |
-| `sparkline.tsx` `Sparkline` | Decorative trend line | `values`, `area?`, `height?` | none |
+| `kpi-tile.tsx` `KpiTile`, `KpiTileSkeleton` | Re-export of the package tiles, shared by home and traffic pages | `icon`, `label`, `value`, `hint`, `tone` (props in `KpiTileProps`) | none |
+| `figure.tsx` `Figure` | Adapter: package `Figure` with `locale` from `useLocale()` | `value`, `kind` (`compact`, `percent`, `ms`) | none |
+| `sparkline.tsx` `Sparkline` | Re-export of the package `Sparkline` | `values`, `area?`, `height?` | none |
 | `trend-minis.tsx` `LatencyMini`, `ErrorsMini` | Latency split and error-rate mini cards | `range`; `useAnalyticsOverview`, `useAnalyticsTimeSeries` | `GET /analytics/overview`, `GET /analytics/timeseries` |
 | `top-apis-card.tsx` `TopApisCard` | Share of requests for busiest APIs | `range`; `useAnalyticsApis`, `useAnalyticsOverview` | `GET /analytics/apis`, `/analytics/overview` |
 | `api-traffic-table.tsx` `ApiTrafficTable` | Per-API volume, error rate, latency | `range`; `useAnalyticsApis` | `GET /analytics/apis` |
 | `traffic-chart.tsx` `TrafficChart` | Request columns + error-rate strip, chart/table view, error budget; keyboard stepping (section 9) | `range`; `useAnalyticsTimeSeries('requests')`, `useAnalyticsOverview`, `usePrefersReducedMotion` | `GET /analytics/timeseries`, `/analytics/overview` |
 | `gateway-map.tsx` `GatewayMap` | World map of nodes plus text list; link to `/settings` | none; `useNodeHealth`, `locationOf` | `GET /gateway/nodes/health` |
-| `range-control.tsx` `RangeControl` | The page's single time-range filter | `value`, `onChange` | none |
+| `range-control.tsx` `RangeControl` | The single analytics time-range picker (package `SegmentedControl` fed by `ANALYTICS_RANGES`); see [RangeControl](#rangecontrol) | `value`, `onChange` | none |
 | `recent-activity-card.tsx` `RecentActivityCard` | Last 10 audit entries | `useRecentAudit` | `GET /audit-logs?page=1&pageSize=10` |
 | `sync-summary-card.tsx` `SyncSummaryCard` | Gateway reachability and API sync counts, retry failed syncs (polls 30 s) | `useGatewayStatus`, `useRetrySync` | `GET /gateway/status`, `POST /apis/:id/sync` |
 | `spec-updates-card.tsx` `SpecUpdatesCard` | APIs whose watched URL has an unreviewed version | `useSpecUpdates` | `GET /spec-updates` |
-| `viz-utils.ts` | `useElementWidth`, `columnPath`, `niceTicks`, `bucketErrorRate`, its own `usePrefersReducedMotion` (a second one exists in `src/hooks/use-media-query.ts`) | pure / hooks | none |
+| `viz-utils.ts` | Re-exports `useElementWidth`, `usePrefersReducedMotion`, `fx`, `columnPath`, `niceTicks` from the package and adds the app-only `bucketErrorRate`. `src/hooks/use-media-query.ts` also exports a `usePrefersReducedMotion` (built on `useMediaQuery`) | pure / hooks | none |
 
 ### `src/components/layout`
 
@@ -215,16 +215,55 @@ Portal hooks not shown above: `usePortalPlans` (`GET /portal/catalog/plans`), `u
 | `providers.tsx` -> `providers/index.tsx` `Providers` | `DirectionProvider` > next-themes `ThemeProvider` (`attribute="class"`, default `system`) > `QueryProvider` + `Toaster` | `children`, `dir` | none |
 | `providers/query-provider.tsx` | `QueryClient` defaults: `staleTime` 60 s, `gcTime` 5 min, `retry` 1, no refetch on focus; singleton in browser | none | none |
 | `providers/direction-provider.tsx` | Re-export of Radix `DirectionProvider` so Radix menus/selects follow RTL | none | none |
-| `shared/data-table.tsx` `DataTable`, `DataTablePagination`, `ViewModeToggle`, `useViewMode` | Canonical list view: TanStack table with loading/error/empty states, table/card toggle (remembered in localStorage per key), auto-cards on small screens | `table`, `isLoading`, `isError`, `error`, `onRetry`, `emptyMessage`, `emptyAction`, `skeletonRows`, `viewMode`, `renderCard` | none |
-| `shared/page-header.tsx` `PageHeader` | Title, badges, description, actions, back link | `title, badges, description, actions, back` | none |
-| `shared/state-card.tsx` `StateMessage`, `StateCard`; `shared/route-error.tsx` `RouteError`; `shared/formatted.tsx` `FormattedDate/DateTime/Number` | Empty/error states, route error UI, locale-aware formatting components | as named | none |
+| `shared/data-table.tsx` `DataTable`, `DataTablePagination`, `ViewModeToggle`, `useViewMode` | Adapters over the package list view (TanStack table with loading/error/empty states, table/card toggle remembered in localStorage per key, auto-cards below `sm`). They supply the `dashboard.dataTable.*` and `common.retry` labels, so call sites pass no `labels`; `DataTablePagination` takes `totalCount` and builds the "Page X of Y (N total)" summary | `table`, `isLoading`, `isError`, `error`, `onRetry`, `emptyMessage`, `emptyAction`, `skeletonRows`, `viewMode`, `renderCard` | none |
+| `shared/page-header.tsx` `PageHeader` | Adapter: package `PageHeader` with `linkComponent={Link}` (`next/link`) | `title, badges, description, actions, back` | none |
+| `shared/state-card.tsx` `StateMessage`, `StateCard` (re-export); `shared/route-error.tsx` `RouteError`; `shared/formatted.tsx` `FormattedDate/DateTime/Number` | Empty/error states, route error UI (built on `StateCard`), locale-aware formatting components | as named | none |
 | `tenants/tenant-form-sheet.tsx` | Create/edit tenant | `useCreateTenant`, `useUpdateTenant` | `POST /tenants`, `PATCH /tenants/:id` |
 | `tenants/tenant-status-dialog.tsx` | Archive / status change | `tenant`, `action`, `onClose`, `onArchived`; `useArchiveTenant`, `useUpdateTenant` | `DELETE /tenants/:id`, `PATCH /tenants/:id` |
 | `tenants/members-card.tsx` | Members table, role change, invite | `tenantId`; `useTenantMembers`, `useUpdateMemberRole`, `usePermissions` | `GET /tenants/:id/users`, `PATCH /tenants/:id/users/:uid` |
 | `tenants/invite-member-sheet.tsx` | Add existing user by email lookup; invite-by-email only when `NEXT_PUBLIC_FEATURE_INVITE_BY_EMAIL === 'true'` | `useLookupUser`, `useInviteMember`, `useInviteByEmail` | `GET /tenants/:id/users/lookup`, `POST /tenants/:id/users`, `POST /tenants/:id/users/invite` |
 | `tenants/remove-member-dialog.tsx` | Remove member | `tenantId`, `member`, `onClose`; `useRemoveMember` | `DELETE /tenants/:id/users/:uid` |
 | `tenants/tenant-quota-sheet.tsx`, `tenant-usage-card.tsx` | Quota edit; usage + reset | `useTenantQuota`, `useSetTenantQuota`, `useTenantUsage`, `useResetTenantQuota` | `GET/PATCH /tenants/:id/quota`, `POST /tenants/:id/quota/reset`, `GET /tenants/:id/usage` |
-| `ui/*` | shadcn-style primitives: alert-dialog, avatar, badge, checkbox, collapsible, command, dialog, dropdown-menu, form, input, label, popover, scroll-area, select, separator, sheet, skeleton, sonner (`Toaster`, `toast`), switch, tabs, textarea, tooltip. `button`, `card`, `table`, `progress`, `toggle-group` re-export `@open-gateway/ui` | Radix based | none |
+| `ui/*` | Thin layer over `@open-gateway/ui`. **Pure re-exports**: alert-dialog, badge, button, card, checkbox, dropdown-menu, input, label, popover, progress, select, skeleton, switch, table, tabs, textarea, toggle-group, tooltip. **Wrappers** injecting the translated `common.close` label: `dialog.tsx` (`DialogContent`) and `sheet.tsx` (`SheetContent`). **App-local** (no package import): avatar, command, form (react-hook-form glue), scroll-area, sonner (`Toaster`, `toast`). No `collapsible` or `separator` file exists (the earlier list was stale). All adapters: [packages.md](packages.md#the-adapter-pattern) | Radix based | none |
+
+### Shared UI conventions
+
+Read these before writing a control, filter, dialog or badge.
+
+#### Filters: `PageFilter` and `usePageFilterLabels`
+
+Every filtered list or chart uses the package `PageFilter` (props and field types: [packages.md](packages.md#pagefilter-componentspage-filtertsx)). The page owns the values and turns them into a query; `PageFilter` renders. `src/hooks/use-page-filter-labels.ts` `usePageFilterLabels(resetLabel?)` supplies the three strings every bar needs from the `common` messages: `title` = `common.filters`, `reset` = `resetLabel ?? common.clearFilters`, `active(count)` = `common.activeFilters`. A page then only writes its own field labels. Per page (read from each file):
+
+| Where | Layout | Fields | State / notes |
+|---|---|---|---|
+| `src/app/(dashboard)/apis/page.tsx` | `inline` | `select` `status` (ACTIVE / DRAFT / DISABLED), `select` `sync` (SYNCED / PENDING / FAILED) | `useState` filters; any change or reset sets page 1. The empty state offers its own "clear filters" button. Default labels |
+| `src/app/(dashboard)/keys/page.tsx` | `inline` | `select` `status` (ACTIVE / REVOKED / EXPIRED), `select` `apiDefId` (options from the API list) | Same state pattern and empty-state clear button |
+| `src/app/(dashboard)/audit-logs/page.tsx` | `popover` | `search` `resource`, `select` `action` (from `AUDIT_ACTION_VALUES`), `date` `dateFrom`, `date` `dateTo` | Labels are `usePageFilterLabels(t(auditLogs.clearAll))` with `title` overridden by `auditLogs.filters`. The empty state shows a clear button only while a filter is active |
+| `src/components/tenants/members-card.tsx` | `inline`, `showReset={false}` | one `search` `q`, `debounceMs: 250` (`SEARCH_DEBOUNCE_MS`), `className` `w-full sm:w-72` | `searchTerm` state feeds `useTenantMembers`; a change resets to page 1 |
+| `src/components/apis/endpoints/endpoints-tab.tsx` | `inline`, `showReset={false}` | `search` `q` with `debounceMs: 0`, `select` `tag` (tags collected from the endpoints) | Filtering is client-side over the loaded endpoints, so it fires per keystroke; the clear action lives in the empty state. A tag change resets the bulk "whole tag" scope |
+| `src/components/analytics/traffic/traffic-filter-bar.tsx` | `card` (default) | `segmented` `range` (1h / 24h / 7d / 30d), `select` `apiId`, `keyId` (keys of the chosen API), `method`, `statusClass`, `auth`, `minLatencyMs` (`valueType: 'number'`), `number` `status` (100 to 599), `search` `path` (`maxLength` 200, `dir: 'ltr'`) | Own `analytics.traffic.filters.*` labels (does not use `usePageFilterLabels`). Filter state, the "picking an API clears the key" rule and the query live in `useTrafficFilters` (URL search params). The `segmented` range does not count as an active filter |
+
+Rules of thumb: dependent option lists are just different `options` passed once the other value changes; `onChange` receives a patch, merge it (`{ ...current, ...patch }`); use `showReset={false}` where the page already has a clear action.
+
+#### RangeControl
+
+`src/components/dashboard/range-control.tsx` `RangeControl` is the single analytics range picker (1h / 24h / 7d / 30d): a package `SegmentedControl` fed by `ANALYTICS_RANGES` with the `dashboard.page.rangeShort.*` chip text and `analytics.ranges.*` tooltips. Used by the home page, `/analytics`, `components/keys/key-usage-card.tsx` and `components/apis/traffic-tab.tsx`. The traffic page (`/analytics/traffic`) does **not** use it: its range is a `segmented` field inside `PageFilter`, built from the same `ANALYTICS_RANGES` and messages (a second mapping to keep in sync; listed under known follow-ups).
+
+#### Confirm dialogs and `confirmAction`
+
+Destructive or irreversible actions use the package `ConfirmDialog` (`tone` `destructive` by default) together with `src/lib/confirm-action.ts`. Nine dialogs do this: `keys/{revoke,delete,rotate}-key-dialog.tsx`, `apis/delete-api-dialog.tsx`, `tenants/remove-member-dialog.tsx`, `plans/delete-plan-dialog.tsx`, `products/delete-product-dialog.tsx`, `roles/delete-role-dialog.tsx`, `certificates/delete-certificate-dialog.tsx`. Each translates its own title, description, confirm, pending and cancel text and passes `isPending` from its mutation.
+
+`confirmAction({ run, success?, failed, close, onDone?, closeOnError? })` is what `onConfirm` calls: it awaits `run()`, toasts `success(result)` if given, calls `close()`, then `onDone(result)`; on failure it toasts the error's own message (falling back to `failed`) and keeps the dialog open to retry unless `closeOnError` is true (used by the API delete and member removal dialogs). One-time secrets (`keys/key-created-dialog.tsx`, `portal/key-reveal-dialog.tsx`) use `RevealDialog`, with `toast.error` as `onCopyError`.
+
+Not yet on `ConfirmDialog` (hand-built `AlertDialog`): `apis/clients-tab.tsx`, `apis/endpoints/endpoints-tab.tsx`, `apis/spec-source/spec-source-card.tsx`, `tenants/tenant-status-dialog.tsx`, `app/portal/applications/[id]/page.tsx`.
+
+#### Status badges
+
+`StatusBadge` (package) maps a status to a `Badge` variant and a translated label. The app has two thin wrappers, so the same status looks and reads the same everywhere: `components/apis/api-status-badge.tsx` `ApiStatusBadge` (`ACTIVE` default, `DRAFT` secondary, `DISABLED` destructive; `apis.status.*`) and `components/keys/key-status-badge.tsx` `KeyStatusBadge` (`ACTIVE` default, `REVOKED` destructive, `EXPIRED` secondary; `keys.status.*`). `ApiStatusBadge` is used on the APIs list and detail, `/analytics` and the dashboard `ApiTrafficTable`; `KeyStatusBadge` on the keys list, key detail and `/analytics`. New status chips should be another wrapper over `StatusBadge`, not a new `Badge` mapping inline. HTTP verbs use `MethodBadge`.
+
+#### Reuse-first
+
+Generic UI lives in `packages/ui` as a prop-driven component; the app keeps only the adapter for translations, routing or data hooks (list in [packages.md](packages.md#the-adapter-pattern)). Before writing a control, check the package index; before adding a second copy of a pattern, extract it.
 
 ## 3. Hooks (`src/hooks`)
 
@@ -245,7 +284,8 @@ Portal hooks not shown above: `usePortalPlans` (`GET /portal/catalog/plans`), `u
 | `use-settings.ts` | `useSettings` (`GET /settings`), `useNodeHealth`, `useReloadGateways` (`POST /gateway/reload`) |
 | `use-portal.ts` | `usePortal*` hooks over `portalApi`, with its own `portalKeys` |
 | `use-format.ts` | `createFormat(locale)`, `useFormat` (date, dateTime, number, percent, ms, bytes via `Intl`) |
-| `use-media-query.ts` | `useMediaQuery`, `usePrefersReducedMotion` |
+| `use-media-query.ts` | Re-exports `useMediaQuery` from `@open-gateway/ui`; adds `usePrefersReducedMotion` |
+| `use-page-filter-labels.ts` | `usePageFilterLabels(resetLabel?)` returns `PageFilterLabels` (see [Filters](#filters-pagefilter-and-usepagefilterlabels)) |
 
 ## 4. Library (`src/lib`)
 

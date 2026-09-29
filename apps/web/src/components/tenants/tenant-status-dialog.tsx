@@ -1,16 +1,7 @@
 'use client';
 
+import { ConfirmDialog } from '@open-gateway/ui';
 import { useTranslations } from 'next-intl';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { toast } from '@/components/ui/sonner';
 import { useArchiveTenant, useUpdateTenant } from '@/hooks/use-tenants';
 
@@ -26,7 +17,12 @@ interface TenantStatusDialogProps {
 }
 
 /** Destructive-ish confirm for suspend/reactivate/archive — all three change a tenant's status. */
-export function TenantStatusDialog({ tenant, action, onClose, onArchived }: TenantStatusDialogProps) {
+export function TenantStatusDialog({
+  tenant,
+  action,
+  onClose,
+  onArchived,
+}: TenantStatusDialogProps) {
   const t = useTranslations('tenants');
   const tCommon = useTranslations('common');
   const updateMutation = useUpdateTenant(tenant?.id ?? '');
@@ -49,9 +45,12 @@ export function TenantStatusDialog({ tenant, action, onClose, onArchived }: Tena
       } else {
         await updateMutation.mutateAsync({ status: action === 'suspend' ? 'SUSPENDED' : 'ACTIVE' });
         toast.success(
-          t(action === 'suspend' ? 'statusDialog.suspendedToast' : 'statusDialog.reactivatedToast', {
-            name: tenant.name,
-          }),
+          t(
+            action === 'suspend' ? 'statusDialog.suspendedToast' : 'statusDialog.reactivatedToast',
+            {
+              name: tenant.name,
+            },
+          ),
         );
       }
       onClose();
@@ -62,34 +61,24 @@ export function TenantStatusDialog({ tenant, action, onClose, onArchived }: Tena
   };
 
   return (
-    <AlertDialog
+    <ConfirmDialog
       open={tenant !== null}
       onOpenChange={(open) => {
-        if (!open && !isPending) onClose();
+        if (!open) onClose();
       }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            <span className="font-medium text-foreground">{tenant?.name}</span>{' — '}{copy.description}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>{tCommon('cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={isPending}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={(event) => {
-              // Radix closes on Action click; hold it open until the request settles.
-              event.preventDefault();
-              void handleConfirm();
-            }}
-          >
-            {isPending ? copy.pendingLabel : copy.confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      title={copy.title}
+      description={
+        <>
+          <span className="text-foreground font-medium">{tenant?.name}</span>
+          {' — '}
+          {copy.description}
+        </>
+      }
+      confirmLabel={copy.confirmLabel}
+      pendingLabel={copy.pendingLabel}
+      cancelLabel={tCommon('cancel')}
+      isPending={isPending}
+      onConfirm={handleConfirm}
+    />
   );
 }

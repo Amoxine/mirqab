@@ -22,16 +22,6 @@ import {
   ViewModeToggle,
 } from '@/components/shared/data-table';
 import { StateCard } from '@/components/shared/state-card';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
-import { PageFilter } from '@open-gateway/ui';
+import { ConfirmDialog, PageFilter } from '@open-gateway/ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import type { ApiDetail } from '@/hooks/use-apis';
@@ -861,25 +851,24 @@ function EndpointsView({
         }
       />
 
-      <AlertDialog
+      <ConfirmDialog
+        // These confirmations are not deletions, so the confirm button keeps the primary colour.
+        tone="default"
         open={confirm !== null}
         onOpenChange={(open) => {
           if (!open) setConfirm(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirm?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{confirm?.body}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{tCommon('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirm?.run(confirm.revision)}>
-              {confirm?.confirmLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={confirm?.title}
+        description={confirm?.body}
+        confirmLabel={confirm?.confirmLabel}
+        cancelLabel={tCommon('cancel')}
+        onConfirm={() => {
+          // Closes at once and runs in the background (the request has its own toast), as before.
+          const request = confirm;
+          setConfirm(null);
+          if (request) void request.run(request.revision);
+        }}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { SegmentedControl } from '@open-gateway/ui';
-import { ANALYTICS_RANGES } from '@/hooks/use-analytics';
+import { useRangeOptions } from '@/hooks/use-range-options';
 import type { AnalyticsRange } from '@/types';
 
 /**
@@ -16,19 +16,15 @@ export function RangeControl({
   value: AnalyticsRange;
   onChange: (range: AnalyticsRange) => void;
 }) {
-  const t = useTranslations('dashboard.page');
   const tAnalytics = useTranslations('analytics');
+  const options = useRangeOptions();
 
   return (
     <SegmentedControl
       value={value}
       onChange={onChange}
       ariaLabel={tAnalytics('rangeLabel')}
-      options={ANALYTICS_RANGES.map((range) => ({
-        value: range.value,
-        label: t(`rangeShort.${range.value}`),
-        title: tAnalytics(`ranges.${range.value}`),
-      }))}
+      options={options}
     />
   );
 }

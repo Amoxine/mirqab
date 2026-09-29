@@ -6,20 +6,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { CopyButton, SecretField } from '@open-gateway/ui';
+import { ConfirmDialog, CopyButton, SecretField } from '@open-gateway/ui';
 import { z } from 'zod';
 import { PermissionGate } from '@/components/auth/permission-gate';
 import { DataTable } from '@/components/shared/data-table';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -352,37 +342,17 @@ function RevokeClientDialog({
   const clientLabel = target ? `"${target.name}"` : t('clients.thisClient');
 
   return (
-    <AlertDialog
+    <ConfirmDialog
       open={target !== null}
-      onOpenChange={(open) => {
-        if (!revokeMutation.isPending) onOpenChange(open);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t('clients.revokeTitle')}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('clients.revokeDescription', { clientLabel })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={revokeMutation.isPending}>
-            {tCommon('cancel')}
-          </AlertDialogCancel>
-          <AlertDialogAction
-            disabled={revokeMutation.isPending}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={(event) => {
-              // Radix closes on Action click; hold it open until the request settles.
-              event.preventDefault();
-              void handleRevoke();
-            }}
-          >
-            {revokeMutation.isPending ? t('clients.revoking') : t('clients.revokeClient')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      onOpenChange={onOpenChange}
+      title={t('clients.revokeTitle')}
+      description={t('clients.revokeDescription', { clientLabel })}
+      confirmLabel={t('clients.revokeClient')}
+      pendingLabel={t('clients.revoking')}
+      cancelLabel={tCommon('cancel')}
+      isPending={revokeMutation.isPending}
+      onConfirm={handleRevoke}
+    />
   );
 }
 

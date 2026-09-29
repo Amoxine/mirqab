@@ -394,7 +394,11 @@ export function PageFilter({
             {active > 0 && <Badge variant="secondary">{active}</Badge>}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-80 space-y-3" aria-label={labels.title}>
+        <PopoverContent
+          align="start"
+          className="w-80 max-w-[calc(100vw-2rem)] space-y-3"
+          aria-label={labels.title}
+        >
           {fields.map(labelled)}
           <div className="flex justify-end">{resetButton}</div>
         </PopoverContent>

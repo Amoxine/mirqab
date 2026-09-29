@@ -15,10 +15,9 @@ import { isPipelineStale } from '@/components/analytics/pipeline-status';
 import { LatencyChart } from '@/components/analytics/latency-chart';
 import { RequestsChart } from '@/components/analytics/requests-chart';
 import { StatusCodeChart } from '@/components/analytics/status-code-chart';
-import { Badge } from '@/components/ui/badge';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
 import { KpiTile, KpiTileSkeleton } from '@/components/dashboard/kpi-tile';
-import { keyStatusVariant } from '@/components/keys/key-utils';
+import { KeyStatusBadge } from '@/components/keys/key-status-badge';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RangeControl } from '@/components/dashboard/range-control';
@@ -229,12 +228,6 @@ function apiColumns(
   ];
 }
 
-/** Same variant and label as the keys page, instead of the raw enum code. */
-function KeyStatus({ status }: { status: AnalyticsKeyRow['status'] }) {
-  const t = useTranslations('keys');
-  return <Badge variant={keyStatusVariant(status)}>{t(`status.${status}`)}</Badge>;
-}
-
 function keyColumns(
   t: ReturnType<typeof useTranslations>,
   tStatus: ReturnType<typeof useTranslations>,
@@ -246,7 +239,7 @@ function keyColumns(
       cell: (row) => <span className="font-medium">{row.name}</span>,
     },
     { header: t('table.columns.api'), cell: (row) => row.apiDefName ?? '—' },
-    { header: tStatus('status'), cell: (row) => <KeyStatus status={row.status} /> },
+    { header: tStatus('status'), cell: (row) => <KeyStatusBadge status={row.status} /> },
     { header: t('table.columns.requests'), numeric: true, cell: (row) => fmt.number(row.requests) },
     { header: t('table.columns.errors'), numeric: true, cell: (row) => fmt.number(row.errors) },
     {

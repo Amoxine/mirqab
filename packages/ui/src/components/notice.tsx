@@ -50,12 +50,13 @@ export function Notice({
   tone = 'warning',
   title,
   children,
+  icon,
   action,
   role,
   className,
 }: NoticeProps) {
   const resolved = tone ?? 'warning';
-  const Icon = ICON[resolved];
+  const Icon = icon ?? ICON[resolved];
   return (
     <div role={role} className={cn(noticeVariants({ tone }), className)}>
       <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ICON_COLOR[resolved])} aria-hidden />

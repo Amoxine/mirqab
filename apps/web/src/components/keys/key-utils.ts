@@ -128,17 +128,3 @@ export function toDate(value: number | string | null | undefined): Date | null {
   const date = new Date(typeof value === 'number' ? value * 1000 : value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
-
-/** Badge variant for a key status. */
-export function keyStatusVariant(status: string): 'default' | 'destructive' | 'secondary' | 'outline' {
-  switch (status) {
-    case 'ACTIVE':
-      return 'default';
-    case 'REVOKED':
-      return 'destructive';
-    case 'EXPIRED':
-      return 'secondary';
-    default:
-      return 'outline';
-  }
-}

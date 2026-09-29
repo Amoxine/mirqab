@@ -9,10 +9,9 @@ import { PagePermissionGate, PermissionGate } from '@/components/auth/permission
 import { DeleteKeyDialog } from '@/components/keys/delete-key-dialog';
 import { KeyCreatedDialog } from '@/components/keys/key-created-dialog';
 import { KeyFormSheet } from '@/components/keys/key-form-sheet';
-import { keyStatusVariant } from '@/components/keys/key-utils';
+import { KeyStatusBadge } from '@/components/keys/key-status-badge';
 import { RevokeKeyDialog } from '@/components/keys/revoke-key-dialog';
 import { RotateKeyDialog } from '@/components/keys/rotate-key-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -130,11 +129,7 @@ function getColumns(
     {
       accessorKey: 'status',
       header: tCommon('status'),
-      cell: ({ row }) => (
-        <Badge variant={keyStatusVariant(row.original.status)}>
-          {t(`status.${row.original.status}`)}
-        </Badge>
-      ),
+      cell: ({ row }) => <KeyStatusBadge status={row.original.status} />,
     },
     {
       accessorKey: 'apiDefName',

@@ -2,12 +2,10 @@
 
 import { Notice } from '@open-gateway/ui';
 import type { ReactNode } from 'react';
-import { AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ChartCard as BaseChartCard, ErrorState } from '@open-gateway/ui';
 import { dateFnsLocale } from '@/lib/date-fns-locale';
 import { cn } from '@/lib/utils';
 import type { Locale } from '@/i18n/locales';
@@ -47,13 +45,21 @@ const BUCKET_FORMATS = {
   dayTime: { month: 'short', day: 'numeric', ...time },
 } as const satisfies Record<string, Intl.DateTimeFormatOptions>;
 const utcFormat = (kind: keyof typeof BUCKET_FORMATS, locale: string) =>
-  cached(`d:${kind}:${locale}`, () => new Intl.DateTimeFormat(locale, { ...BUCKET_FORMATS[kind], timeZone: 'UTC' }));
+  cached(
+    `d:${kind}:${locale}`,
+    () => new Intl.DateTimeFormat(locale, { ...BUCKET_FORMATS[kind], timeZone: 'UTC' }),
+  );
 
 /**
  * Time-axis label (UTC) for a bucket start. Buckets are minutes (`1h`), hours (`24h`, `7d`) or days (`30d`);
  * `long` is the tooltip variant.
  */
-export function formatBucket(bucket: string, range: AnalyticsRange, long = false, locale = 'en'): string {
+export function formatBucket(
+  bucket: string,
+  range: AnalyticsRange,
+  long = false,
+  locale = 'en',
+): string {
   const date = new Date(bucket);
   if (Number.isNaN(date.getTime())) return bucket;
   if (range === '30d') return utcFormat(long ? 'dayYear' : 'day', locale).format(date);
@@ -90,7 +96,8 @@ const lastRecordLabel = (
 // that file is owned by another workstream, so the English copy isn't sourced from it directly.
 function pipelineHintKey(health: AnalyticsHealth): string {
   if (!health.pumpReachable) return 'emptyState.hintPumpDown';
-  if (!health.rawTablePresent || !health.aggregateTablePresent) return 'emptyState.hintTablesMissing';
+  if (!health.rawTablePresent || !health.aggregateTablePresent)
+    return 'emptyState.hintTablesMissing';
   return 'emptyState.hintNoTraffic';
 }
 
@@ -113,19 +120,27 @@ export function AnalyticsEmptyState({ health, description, className }: Analytic
         className,
       )}
     >
-      <BarChart3 className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-      <p className="text-sm font-medium">{notReady ? t('emptyState.pipelineNotReady') : t('emptyState.noDataTitle')}</p>
-      <p className="max-w-md text-sm text-muted-foreground">
-        {notReady ? t(pipelineHintKey(health)) : description ?? t('emptyState.defaultDescription')}
+      <BarChart3 className="text-muted-foreground h-8 w-8" aria-hidden="true" />
+      <p className="text-sm font-medium">
+        {notReady ? t('emptyState.pipelineNotReady') : t('emptyState.noDataTitle')}
+      </p>
+      <p className="text-muted-foreground max-w-md text-sm">
+        {notReady
+          ? t(pipelineHintKey(health))
+          : (description ?? t('emptyState.defaultDescription'))}
       </p>
       {notReady && (
-        <dl className="mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-start text-xs text-muted-foreground">
+        <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-start text-xs">
           <dt>{t('emptyState.pump')}</dt>
-          <dd>{health.pumpReachable ? t('emptyState.pumpRunning') : t('emptyState.pumpNotRunning')}</dd>
+          <dd>
+            {health.pumpReachable ? t('emptyState.pumpRunning') : t('emptyState.pumpNotRunning')}
+          </dd>
           <dt>{t('emptyState.rawTable')}</dt>
           <dd>{health.rawTablePresent ? t('emptyState.present') : t('emptyState.missing')}</dd>
           <dt>{t('emptyState.aggregateTable')}</dt>
-          <dd>{health.aggregateTablePresent ? t('emptyState.present') : t('emptyState.missing')}</dd>
+          <dd>
+            {health.aggregateTablePresent ? t('emptyState.present') : t('emptyState.missing')}
+          </dd>
           <dt>{t('emptyState.rowsRecorded')}</dt>
           <dd>
             <FormattedNumber value={health.rowCount} />
@@ -159,21 +174,13 @@ export function AnalyticsErrorState({ message, onRetry, className }: AnalyticsEr
   const t = useTranslations('analytics');
   const tCommon = useTranslations('common');
   return (
-    <div
-      role="alert"
-      className={cn(
-        'flex h-full min-h-40 flex-col items-center justify-center gap-2 px-4 py-6 text-center',
-        className,
-      )}
-    >
-      <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
-      <p className="text-sm font-medium">{t('errorState.title')}</p>
-      <p className="max-w-md text-sm text-muted-foreground">{message}</p>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        <RefreshCw className="h-4 w-4" aria-hidden="true" />
-        {tCommon('retry')}
-      </Button>
-    </div>
+    <ErrorState
+      title={t('errorState.title')}
+      message={message}
+      retryLabel={tCommon('retry')}
+      onRetry={onRetry}
+      className={className}
+    />
   );
 }
 
@@ -191,7 +198,7 @@ interface ChartCardProps {
   children: ReactNode;
 }
 
-/** A card whose body is never an empty canvas: skeleton while loading, retryable error, empty state, or the chart. */
+/** A chart card whose loading / error / empty states are the analytics ones (translated, with retry). */
 export function ChartCard({
   title,
   description,
@@ -202,25 +209,19 @@ export function ChartCard({
   emptyMessage,
   children,
 }: ChartCardProps) {
-  // The chart is an image to assistive tech; the API/key tables below carry the same data as text.
-  let body: ReactNode = (
-    <div role="img" aria-label={`${title}. ${description}`} className="h-full">
-      {children}
-    </div>
-  );
-  if (isLoading) body = <Skeleton className="h-full w-full" />;
-  else if (error) body = <AnalyticsErrorState message={error.message} onRetry={onRetry} />;
-  else if (isEmpty) body = <AnalyticsEmptyState description={emptyMessage} />;
-
+  const status = isLoading ? 'loading' : error ? 'error' : isEmpty ? 'empty' : 'ready';
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className={CHART_HEIGHT_CLASS}>{body}</div>
-      </CardContent>
-    </Card>
+    <BaseChartCard
+      title={title}
+      description={description}
+      status={status}
+      heightClass={CHART_HEIGHT_CLASS}
+      errorContent={
+        error ? <AnalyticsErrorState message={error.message} onRetry={onRetry} /> : null
+      }
+      emptyContent={<AnalyticsEmptyState description={emptyMessage} />}
+    >
+      {children}
+    </BaseChartCard>
   );
 }

@@ -41,7 +41,7 @@ flowchart LR
 |---|---|---|
 | Dashboard and developer portal | `apps/web` | [web-app.md](web-app.md) |
 | REST API (20 NestJS modules) | `apps/api` | [identity and commerce](api-identity-and-commerce.md), [gateway and analytics](api-gateway-and-analytics.md) |
-| Shared UI (Button, Card, Table, Progress, ToggleGroup, WorldMap) | `packages/ui` | [packages.md](packages.md) |
+| Shared UI (shadcn primitives, `PageFilter`, `DataTable`, dialogs, KPI/chart pieces, `WorldMap`) | `packages/ui` | [packages.md](packages.md) |
 | Prisma schema, migrations, seed | `packages/database` | [packages.md](packages.md) |
 | Shared types, lint/format/tsconfig bases | `packages/types`, `packages/config` | [packages.md](packages.md) |
 | Container stack (31 compose services), edge, Ory, pump, observability | `infra/` | [infrastructure.md](infrastructure.md) |
@@ -54,7 +54,8 @@ flowchart LR
 - **Session cookies.** `mq_access_token` and `mq_refresh_token` (prefixed so they cannot collide with another app on `localhost`, since browsers share cookies across ports). Set by `apps/web`; the API reads the access cookie or a Bearer header.
 - **Response envelope.** `{ success: true, data }` / `{ success: false, error }`; the web `api-client` unwraps it and retries once after `POST /oauth2/refresh` on a 401.
 - **Build-time public config.** `NEXT_PUBLIC_*` values (including `NEXT_PUBLIC_GATEWAY_NODE_LOCATIONS`, which places nodes on the dashboard map) are baked into the web image at build time — change them, rebuild the image.
-- **Design system.** shadcn components only; shared ones live in `packages/ui` and `apps/web/src/components/ui/*` re-exports them.
+- **Design system.** shadcn components only; shared ones live in `packages/ui` and `apps/web/src/components/ui/*` re-exports or wraps them.
+- **Reuse-first rule.** Generic UI belongs in `packages/ui` as a prop-driven component: labels, links, locale and data come in as props, and the package imports no `next-intl`, `next/*`, `@tanstack/react-query` or `apps/web` code. The app keeps only a thin adapter for i18n, routing or data hooks (list: [packages.md](packages.md#the-adapter-pattern)). Before writing any control, check the export index in [packages.md](packages.md); before adding a second copy of a pattern, extract it.
 
 ## Known documentation drift
 
@@ -91,11 +92,27 @@ Recorded by the documentation pass so they are not lost. Each is described in th
 | Cookies | ~~Session cookies were not `Secure` on the default stack~~ — **fixed**: compose now passes `COOKIE_SECURE` (default `true`) to `web`, which sets the cookies; takes effect on the next container recreate |
 | Edge | Coraza WAF runs in `DetectionOnly` |
 | Installer | Final health probe uses `http://` on HTTPS ports; still writes the unused `TYK_ORG_ID`; `infra/gateway/tyk.conf` is an empty directory |
-| Packages | `packages/types` enums are stale against Prisma (`ApiStatus` lacks `RETIRED`, `AuditAction` misses ~13 values); `packages/ui/package.json` declares Radix packages nothing imports; `packages/config` eslint/prettier bases have no importer |
+| Packages | `packages/types` enums are stale against Prisma (`ApiStatus` lacks `RETIRED`, `AuditAction` misses ~13 values); `packages/ui/package.json` declares `@radix-ui/react-separator`, which nothing imports; `packages/config` eslint/prettier bases have no importer |
 | Dead config | `JWT_SECRET` (still required by compose), `TYK_ORG_ID`, `LOG_LEVEL`, `NEXT_PUBLIC_ENABLE_ANALYTICS`, `NEXT_PUBLIC_ENABLE_WEBSOCKETS`, `TenantSlugGuard`, `TenantService.findOneBySlug` |
+
+## Known follow-ups (UI reuse)
+
+Gaps noticed while documenting the expanded `packages/ui`; none is a bug. Details in [web-app.md](web-app.md) and [packages.md](packages.md).
+
+| Area | Gap |
+|---|---|
+| Form sheets | Six `*-form-sheet.tsx` (`apis/api-form-sheet.tsx`, `keys/key-form-sheet.tsx`, `plans/plan-form-sheet.tsx`, `products/product-form-sheet.tsx`, `roles/role-form-sheet.tsx`, `tenants/tenant-form-sheet.tsx`) repeat the same header / footer boilerplate; a generic `FormSheet` is not extracted (the duplication is reported by the maintainers; the six files were not diffed here, unverified) |
+| Layout chrome | `components/layout/breadcrumb.tsx`, `theme-switcher.tsx` and `locale-switcher.tsx` are app-only (next-intl / next-themes / route logic inline) and not generic in the package |
+| Confirmations | Five places still hand-build an `AlertDialog` instead of `ConfirmDialog`: `apis/clients-tab.tsx`, `apis/endpoints/endpoints-tab.tsx`, `apis/spec-source/spec-source-card.tsx`, `tenants/tenant-status-dialog.tsx`, `app/portal/applications/[id]/page.tsx` |
+| Range picker | The traffic page builds its range chips inside `PageFilter` (`traffic-filter-bar.tsx`) with the same `ANALYTICS_RANGES` mapping that `RangeControl` has; two copies of the labels/tooltips mapping |
+| `Notice` | `NoticeProps.icon` is declared but ignored by the component |
+| Default strings | `DialogContent` / `SheetContent` default `closeLabel` to the English `Close`; only the app wrappers and `RevealDialog` callers pass a translated one |
+| Package deps | `@radix-ui/react-separator` is declared in `packages/ui/package.json` and imported nowhere (verified); `@tanstack/react-table` is both a peer and a devDependency (intended) |
+| Boundary check | The "no `next-intl` / `next/*` / `react-query` / `apps/web`" rule for `packages/ui` is upheld today (grep) but no lint rule enforces it (unverified for root ESLint config) |
+| Stale doc | `packages/ui/components.json` still points shadcn at `@ui/components/ui` although components sit flat in `src/components/` |
 
 ## Keeping this current
 
 - Add a route, module, component or variable → update its reference page in the same change.
 - A line marked **unverified** should be confirmed and unmarked, not repeated elsewhere as fact.
-- New tenant-scoped code must follow the tenancy rule above; new UI must use shadcn components from `packages/ui`.
+- New tenant-scoped code must follow the tenancy rule above; new UI must follow the reuse-first rule above and use shadcn components from `packages/ui`.

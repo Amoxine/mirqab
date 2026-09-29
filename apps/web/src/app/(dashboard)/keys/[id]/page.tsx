@@ -10,10 +10,10 @@ import { DeleteKeyDialog } from '@/components/keys/delete-key-dialog';
 import { KeyCreatedDialog } from '@/components/keys/key-created-dialog';
 import { KeyFormSheet } from '@/components/keys/key-form-sheet';
 import { KeyUsageCard } from '@/components/keys/key-usage-card';
-import { QUOTA_PERIODS, formatQuotaPeriod, formatRate, keyStatusVariant, toDate } from '@/components/keys/key-utils';
+import { KeyStatusBadge } from '@/components/keys/key-status-badge';
+import { QUOTA_PERIODS, formatQuotaPeriod, formatRate, toDate } from '@/components/keys/key-utils';
 import { RevokeKeyDialog } from '@/components/keys/revoke-key-dialog';
 import { RotateKeyDialog } from '@/components/keys/rotate-key-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -92,7 +92,7 @@ function KeyDetailPage() {
       <PageHeader
         back={{ href: '/keys', label: t('detail.backToKeys') }}
         title={key.name}
-        badges={<Badge variant={keyStatusVariant(key.status)}>{t(`status.${key.status}`)}</Badge>}
+        badges={<KeyStatusBadge status={key.status} />}
         description={t('detail.description')}
         actions={
           <>
