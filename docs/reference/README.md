@@ -79,8 +79,8 @@ Recorded by the documentation pass so they are not lost. Each is described in th
 
 | Area | Issue |
 |---|---|
-| Analytics export | `GET /analytics/export` writes 6 header columns but 7 values per row (`apiid` and `api_name`), so rows are shifted against the header |
-| Webhooks | `GET /apis/:id` returns `oasDocument`; for webhook-enabled APIs it carries the platform-wide `TYK_WEBHOOK_RELAY_SECRET`, readable by anyone with `api:read` |
+| Analytics export | ~~header had 6 columns for 7 values per row~~ — **fixed**: header now includes `API ID` (test asserts equal widths) |
+| Webhooks | ~~`GET /apis/:id` exposed `TYK_WEBHOOK_RELAY_SECRET` inside `oasDocument`~~ — **fixed**: blanked (`[redacted]`) in every `ApiDetail` response by `redactRelaySecret`; the stored copy is unchanged. Rotate the secret if it may already have been read |
 | API delete | `ApiService.remove()` ignores per-node results unless all fail, leaving an orphan on a failed node that reconcile cannot see |
 | MCP | `POST /mcps/:id/sync` nests `syncStatus` under `data`, so a failed sync is audited as `SYNC_SUCCEEDED`; reconcile skips MCP servers |
 | Reconcile / reload | Reconcile only detects drift, never repairs; a failed reload still counts the node as `ok: true` |
@@ -88,7 +88,7 @@ Recorded by the documentation pass so they are not lost. Each is described in th
 | Tenants | `PATCH /tenants/:id` validates the slug but does not persist it |
 | Quotas | `POST /quotas/meter` meters every tenant, not just the caller's |
 | Portal | Any Kratos failure on register is reported as 409 "account already exists"; portal actions write no audit rows |
-| Cookies | Session cookies are not `Secure` on the default stack (`COOKIE_SECURE` reaches `api`, which ignores it, not `web`) |
+| Cookies | ~~Session cookies were not `Secure` on the default stack~~ — **fixed**: compose now passes `COOKIE_SECURE` (default `true`) to `web`, which sets the cookies; takes effect on the next container recreate |
 | Edge | Coraza WAF runs in `DetectionOnly` |
 | Installer | Final health probe uses `http://` on HTTPS ports; still writes the unused `TYK_ORG_ID`; `infra/gateway/tyk.conf` is an empty directory |
 | Packages | `packages/types` enums are stale against Prisma (`ApiStatus` lacks `RETIRED`, `AuditAction` misses ~13 values); `packages/ui/package.json` declares Radix packages nothing imports; `packages/config` eslint/prettier bases have no importer |

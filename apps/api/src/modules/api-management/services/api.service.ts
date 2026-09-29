@@ -38,6 +38,7 @@ import {
   readConfig,
   type ApiVersionChild,
 } from './tyk-mappers';
+import { redactRelaySecret } from '../../webhooks/webhook-relay.constants';
 import type { NodeOutcome, TykDebugResult } from '../../tyk-integration/services/tyk-client.service';
 import type { DebugRequestDto } from '../dto/debug-request.dto';
 import { ReconcileService, type SyncState } from './reconcile.service';
@@ -280,7 +281,8 @@ function toApiDetail(row: ApiRow): ApiDetail {
     lastSyncedAt: row.lastSyncedAt,
     healthStatus: row.healthStatus,
     config: readConfig(row.config),
-    oasDocument: row.oasDocument,
+    // The stored document carries the webhook relay secret; the copy sent to clients does not.
+    oasDocument: redactRelaySecret(row.oasDocument),
     keyCount: row._count.apiKeys,
     parentApiId: row.parentApiId,
     versionName: row.versionName,

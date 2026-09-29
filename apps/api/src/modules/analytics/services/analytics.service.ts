@@ -48,7 +48,8 @@ const CACHE_TTL_SECONDS = 60;
 const EXPORT_BATCH_SIZE = 1000;
 export const ANALYTICS_EXPORT_MAX_ROWS = 50_000;
 
-const EXPORT_CSV_HEADER = ['Timestamp', 'API', 'Method', 'Path', 'Status', 'Latency (ms)'];
+// One column per value `exportRowsQuery`'s rows are written with below (the Tyk API id AND its name).
+const EXPORT_CSV_HEADER = ['Timestamp', 'API ID', 'API', 'Method', 'Path', 'Status', 'Latency (ms)'];
 
 /** Order of the status-code breakdown; `2xx` comes from `counter_success` (spec §0.7). */
 const STATUS_CODE_ORDER: { code: string; column: keyof StatusCodeRow }[] = [

@@ -1037,6 +1037,11 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: development
+      # The session cookies (`mq_access_token` / `mq_refresh_token`) are set by THIS service, not the
+      # api, so this is where `Secure` is decided (lib/oauth-cookies.ts). NODE_ENV=development would
+      # otherwise leave them without it even though the edge is HTTPS-only. Set COOKIE_SECURE=false
+      # in infra/.env only if you deliberately reach the app over plain HTTP.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       NEXT_PUBLIC_API_URL: https://localhost:33001/api
       # The app's own public origin — read server-side only (hydra-admin.ts), so it's a plain
       # runtime var, not NEXT_PUBLIC_*. Load-bearing for the open-redirect fix's origin check

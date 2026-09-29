@@ -504,7 +504,9 @@ describe('AnalyticsService', () => {
 
       await service.streamExportCsv(TENANT, AnalyticsRange.ONE_DAY, res as never);
 
-      expect(res.chunks).toEqual(['"Timestamp","API","Method","Path","Status","Latency (ms)"\r\n']);
+      expect(res.chunks).toEqual([
+        '"Timestamp","API ID","API","Method","Path","Status","Latency (ms)"\r\n',
+      ]);
       expect(res.end).toHaveBeenCalledTimes(1);
     });
 
@@ -528,6 +530,28 @@ describe('AnalyticsService', () => {
       expect(res.chunks[1]).toContain('"2026-09-01T00:00:00.000Z","api-a","Orders","GET","/orders","200","42"');
       expect(res.chunks[0]).not.toContain('rawrequest');
       expect(res.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes exactly as many values per row as the header has columns (they were once shifted)', async () => {
+      prisma.apiDefinition.findMany.mockResolvedValue([{ tykApiId: 'api-a' }]);
+      prisma.$queryRaw.mockResolvedValueOnce([
+        {
+          ts: new Date('2026-09-01T00:00:00.000Z'),
+          apiid: 'api-a',
+          api_name: 'Orders',
+          method: 'GET',
+          path: '/orders',
+          responsecode: 200n,
+          latency_total: 42n,
+        },
+      ]);
+      const res = makeRes();
+
+      await service.streamExportCsv(TENANT, AnalyticsRange.ONE_DAY, res as never);
+
+      // None of these values contain a comma, so splitting on it counts columns.
+      const columns = (line: string) => line.trim().split(',').length;
+      expect(columns(res.chunks[1] as string)).toBe(columns(res.chunks[0] as string));
     });
   });
 

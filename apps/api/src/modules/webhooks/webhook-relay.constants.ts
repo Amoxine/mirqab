@@ -40,6 +40,46 @@ export function webhookRelayUrl(apiId: string): string {
   return `http://api:4000/api/webhooks/relay/${apiId}`;
 }
 
+/** What replaces the relay secret in anything returned to a client. */
+export const REDACTED = '[redacted]';
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The stored `oasDocument` is exactly what was sent to Tyk, which includes the platform-wide relay
+ * secret in every event handler's headers. Anyone with `api:read` gets that document, and holding
+ * the secret lets them forge Tyk events at the public `@Public()` relay endpoint — so the copy that
+ * leaves the API has the value blanked. The stored row is untouched (drift compares against it).
+ * Returns a copy; the input is never mutated.
+ */
+export function redactRelaySecret<T>(doc: T): T {
+  if (!isRecord(doc)) return doc;
+  const ext = doc['x-tyk-api-gateway'];
+  if (!isRecord(ext)) return doc;
+  const server = ext.server;
+  if (!isRecord(server)) return doc;
+  const handlers = server.eventHandlers;
+  if (!Array.isArray(handlers)) return doc;
+
+  const redacted = handlers.map((handler: unknown) => {
+    if (!isRecord(handler) || !Array.isArray(handler.headers)) return handler;
+    return {
+      ...handler,
+      headers: handler.headers.map((header: unknown) =>
+        isRecord(header) &&
+        String(header.name).toLowerCase() === WEBHOOK_RELAY_SECRET_HEADER.toLowerCase()
+          ? { ...header, value: REDACTED }
+          : header,
+      ),
+    };
+  });
+  return {
+    ...doc,
+    'x-tyk-api-gateway': { ...ext, server: { ...server, eventHandlers: redacted } },
+  } as T;
+}
+
 /**
  * `x-tyk-api-gateway.server.eventHandlers` entries (S1's verified shape, `X-Tyk-Webhook-Without-ID`)
  * for one API. Called from `mapToTykOas` whenever `ApiDefinition.webhooksEnabled` is true.
