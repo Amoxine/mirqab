@@ -113,6 +113,19 @@ describe('PageFilter (card)', () => {
     expect(input.value).toBe('from-url');
   });
 
+  it('Reset discards an uncommitted draft instead of re-applying it later', () => {
+    vi.useFakeTimers();
+    const { onChange, onReset } = setup([query, from], { from: '2026-09-01' });
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+    expect(onReset).toHaveBeenCalledTimes(1);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText<HTMLInputElement>('Search').value).toBe('');
+  });
+
   it('fires on every keystroke when debounceMs is 0 (client-side filtering)', () => {
     const { onChange } = setup([{ ...query, debounceMs: 0 }], {});
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'a' } });
@@ -182,5 +195,13 @@ describe('PageFilter (popover)', () => {
     fireEvent.click(trigger);
     expect(screen.getByLabelText('Search')).toBeTruthy();
     expect(screen.getByLabelText('From')).toBeTruthy();
+  });
+
+  it('commits a typed-but-pending search when the popover closes', () => {
+    const { onChange } = setup([query], {}, 'popover');
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'abc' } });
+    fireEvent.keyDown(screen.getByLabelText('Search'), { key: 'Escape' });
+    expect(onChange).toHaveBeenCalledWith({ q: 'abc' });
   });
 });

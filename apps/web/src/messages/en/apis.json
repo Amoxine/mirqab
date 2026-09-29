@@ -8,8 +8,7 @@
   },
   "filters": {
     "statusLabel": "Filter by status",
-    "syncLabel": "Filter by sync status",
-    "syncPlaceholder": "Filter by sync"
+    "syncLabel": "Filter by sync status"
   },
   "status": {
     "all": "All statuses",
@@ -95,13 +94,6 @@
     "path": "Path",
     "status": "Status",
     "view": "View",
-    "rangeLabel": "Filter by time range",
-    "ranges": {
-      "1h": "Last hour",
-      "24h": "Last 24 hours",
-      "7d": "Last 7 days",
-      "30d": "Last 30 days"
-    },
     "pageLabel": "Page {page}",
     "detailTitle": "Captured request",
     "redactionNote": "Secrets are hidden by name: values of headers, query and form parameters, and JSON fields whose names look like credentials (tokens, passwords, keys, cookies) show as [REDACTED]. Some harmless fields with similar names may be hidden too. Multipart bodies and JSON embedded inside a string are shown as captured. A stray quote earlier in a non-JSON body can also throw off matching further in, so a later secret-looking field there may not be hidden.",

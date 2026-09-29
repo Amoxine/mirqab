@@ -294,10 +294,7 @@ function WizardBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
           </Tabs>
 
           {previewError && (
-            <div role="alert" className="flex gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-              <ApiErrorText {...previewError} />
-            </div>
+            <Notice tone="destructive" role="alert"><ApiErrorText {...previewError} /></Notice>
           )}
 
           {preview && (

@@ -103,9 +103,6 @@ Gaps noticed while documenting the expanded `packages/ui`; none is a bug. Detail
 |---|---|
 | Form sheets | Six `*-form-sheet.tsx` (`apis/api-form-sheet.tsx`, `keys/key-form-sheet.tsx`, `plans/plan-form-sheet.tsx`, `products/product-form-sheet.tsx`, `roles/role-form-sheet.tsx`, `tenants/tenant-form-sheet.tsx`) repeat the same header / footer boilerplate; a generic `FormSheet` is not extracted (the duplication is reported by the maintainers; the six files were not diffed here, unverified) |
 | Layout chrome | `components/layout/breadcrumb.tsx`, `theme-switcher.tsx` and `locale-switcher.tsx` are app-only (next-intl / next-themes / route logic inline) and not generic in the package |
-| Confirmations | Five places still hand-build an `AlertDialog` instead of `ConfirmDialog`: `apis/clients-tab.tsx`, `apis/endpoints/endpoints-tab.tsx`, `apis/spec-source/spec-source-card.tsx`, `tenants/tenant-status-dialog.tsx`, `app/portal/applications/[id]/page.tsx` |
-| Range picker | The traffic page builds its range chips inside `PageFilter` (`traffic-filter-bar.tsx`) with the same `ANALYTICS_RANGES` mapping that `RangeControl` has; two copies of the labels/tooltips mapping |
-| `Notice` | `NoticeProps.icon` is declared but ignored by the component |
 | Default strings | `DialogContent` / `SheetContent` default `closeLabel` to the English `Close`; only the app wrappers and `RevealDialog` callers pass a translated one |
 | Package deps | `@radix-ui/react-separator` is declared in `packages/ui/package.json` and imported nowhere (verified); `@tanstack/react-table` is both a peer and a devDependency (intended) |
 | Boundary check | The "no `next-intl` / `next/*` / `react-query` / `apps/web`" rule for `packages/ui` is upheld today (grep) but no lint rule enforces it (unverified for root ESLint config) |

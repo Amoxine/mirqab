@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-const noticeVariants = cva('flex items-start gap-2 rounded-md border p-3 text-sm', {
+const noticeVariants = cva('flex flex-wrap items-start gap-2 rounded-md border p-3 text-sm sm:flex-nowrap', {
   variants: {
     tone: {
       warning: 'border-warning/50 bg-warning/10',
@@ -60,7 +60,7 @@ export function Notice({
   return (
     <div role={role} className={cn(noticeVariants({ tone }), className)}>
       <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ICON_COLOR[resolved])} aria-hidden />
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="min-w-0 flex-1 basis-40 space-y-1">
         {title && <p className="font-medium">{title}</p>}
         {children && <div className={title ? 'text-muted-foreground' : undefined}>{children}</div>}
       </div>

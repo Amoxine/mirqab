@@ -198,6 +198,7 @@ export function SpecSourceCard({ apiId, canUpdate }: { apiId: string; canUpdate:
 
       <SpecSourceSheet apiId={apiId} source={source} open={editOpen} onOpenChange={setEditOpen} />
       <ConfirmDialog
+        buttonClassName="min-h-11"
         tone="default"
         open={confirmRemove}
         onOpenChange={setConfirmRemove}

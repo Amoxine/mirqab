@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { cn } from '../lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,8 @@ export interface ConfirmDialogProps {
   onConfirm: () => void | Promise<void>;
   /** `destructive` for delete / revoke / remove; `default` for a confirmation that is not irreversible. */
   tone?: 'destructive' | 'default';
+  /** Extra classes for both footer buttons (e.g. a larger touch target). */
+  buttonClassName?: string;
   /** Extra body content under the description (a checkbox, a warning). */
   children?: ReactNode;
 }
@@ -47,6 +50,7 @@ export function ConfirmDialog({
   isPending = false,
   onConfirm,
   tone = 'destructive',
+  buttonClassName,
   children,
 }: ConfirmDialogProps) {
   return (
@@ -63,14 +67,15 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         {children}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending} className={buttonClassName}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isPending}
-            className={
-              tone === 'destructive'
-                ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                : undefined
-            }
+            aria-busy={isPending || undefined}
+            className={cn(
+              tone === 'destructive' &&
+                'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+              buttonClassName,
+            )}
             onClick={(event) => {
               event.preventDefault();
               void onConfirm();

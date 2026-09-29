@@ -125,6 +125,8 @@ export interface PageFilterProps {
 /** Radix Select forbids an empty item value, so "no filter" is this internal sentinel. */
 const ALL = '__all__';
 const DEFAULT_DEBOUNCE_MS = 350;
+const LABEL_CLASS =
+  'text-muted-foreground font-mono text-[0.66rem] font-normal uppercase tracking-[0.08em]';
 
 const isEmpty = (value: FilterValue): boolean => value === undefined || value === '';
 
@@ -140,10 +142,15 @@ export function countActiveFilters(fields: FilterField[], values: FilterValues):
  * changes underneath it (browser back, Reset). Committing on every keystroke would refetch per key.
  * A delay of 0 commits on every keystroke instead — right when filtering happens client-side.
  */
+/** Set by Reset for one render so the controls it remounts drop their draft instead of flushing it. */
+const discardDrafts = { current: false };
+
 function useDebouncedDraft(value: string, commit: (draft: string) => void, delayMs: number) {
   const [draft, setDraft] = React.useState(value);
   const commitRef = React.useRef(commit);
   commitRef.current = commit;
+  const pendingRef = React.useRef({ draft: value, value });
+  pendingRef.current = { draft, value };
 
   React.useEffect(() => {
     setDraft(value);
@@ -158,6 +165,15 @@ function useDebouncedDraft(value: string, commit: (draft: string) => void, delay
       window.clearTimeout(id);
     };
   }, [draft, value, delayMs]);
+
+  // Closing a popover unmounts the control: flush what was typed instead of dropping it.
+  React.useEffect(
+    () => () => {
+      const { draft: last, value: current } = pendingRef.current;
+      if (!discardDrafts.current && delayMs > 0 && last !== current) commitRef.current(last);
+    },
+    [delayMs],
+  );
 
   const update = (next: string) => {
     setDraft(next);
@@ -325,11 +341,21 @@ export function PageFilter({
   className,
 }: PageFilterProps) {
   const baseId = React.useId();
+  // Bumped by Reset so controls holding an uncommitted draft remount empty.
+  const [resetCount, setResetCount] = React.useState(0);
+  React.useEffect(() => {
+    discardDrafts.current = false;
+  }, [resetCount]);
   const active = countActiveFilters(fields, values);
   const idOf = (field: FilterField) => `${baseId}-${field.key}`;
 
   const resetButton = (
-    <Button type="button" variant="outline" size="sm" disabled={active === 0} onClick={onReset}>
+    <Button type="button" variant="outline" size="sm" disabled={active === 0} onClick={() => {
+        discardDrafts.current = true;
+        setResetCount((n) => n + 1);
+        onReset();
+      }}
+    >
       <FilterX aria-hidden="true" />
       {labels.reset}
     </Button>
@@ -342,6 +368,7 @@ export function PageFilter({
 
   const control = (field: FilterField, compact: boolean) => (
     <FieldControl
+      key={resetCount}
       field={field}
       id={idOf(field)}
       value={values[field.key]}
@@ -353,12 +380,13 @@ export function PageFilter({
   // A visible, real <label> above each control (card and popover).
   const labelled = (field: FilterField) => (
     <div key={field.key} className="min-w-0 space-y-1">
-      <Label
-        htmlFor={idOf(field)}
-        className="text-muted-foreground font-mono text-[0.66rem] font-normal uppercase tracking-[0.08em]"
-      >
-        {field.label}
-      </Label>
+      {field.type === 'segmented' ? (
+        <span className={LABEL_CLASS}>{field.label}</span>
+      ) : (
+        <Label htmlFor={idOf(field)} className={LABEL_CLASS}>
+          {field.label}
+        </Label>
+      )}
       {control(field, false)}
     </div>
   );

@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -235,15 +236,9 @@ function ApiDetailView({ apiDef }: { apiDef: ApiDetail }) {
             </CardHeader>
             <CardContent className="space-y-6">
               {apiDef.syncStatus === 'FAILED' && (
-                <div
-                  role="alert"
-                  className="flex gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm"
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-                  <p className="min-w-0 break-words">
+                <Notice tone="destructive" role="alert">
                     {t('overview.syncAlert', { error: apiDef.syncError ?? t('unknownGatewayError') })}
-                  </p>
-                </div>
+                  </Notice>
               )}
               <dl className="grid gap-6 sm:grid-cols-2">
                 <Field label={tCommon('name')}>{apiDef.name}</Field>

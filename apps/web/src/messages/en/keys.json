@@ -61,13 +61,6 @@
   "usage": {
     "title": "Usage",
     "description": "Traffic for this key and its live quota.",
-    "rangeLabel": "Usage range",
-    "ranges": {
-      "1h": "Last hour",
-      "24h": "Last 24 hours",
-      "7d": "Last 7 days",
-      "30d": "Last 30 days"
-    },
     "loadFailed": "Failed to load usage.",
     "quota": "Quota",
     "quotaUsed": "{used} / {max} used",

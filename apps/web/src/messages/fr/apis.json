@@ -8,8 +8,7 @@
   },
   "filters": {
     "statusLabel": "Filtrer par statut",
-    "syncLabel": "Filtrer par statut de synchro",
-    "syncPlaceholder": "Filtrer par synchro"
+    "syncLabel": "Filtrer par statut de synchro"
   },
   "status": {
     "all": "Tous les statuts",
@@ -95,13 +94,6 @@
     "path": "Chemin",
     "status": "Statut",
     "view": "Voir",
-    "rangeLabel": "Filtrer par période",
-    "ranges": {
-      "1h": "Dernière heure",
-      "24h": "Dernières 24 heures",
-      "7d": "Derniers 7 jours",
-      "30d": "Derniers 30 jours"
-    },
     "pageLabel": "Page {page}",
     "detailTitle": "Requête capturée",
     "redactionNote": "Les secrets sont masqués selon leur nom : les valeurs des en-têtes, des paramètres de requête et de formulaire, et des champs JSON dont le nom ressemble à un identifiant (jetons, mots de passe, clés, cookies) apparaissent comme [REDACTED]. Certains champs inoffensifs au nom proche peuvent aussi être masqués. Les corps multipart et le JSON intégré dans une chaîne sont affichés tels que capturés. Un guillemet isolé plus tôt dans un corps non-JSON peut aussi perturber la détection plus loin, si bien qu'un champ à l'apparence secrète situé après peut ne pas être masqué.",

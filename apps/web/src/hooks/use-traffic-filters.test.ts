@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, parseTrafficFilters } from './use-traffic-filters';
+import { parseTrafficFilters } from './use-traffic-filters';
+
+const activeFilterCount = (filters: object) =>
+  Object.entries(filters).filter(([key, v]) => key !== 'range' && v !== undefined && v !== '').length;
 
 describe('parseTrafficFilters', () => {
   it('defaults to the last 24 hours with no filters', () => {

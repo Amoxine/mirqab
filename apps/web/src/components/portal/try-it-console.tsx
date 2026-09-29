@@ -1,10 +1,11 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
-import { AlertTriangle, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -164,10 +165,7 @@ export function TryItConsole({ api }: { api: PortalApiDoc }) {
         )}
 
         {requestError && (
-          <div role="alert" className="flex gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-            <p className="min-w-0 break-words">{requestError}</p>
-          </div>
+          <Notice tone="destructive" role="alert">{requestError}</Notice>
         )}
         {result && (
           <div className="space-y-2 rounded-md border p-3" role="status">

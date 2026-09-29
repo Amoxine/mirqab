@@ -7,7 +7,7 @@ Full reference (export index, props tables, adapter pattern, rules): [`docs/refe
 ## Import path
 
 ```tsx
-import { Button, Card, CardContent, PageFilter } from @open-gateway/ui;
+import { Button, Card, CardContent, PageFilter } from '@open-gateway/ui';
 ```
 
 `@open-gateway/ui` (resolved to `src/index.ts`) is the only public entry; there are no deep imports. The one other export is `@open-gateway/ui/styles.css`.
@@ -29,7 +29,7 @@ Everything variable comes in as a prop: labels, messages, links (`linkComponent`
 
 ## How `apps/web` wires it
 
-- `apps/web/next.config.ts`: `transpilePackages: [@open-gateway/ui, @open-gateway/types]`.
+- `apps/web/next.config.ts`: `transpilePackages: ['@open-gateway/ui', '@open-gateway/types']`.
 - `apps/web/src/styles/globals.css` imports `packages/ui/src/styles.css` (`.surface-ink`, `.ui-pulse-ring`) and adds `@source ../../../../packages/ui/src` so Tailwind scans this package for utility classes.
 
 ## Design tokens

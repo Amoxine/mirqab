@@ -294,6 +294,7 @@ Radix closes an `AlertDialog` as soon as the action is pressed; this holds it op
 | `isPending` | `boolean` | `false` | Disables both buttons. |
 | `onConfirm` | `() => void \| Promise<void>` | required | The dialog stays open; close it from here when the work settles. |
 | `tone` | `destructive` \| `default` | `destructive` | `destructive` styles the confirm button with `bg-destructive`. |
+| `buttonClassName` | string | | Extra classes for both footer buttons (e.g. `min-h-11` touch targets). The confirm button also sets `aria-busy` while pending. |
 | `children` | `ReactNode` | | Extra body under the description (a checkbox, a warning). |
 
 #### `RevealDialog` (`components/reveal-dialog.tsx`)
@@ -361,7 +362,7 @@ Generic over the status union `T extends string`.
 | `action` | `ReactNode` | | Button or link on the end side. |
 | `role` | `status` \| `alert` \| `note` | none | `alert` for a failure, `status` for something that appears on its own. |
 | `className` | `string` | | |
-| `icon` | component | | Declared in `NoticeProps` but **not destructured or used** by the component (verified: the render always uses the tone icon). Treat as a dead prop. |
+| `icon` | component | tone icon | Replaces the tone's default icon (e.g. `FileDiff` in `spec-update-banner`). |
 
 #### `PageHeader` (`components/page-header.tsx`)
 

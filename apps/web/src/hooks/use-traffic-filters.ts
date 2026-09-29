@@ -34,12 +34,6 @@ export function parseTrafficFilters(params: URLSearchParams): TrafficFilters {
 
 const isEmpty = (value: unknown): boolean => value === undefined || value === '';
 
-/** Number of filters narrowing the view (the time range always applies, so it does not count). */
-export function activeFilterCount(filters: TrafficFilters): number {
-  const { range: _range, ...rest } = filters;
-  return Object.values(rest).filter((v) => !isEmpty(v)).length;
-}
-
 /**
  * The traffic page's filters, kept in the URL so a filtered view can be shared or bookmarked and
  * survives a reload. Changing an API also clears the key filter, which only makes sense per API.

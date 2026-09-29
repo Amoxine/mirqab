@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useMediaQuery } from './use-media-query';
 
 /** Width of an element, kept current with a ResizeObserver; 0 until measured. */
 export function useElementWidth<T extends HTMLElement>() {
@@ -22,21 +23,7 @@ export function useElementWidth<T extends HTMLElement>() {
 }
 
 /** True when the OS asks for reduced motion (SMIL packets and draw-in animations are skipped). */
-export function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(mq.matches);
-    const onChange = () => {
-      setReduced(mq.matches);
-    };
-    mq.addEventListener('change', onChange);
-    return () => {
-      mq.removeEventListener('change', onChange);
-    };
-  }, []);
-  return reduced;
-}
+export const usePrefersReducedMotion = () => useMediaQuery('(prefers-reduced-motion: reduce)');
 
 /** A coordinate for SVG path strings (two decimals). */
 export const fx = (v: number): string => v.toFixed(2);

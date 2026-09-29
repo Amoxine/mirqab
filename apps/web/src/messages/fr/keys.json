@@ -61,13 +61,6 @@
   "usage": {
     "title": "Utilisation",
     "description": "Trafic de cette clé et son quota en direct.",
-    "rangeLabel": "Période d'utilisation",
-    "ranges": {
-      "1h": "Dernière heure",
-      "24h": "Dernières 24 heures",
-      "7d": "7 derniers jours",
-      "30d": "30 derniers jours"
-    },
     "loadFailed": "Impossible de charger l'utilisation.",
     "quota": "Quota",
     "quotaUsed": "{used} / {max} utilisés",
