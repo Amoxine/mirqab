@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AnalyticsService } from './services/analytics.service';
 import { AnalyticsRetentionScheduler } from './services/analytics-retention.scheduler';
 import { PumpHealthService } from './services/pump-health.service';
+import { TrafficAnalyticsService } from './services/traffic-analytics.service';
 import { TrafficInspectorService } from './services/traffic-inspector.service';
 import { AnalyticsController } from './controllers/analytics.controller';
 
@@ -11,7 +12,13 @@ import { AnalyticsController } from './controllers/analytics.controller';
  */
 @Module({
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, AnalyticsRetentionScheduler, PumpHealthService, TrafficInspectorService],
+  providers: [
+    AnalyticsService,
+    AnalyticsRetentionScheduler,
+    PumpHealthService,
+    TrafficInspectorService,
+    TrafficAnalyticsService,
+  ],
   // TrafficInspectorService: served by `GET /apis/:id/traffic` on the API controller (V1-LOG-02).
   exports: [AnalyticsService, TrafficInspectorService],
 })

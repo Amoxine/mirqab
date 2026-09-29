@@ -2,12 +2,14 @@ import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AnalyticsService } from '../services/analytics.service';
+import { TrafficAnalyticsService } from '../services/traffic-analytics.service';
 import {
   AnalyticsExportQueryDto,
   AnalyticsListQueryDto,
   AnalyticsRangeQueryDto,
   AnalyticsTimeSeriesQueryDto,
   AnalyticsTopApisQueryDto,
+  AnalyticsTrafficQueryDto,
 } from '../dto/analytics-query.dto';
 import type {
   AnalyticsApiRowResponse,
@@ -17,6 +19,7 @@ import type {
   AnalyticsStatusCodeResponse,
   AnalyticsTimeSeriesPointResponse,
   AnalyticsTopApiResponse,
+  AnalyticsTrafficResponse,
 } from '../dto/analytics-response.dto';
 import { TenantIsolationGuard } from '../../../common/guards/tenant-isolation.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
@@ -29,7 +32,10 @@ import { CurrentTenant } from '../../../common/decorators/current-tenant.decorat
 @Permissions('analytics:read')
 @Controller('analytics')
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly trafficService: TrafficAnalyticsService,
+  ) {}
 
   @Get('overview')
   @ApiOperation({ summary: 'Aggregate request/latency/error totals for the range' })
@@ -85,6 +91,20 @@ export class AnalyticsController {
     return this.analyticsService.getStatusCodes(tenantId, query.range);
   }
 
+  @Get('traffic')
+  @ApiOperation({
+    summary: 'Filtered traffic KPIs, time series and endpoint breakdowns',
+    description:
+      'Reads the raw request table so it can filter by API, key, method, status, path and latency. ' +
+      "Every filter is optional; ids that are not the caller's tenant's match nothing.",
+  })
+  async getTraffic(
+    @CurrentTenant() tenantId: string,
+    @Query() query: AnalyticsTrafficQueryDto,
+  ): Promise<AnalyticsTrafficResponse> {
+    return this.trafficService.getTraffic(tenantId, query);
+  }
+
   @Get('health')
   @ApiOperation({ summary: 'Readiness of the Tyk Pump analytics pipeline' })
   async getHealth(@CurrentTenant() tenantId: string): Promise<AnalyticsHealthResponse> {
@@ -97,7 +117,8 @@ export class AnalyticsController {
   @Permissions('analytics:export')
   @ApiOperation({
     summary: 'Export analytics as CSV',
-    description: 'Streams text/csv (never buffers the full export in memory). Only `format=csv` is supported today.',
+    description:
+      'Streams text/csv (never buffers the full export in memory). Only `format=csv` is supported today.',
   })
   async exportCsv(
     @Res() res: Response,
@@ -105,7 +126,10 @@ export class AnalyticsController {
     @Query() query: AnalyticsExportQueryDto,
   ): Promise<void> {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="analytics-${String(Date.now())}.csv"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="analytics-${String(Date.now())}.csv"`,
+    );
     await this.analyticsService.streamExportCsv(tenantId, query.range, res);
   }
 }

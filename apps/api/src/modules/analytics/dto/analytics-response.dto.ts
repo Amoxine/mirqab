@@ -83,3 +83,58 @@ export interface AnalyticsHealthResponse {
   /** Raw rows for this tenant's APIs. */
   rowCount: number;
 }
+
+export interface AnalyticsTrafficResponse {
+  range: AnalyticsRange;
+  /** Window length in seconds — what `requestsPerSecond` is averaged over. */
+  windowSeconds: number;
+  summary: {
+    requests: number;
+    requestsPerSecond: number;
+    errors: number;
+    /** 0-100, two decimals, like every other error rate. */
+    errorRate: number;
+    clientErrors: number;
+    serverErrors: number;
+    avgLatencyMs: number;
+    avgUpstreamLatencyMs: number;
+    p50LatencyMs: number;
+    p95LatencyMs: number;
+    p99LatencyMs: number;
+    /** Distinct client IPs. */
+    uniqueClients: number;
+    /** Distinct API keys seen (unauthenticated traffic excluded). */
+    uniqueKeys: number;
+    /** Share of requests with no API key, 0-100. */
+    anonymousShare: number;
+    /** Sum of request body sizes the gateway recorded (Content-Length), in bytes. */
+    bytesIn: number;
+    lastRequestAt: string | null;
+  };
+  timeseries: {
+    bucket: string;
+    requests: number;
+    errors: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+  }[];
+  /** Counts per status class, always the four classes in order. */
+  statusClasses: { class: '2xx' | '3xx' | '4xx' | '5xx'; count: number }[];
+  /** Individual status codes, most frequent first (at most 10). */
+  statusCodes: { code: number; count: number }[];
+  methods: { method: string; count: number }[];
+  /** Busiest endpoints (at most 10). */
+  topEndpoints: TrafficEndpointResponse[];
+  /** Slowest by p95 among the busiest 50 endpoints with at least 5 requests (at most 10). */
+  slowestEndpoints: TrafficEndpointResponse[];
+}
+
+export interface TrafficEndpointResponse {
+  method: string;
+  path: string;
+  requests: number;
+  errors: number;
+  errorRate: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+}

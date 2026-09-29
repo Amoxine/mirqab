@@ -1,6 +1,21 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  TRAFFIC_METHODS,
+  TRAFFIC_STATUS_CLASSES,
+  type TrafficStatusClass,
+} from '../services/traffic-query.builder';
 
 /**
  * Time window for every analytics read. A closed enum is the only thing that reaches the SQL
@@ -68,4 +83,63 @@ export class AnalyticsListQueryDto extends AnalyticsRangeQueryDto {
   @Min(1)
   @Max(MAX_LIST_LIMIT)
   limit = DEFAULT_LIST_LIMIT;
+}
+
+/** `GET /analytics/traffic` — every filter is optional and narrows the same window. */
+export class AnalyticsTrafficQueryDto extends AnalyticsRangeQueryDto {
+  @ApiPropertyOptional({ description: "Only this API (must belong to the caller's tenant)" })
+  @IsOptional()
+  @IsUUID()
+  apiId?: string;
+
+  @ApiPropertyOptional({
+    description: "Only requests made with this API key (must belong to the caller's tenant)",
+  })
+  @IsOptional()
+  @IsUUID()
+  keyId?: string;
+
+  @ApiPropertyOptional({ enum: TRAFFIC_METHODS })
+  @IsOptional()
+  @IsIn(TRAFFIC_METHODS)
+  method?: (typeof TRAFFIC_METHODS)[number];
+
+  @ApiPropertyOptional({ enum: TRAFFIC_STATUS_CLASSES })
+  @IsOptional()
+  @IsIn(TRAFFIC_STATUS_CLASSES)
+  statusClass?: TrafficStatusClass;
+
+  @ApiPropertyOptional({ minimum: 100, maximum: 599, description: 'An exact status code' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(100)
+  @Max(599)
+  status?: number;
+
+  @ApiPropertyOptional({
+    maxLength: 200,
+    description: 'Substring of the request path, case-insensitive',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  path?: string;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 600_000,
+    description: 'Only requests at least this slow',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(600_000)
+  minLatencyMs?: number;
+
+  @ApiPropertyOptional({ enum: ['authenticated', 'anonymous'] })
+  @IsOptional()
+  @IsIn(['authenticated', 'anonymous'])
+  auth?: 'authenticated' | 'anonymous';
 }
