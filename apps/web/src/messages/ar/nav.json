@@ -12,5 +12,12 @@
   "collapseSidebar": "طي الشريط الجانبي",
   "brand": "MIRQAB",
   "brandShort": "OG",
-  "brandCaption": "مستوى التحكم في البوابة"
+  "brandCaption": "مستوى التحكم في البوابة",
+  "groups": {
+    "workspace": "مساحة العمل",
+    "manage": "الإدارة",
+    "trust": "الثقة والعمليات"
+  },
+  "help": "المساعدة والاختصارات",
+  "traffic": "الحركة"
 }

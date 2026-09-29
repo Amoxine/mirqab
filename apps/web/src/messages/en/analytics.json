@@ -125,5 +125,88 @@
       "SYNC_FAILED": "Sync Failed",
       "SPEC_UPDATE_DETECTED": "Spec Update Detected"
     }
+  },
+  "traffic": {
+    "title": "Traffic",
+    "subtitle": "Filter live gateway traffic by API, key, method, status, path and latency.",
+    "filters": {
+      "title": "Traffic filters",
+      "api": "API",
+      "allApis": "All APIs",
+      "key": "API key",
+      "allKeys": "All keys",
+      "method": "Method",
+      "allMethods": "All methods",
+      "statusClass": "Status class",
+      "allStatuses": "All statuses",
+      "statusCode": "Exact status",
+      "statusCodePlaceholder": "e.g. 429",
+      "path": "Path contains",
+      "pathPlaceholder": "/v1/orders",
+      "auth": "Authentication",
+      "allTraffic": "All traffic",
+      "authenticated": "With an API key",
+      "anonymous": "Without a key",
+      "minLatency": "Latency",
+      "anyLatency": "Any latency",
+      "slowerThan": "Slower than {ms} ms",
+      "reset": "Reset filters",
+      "active": "{count, plural, one {# filter} other {# filters}} active"
+    },
+    "statusClasses": {
+      "2xx": "Success (2xx)",
+      "3xx": "Redirect (3xx)",
+      "4xx": "Client error (4xx)",
+      "5xx": "Server error (5xx)"
+    },
+    "kpis": {
+      "requests": "Requests",
+      "lastRequest": "Last {when}",
+      "noRequests": "No requests match",
+      "throughput": "Throughput",
+      "perSecond": "requests / second",
+      "errorRate": "Error rate",
+      "errorSplit": "{client} client · {server} server",
+      "avgLatency": "Avg latency",
+      "upstream": "upstream {value}",
+      "p95": "P95 latency",
+      "p50": "median {value}",
+      "p99": "P99 latency",
+      "slowestOnePercent": "slowest 1% of requests",
+      "clients": "Clients",
+      "clientsHint": "{keys} keys · {share} anonymous",
+      "dataIn": "Data received",
+      "dataInHint": "request bodies"
+    },
+    "charts": {
+      "volume": "Requests over time",
+      "volumeDescription": "Requests and errors per interval",
+      "latency": "Latency over time",
+      "latencyDescription": "Average and 95th percentile per interval",
+      "requests": "Requests",
+      "errors": "Errors",
+      "avg": "Average",
+      "p95": "P95",
+      "empty": "No requests match these filters."
+    },
+    "mix": {
+      "title": "Traffic mix",
+      "empty": "No requests match these filters.",
+      "byClass": "By status class",
+      "byMethod": "By method",
+      "byCode": "Top status codes"
+    },
+    "endpoints": {
+      "topTitle": "Busiest endpoints",
+      "topDescription": "Most requested method and path pairs",
+      "slowTitle": "Slowest endpoints",
+      "slowDescription": "Highest P95 among the busiest, with at least 5 requests",
+      "empty": "No endpoints match these filters.",
+      "endpoint": "Endpoint",
+      "requests": "Requests",
+      "errorRate": "Errors",
+      "avg": "Avg",
+      "p95": "P95"
+    }
   }
 }

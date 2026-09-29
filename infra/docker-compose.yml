@@ -1030,6 +1030,8 @@ services:
         NEXT_PUBLIC_HYDRA_URL: https://localhost:33010
         NEXT_PUBLIC_APP_URL: https://localhost:33000
         NEXT_PUBLIC_GATEWAY_URL: https://localhost:33005
+        # From infra/.env (single-quote the JSON there); empty = the map shows no pins.
+        NEXT_PUBLIC_GATEWAY_NODE_LOCATIONS: ${NEXT_PUBLIC_GATEWAY_NODE_LOCATIONS:-}
     container_name: open-gateway-web
     logging: *default-logging
     restart: unless-stopped

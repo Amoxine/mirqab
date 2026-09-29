@@ -28,7 +28,11 @@
       "24h": "24h",
       "7d": "7d",
       "30d": "30d"
-    }
+    },
+    "search": "Search the workspace",
+    "searchHint": "Search · Ctrl/⌘ K",
+    "refresh": "Refresh",
+    "createApi": "Create API"
   },
   "gatewayHealth": {
     "title": "Gateway health",
@@ -48,7 +52,10 @@
     "title": "Recent activity",
     "viewAll": "View all",
     "empty": "No activity recorded yet.",
-    "system": "System"
+    "system": "System",
+    "logLabel": "Recent activity log",
+    "logName": "activity.log",
+    "events": "{count, plural, one {# event} other {# events}}"
   },
   "syncSummary": {
     "title": "API sync status",
@@ -107,7 +114,9 @@
     "cardView": "Card view"
   },
   "layout": {
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "footer": "© {year} MIRQAB",
+    "backToTop": "Back to top ↑"
   },
   "errorBoundary": {
     "home": "Go to dashboard"
@@ -164,7 +173,8 @@
       "pass": "healthy",
       "fail": "failing",
       "unknown": "unknown"
-    }
+    },
+    "mapLabel": "Map of gateway nodes: {nodes}"
   },
   "topApis": {
     "title": "Top APIs",
@@ -194,6 +204,43 @@
     "readout": "{time}: {requests} requests, error rate {rate}",
     "roleDescription": "chart",
     "ariaLabel": "Requests and error rate by time bucket. Use the left and right arrow keys to read values.",
-    "bucket": "Time (UTC)"
+    "bucket": "Time (UTC)",
+    "budget": "Error budget",
+    "budgetLeft": "left · SLO {slo}",
+    "budgetAria": "Error budget left against a {slo} SLO"
+  },
+  "palette": {
+    "title": "Search the workspace",
+    "description": "Jump to a page.",
+    "placeholder": "Search pages…",
+    "empty": "No matching page.",
+    "pages": "Pages"
+  },
+  "help": {
+    "title": "Help & shortcuts",
+    "intro": "Move between pages with the sidebar, or search for one.",
+    "shortcuts": "Shortcuts",
+    "search": "Open search",
+    "searchKeys": "Ctrl/⌘ + K",
+    "close": "Close menus and dialogs",
+    "closeKeys": "Esc",
+    "chart": "Step through the traffic chart",
+    "chartKeys": "← →",
+    "done": "Close"
+  },
+  "kpis": {
+    "title": "Key figures",
+    "throughput": "Throughput",
+    "perSecond": "requests / second",
+    "p95": "P95 latency",
+    "p99": "P99 latency",
+    "p50": "median {value}",
+    "slowestOnePercent": "slowest 1% of requests",
+    "apis": "Active APIs",
+    "keys": "{count} active keys",
+    "nodes": "Gateway nodes",
+    "nodesHint": "{up} of {total} reachable",
+    "nodesNone": "none configured",
+    "openTraffic": "Open the traffic view"
   }
 }

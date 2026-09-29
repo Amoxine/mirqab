@@ -29,6 +29,9 @@ export type {
   AnalyticsTopApi,
   AnalyticsStatusCode,
   AnalyticsHealth,
+  AnalyticsTraffic,
+  TrafficEndpoint,
+  TrafficFilters,
 } from './local';
 
 export interface LoginFormValues {

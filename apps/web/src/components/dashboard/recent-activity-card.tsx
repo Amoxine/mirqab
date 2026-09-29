@@ -6,7 +6,6 @@ import { useLocale, useTranslations } from 'next-intl';
 import { History } from 'lucide-react';
 import { AnalyticsErrorState } from '@/components/analytics/analytics-empty-state';
 import { StateMessage } from '@/components/shared/state-card';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRecentAudit } from '@/hooks/use-audit';
@@ -16,7 +15,6 @@ import type { Locale } from '@/i18n/locales';
 import { useFormat } from '@/hooks/use-format';
 
 const DESTRUCTIVE_ACTIONS = new Set(['DELETED', 'REVOKED', 'SYNC_FAILED', 'QUOTA_EXCEEDED']);
-
 
 export function RecentActivityCard() {
   const { data, isLoading, error, refetch } = useRecentAudit();
@@ -30,7 +28,10 @@ export function RecentActivityCard() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-base">{t('title')}</CardTitle>
-        <Link href="/audit-logs" className="rounded-sm text-sm font-medium text-primary hover:underline">
+        <Link
+          href="/audit-logs"
+          className="text-primary rounded-sm text-sm font-medium hover:underline"
+        >
           {t('viewAll')}
         </Link>
       </CardHeader>
@@ -44,32 +45,56 @@ export function RecentActivityCard() {
         ) : error ? (
           <AnalyticsErrorState message={error.message} onRetry={() => void refetch()} />
         ) : !data?.length ? (
-          <StateMessage icon={<History aria-hidden="true" />} message={t('empty')} className="py-6" />
+          <StateMessage
+            icon={<History aria-hidden="true" />}
+            message={t('empty')}
+            className="py-6"
+          />
         ) : (
-          <ul className="divide-y">
-            {data.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Badge variant={DESTRUCTIVE_ACTIONS.has(entry.action) ? 'destructive' : 'secondary'} className="shrink-0">
-                    {auditActionLabel(tAnalytics, entry.action)}
-                  </Badge>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium capitalize">{entry.resource}</p>
-                    <p className="truncate text-xs text-muted-foreground">
+          <div
+            role="log"
+            aria-label={t('logLabel')}
+            className="bg-ink text-secondary-foreground overflow-hidden rounded-[0.875rem] pb-3 font-mono text-xs"
+          >
+            <div className="text-secondary-foreground/55 flex justify-between gap-3 border-b border-white/10 px-3.5 py-2 text-[0.68rem]">
+              <span>{t('logName')}</span>
+              <span>{t('events', { count: data.length })}</span>
+            </div>
+            <ul>
+              {data.map((entry) => (
+                <li key={entry.id} className="flex gap-2.5 px-3.5 pt-2.5 leading-relaxed">
+                  <time
+                    dateTime={entry.createdAt}
+                    dir="ltr"
+                    className="text-secondary-foreground/45 shrink-0"
+                    title={fmt.dateTime(entry.createdAt)}
+                  >
+                    {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale })}
+                  </time>
+                  <span aria-hidden="true" className="shrink-0 text-[#22b8c9]">
+                    {'›'}
+                  </span>
+                  <span className="min-w-0 break-words">
+                    <b
+                      className={
+                        DESTRUCTIVE_ACTIONS.has(entry.action)
+                          ? 'font-medium text-[#f87171]'
+                          : 'font-medium text-[#22b8c9]'
+                      }
+                    >
+                      {auditActionLabel(tAnalytics, entry.action)}
+                    </b>{' '}
+                    <span dir="auto" className="capitalize">
+                      {entry.resource}
+                    </span>{' '}
+                    <span className="text-secondary-foreground/60">
                       {entry.user ? (entry.user.name ?? entry.user.email) : t('system')}
-                    </p>
-                  </div>
-                </div>
-                <time
-                  dateTime={entry.createdAt}
-                  className="shrink-0 text-xs text-muted-foreground"
-                  title={fmt.dateTime(entry.createdAt)}
-                >
-                  {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale })}
-                </time>
-              </li>
-            ))}
-          </ul>
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </CardContent>
     </Card>

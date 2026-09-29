@@ -37,7 +37,7 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
   const max = Math.max(...columns.map((c) => c.value), 1);
 
   return (
-    <Card className="surface-ink flex flex-col rounded-[1.25rem] p-5">
+    <Card variant="ink" className="flex flex-col p-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>
         <Link
@@ -50,7 +50,7 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
       </div>
 
       {apis.isLoading || overview.isLoading ? (
-        <div className="mt-6 grid flex-1 grid-cols-3 items-end gap-2" aria-hidden="true">
+        <div className="mt-4 grid flex-1 grid-cols-3 items-end gap-2" aria-hidden="true">
           {[80, 60, 45].map((h) => (
             <Skeleton
               key={h}
@@ -75,7 +75,7 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
             })}
           </p>
           <ul
-            className="mt-5 grid min-h-44 flex-1 gap-2"
+            className="mt-3 grid min-h-36 flex-1 gap-2"
             style={{ gridTemplateColumns: `repeat(${String(columns.length)}, minmax(0, 1fr))` }}
           >
             {columns.map((c) => {

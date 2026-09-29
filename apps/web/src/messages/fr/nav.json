@@ -12,5 +12,12 @@
   "collapseSidebar": "Réduire la barre latérale",
   "brand": "MIRQAB",
   "brandShort": "OG",
-  "brandCaption": "Plan de contrôle de la passerelle"
+  "brandCaption": "Plan de contrôle de la passerelle",
+  "groups": {
+    "workspace": "Espace de travail",
+    "manage": "Gestion",
+    "trust": "Confiance et opérations"
+  },
+  "help": "Aide et raccourcis",
+  "traffic": "Trafic"
 }

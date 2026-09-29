@@ -125,8 +125,8 @@ export function OverviewPanel({ range }: { range: AnalyticsRange }) {
   const { data, isLoading, error, refetch } = useAnalyticsOverview(range);
 
   return (
-    <Card className="surface-ink @container flex flex-1 flex-col rounded-[1.25rem] p-5 sm:p-6">
-      <div className="mb-5 flex items-baseline justify-between gap-3">
+    <Card variant="ink" className="@container flex flex-1 flex-col p-4 sm:p-5">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>
         <span className="text-muted-foreground truncate font-mono text-[0.68rem] uppercase tracking-[0.08em]">
           {tRanges(range)}
@@ -170,7 +170,7 @@ export function OverviewPanel({ range }: { range: AnalyticsRange }) {
         </div>
       )}
 
-      <div className="mt-6 border-t pt-4">
+      <div className="mt-4 border-t pt-3">
         <div className="text-muted-foreground mb-2.5 text-[0.8rem]">{t('statusMix')}</div>
         <StatusMix range={range} />
       </div>

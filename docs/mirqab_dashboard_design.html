@@ -1,0 +1,1622 @@
+<title>MIRQB · OpenGateway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:opsz,wght@14..32,300..700&display=swap" />
+<script>
+  /* Resolve the theme before first paint: saved choice, then the host's theme, then the OS. */
+  (function () {
+    var root = document.documentElement, saved = null;
+    try { saved = localStorage.getItem('mirqb-theme'); } catch (e) {}
+    var host = root.getAttribute('data-theme');
+    var dark = saved ? saved === 'dark' : host ? host === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.classList.toggle('dark', dark);
+  })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+<style type="text/tailwindcss">
+  @theme {
+    --color-primary: #087482;
+    --color-primary-foreground: #ffffff;
+    --color-primary-dark: #06606c;
+    --color-primary-light: #dff8fb;
+    --color-secondary: #1f2937;
+    --color-secondary-foreground: #f9fafb;
+    --color-success: #15803d;
+    --color-success-foreground: #ffffff;
+    --color-warning: #b45309;
+    --color-warning-foreground: #ffffff;
+    --color-info: #1d4ed8;
+    --color-info-foreground: #ffffff;
+    --color-patch: #854d0e;
+    --color-patch-foreground: #ffffff;
+    --color-danger: #dc2626;
+    --color-destructive: #dc2626;
+    --color-destructive-foreground: #ffffff;
+    --color-background: #f8fafc;
+    --color-foreground: #111827;
+    --color-surface: #ffffff;
+    --color-card: #ffffff;
+    --color-card-foreground: #111827;
+    --color-popover: #ffffff;
+    --color-popover-foreground: #111827;
+    --color-muted: #f1f5f9;
+    --color-muted-foreground: #475569;
+    --color-accent: #f1f5f9;
+    --color-accent-foreground: #0f172a;
+    --color-border: #e2e8f0;
+    --color-input: #e2e8f0;
+    --color-ring: #087482;
+    --color-text-primary: #111827;
+    --color-text-secondary: #6b7280;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+    --font-sans: var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+</style>
+<style>
+  /* ── Design tokens: your @theme values, mirrored so the page works without the Tailwind runtime ── */
+  :root {
+    color-scheme: light;
+    --font-inter: 'Inter';
+    --color-primary: #087482;
+    --color-primary-foreground: #ffffff;
+    --color-primary-dark: #06606c;
+    --color-primary-light: #dff8fb;
+    --color-secondary: #1f2937;
+    --color-secondary-foreground: #f9fafb;
+    --color-success: #15803d;
+    --color-success-foreground: #ffffff;
+    --color-warning: #b45309;
+    --color-warning-foreground: #ffffff;
+    --color-info: #1d4ed8;
+    --color-info-foreground: #ffffff;
+    --color-patch: #854d0e;
+    --color-patch-foreground: #ffffff;
+    --color-danger: #dc2626;
+    --color-destructive: #dc2626;
+    --color-destructive-foreground: #ffffff;
+    --color-background: #f8fafc;
+    --color-foreground: #111827;
+    --color-surface: #ffffff;
+    --color-card: #ffffff;
+    --color-card-foreground: #111827;
+    --color-popover: #ffffff;
+    --color-popover-foreground: #111827;
+    --color-muted: #f1f5f9;
+    --color-muted-foreground: #475569;
+    --color-accent: #f1f5f9;
+    --color-accent-foreground: #0f172a;
+    --color-border: #e2e8f0;
+    --color-input: #e2e8f0;
+    --color-ring: #087482;
+    --color-text-primary: #111827;
+    --color-text-secondary: #6b7280;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+    --font-sans: var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Layout-level additions, all derived from the tokens above */
+    --frame: #111720;
+    --bezel-ink: #e6ebf2;
+    --bezel-muted: #8a97a8;
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --radius-shell: 26px;
+    --radius-card: var(--radius-xl);
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --nav-active-bg: var(--color-primary-light);
+    --map-dot: #c4ceda;
+    --map-glow: .10;
+    --soft: color-mix(in srgb, var(--color-foreground) 6%, var(--color-background));
+    --glass-card: color-mix(in srgb, var(--color-card) 84%, transparent);
+    /* Emphasis cards stay dark in both themes, so their marks use your dark-theme token values */
+    --on-dark-accent: #22b8c9;
+    --on-dark-accent-ink: #042f2e;
+    --on-dark-success: #4ade80;
+    --on-dark-warning: #fbbf24;
+    --on-dark-danger: #f87171;
+    --on-dark-info: #93c5fd;
+
+    /* Semantic aliases used by the components */
+    --background: var(--color-background);
+    --foreground: var(--color-foreground);
+    --card: var(--color-card);
+    --muted: var(--color-muted);
+    --muted-foreground: var(--color-muted-foreground);
+    --border: var(--color-border);
+    --accent: var(--color-accent);
+    --primary: var(--color-primary);
+    --primary-foreground: var(--color-primary-foreground);
+    --ring: var(--color-ring);
+    --surface: var(--color-surface);
+    --green: var(--color-success);
+    --amber: var(--color-warning);
+    --pink: var(--color-danger);
+  }
+  .dark {
+    color-scheme: dark;
+    --color-primary: #22b8c9;
+    --color-primary-foreground: #042f2e;
+    --color-ring: #22b8c9;
+    --color-destructive: #f87171;
+    --color-danger: #f87171;
+    --color-destructive-foreground: #450a0a;
+    --color-success: #4ade80;
+    --color-success-foreground: #052e16;
+    --color-warning: #fbbf24;
+    --color-warning-foreground: #422006;
+    --color-info: #93c5fd;
+    --color-info-foreground: #172554;
+    --color-patch: #fde047;
+    --color-patch-foreground: #422006;
+    --color-background: #0f172a;
+    --color-foreground: #f1f5f9;
+    --color-surface: #1e293b;
+    --color-secondary: #334155;
+    --color-secondary-foreground: #f1f5f9;
+    --color-card: #1e293b;
+    --color-card-foreground: #f1f5f9;
+    --color-popover: #1e293b;
+    --color-popover-foreground: #f1f5f9;
+    --color-muted: #2a3a50;
+    --color-muted-foreground: #a3b1c6;
+    --color-accent: #334155;
+    --color-accent-foreground: #f1f5f9;
+    --color-border: #334155;
+    --color-input: #64748b;
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #a3b1c6;
+    --frame: #05080f;
+    --nav-active-bg: color-mix(in srgb, #22b8c9 16%, transparent);
+    --map-dot: #26344a;
+    --map-glow: .26;
+  }
+
+  /* ── Base ── */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--grain), var(--frame); color: var(--foreground); font-family: var(--font-sans); font-size: 14px; line-height: 1.45; font-feature-settings: 'cv11', 'ss01'; -webkit-font-smoothing: antialiased; }
+  ::selection { background: color-mix(in srgb, var(--color-primary) 26%, transparent); }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  a { color: inherit; text-decoration: none; }
+  p, h1, h2, h3 { margin: 0; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .icon { width: 18px; height: 18px; stroke-width: 1.8; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .skip-link { position: absolute; top: -60px; left: 16px; z-index: 200; background: var(--primary); color: var(--primary-foreground); padding: 10px 16px; border-radius: 999px; }
+  .skip-link:focus { top: 16px; }
+  .mono { font-family: var(--font-mono); font-feature-settings: normal; }
+  .mono-label { font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+  [hidden] { display: none !important; }
+
+  /* ── Frame: dark bezel with a status strip, one rounded panel holding rail + content ── */
+  .app { height: 100%; display: flex; flex-direction: column; padding: 0 12px 12px; }
+  .bezel { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 10px 0 12px; color: var(--bezel-muted); }
+  .bezel-brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+  .bezel-brand b { color: var(--bezel-ink); font-size: 12.5px; font-weight: 700; letter-spacing: .22em; }
+  .bezel-brand span, .bezel-meta { font-family: var(--font-mono); font-feature-settings: normal; font-size: 11.5px; white-space: nowrap; }
+  .bezel-meta { display: flex; align-items: center; gap: 20px; }
+  .bezel-meta .demo { display: inline-flex; align-items: center; gap: 7px; }
+  .bezel-meta .demo::before { content: ''; width: 6px; height: 6px; border-radius: 9px; background: var(--on-dark-warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--on-dark-warning) 22%, transparent); }
+  .bezel-meta time { color: var(--bezel-ink); }
+  .frame-panel { flex: 1; min-height: 0; min-width: 0; display: flex; background: radial-gradient(80% 42% at 50% -6%, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 72%), var(--background); border-radius: var(--radius-shell); overflow: hidden; position: relative; box-shadow: 0 0 0 1px color-mix(in srgb, #ffffff 4%, transparent); }
+
+  /* ── Rail / sidebar ── */
+  .sidebar { width: 252px; flex: none; height: 100%; display: flex; flex-direction: column; padding: 22px 14px 16px; background: color-mix(in srgb, var(--background) 70%, transparent); border-right: 1px solid var(--border); z-index: 35; transition: width .22s var(--ease), transform .22s var(--ease); }
+  .side-top { display: flex; align-items: center; gap: 11px; padding: 0 4px 20px; }
+  .brand-mark { width: 44px; height: 44px; border-radius: 14px; background: var(--primary); color: var(--primary-foreground); display: grid; place-items: center; flex: none; box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--color-primary) 70%, transparent); }
+  .brand-mark svg { width: 28px; height: 28px; }
+  .brand-text { font-size: 17px; font-weight: 700; letter-spacing: .16em; line-height: 1; }
+  .brand-caption { color: var(--muted-foreground); font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; margin-top: 5px; }
+  .rail-toggle { margin-left: auto; }
+  .circle-btn { width: 40px; height: 40px; border-radius: 999px; border: 0; display: inline-grid; place-items: center; background: var(--soft); color: var(--foreground); flex: none; transition: background .15s, transform .15s; }
+  .circle-btn:hover, .circle-btn[aria-expanded="true"] { background: color-mix(in srgb, var(--foreground) 12%, var(--background)); }
+  .circle-btn:active, .btn:active:not(:disabled), .pill:active { transform: scale(.96); }
+  .tenant-wrap { position: relative; padding: 0 0 16px; }
+  .tenant { width: 100%; border: 1px solid var(--border); background: var(--card); border-radius: 16px; display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left; }
+  .tenant:hover { border-color: var(--primary); }
+  .tenant-avatar { width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; background: var(--nav-active-bg); color: var(--primary); font-family: var(--font-mono); font-feature-settings: normal; font-size: 11px; font-weight: 500; flex: none; }
+  .tenant-label { flex: 1; min-width: 0; }
+  .tenant-label strong { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tenant-label small { display: block; margin-top: 2px; color: var(--muted-foreground); font-size: 11px; }
+  .sidebar-scroll { flex: 1; overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 18px; padding-top: 4px; }
+  .nav-group { display: flex; flex-direction: column; gap: 4px; }
+  .nav-title { margin: 0 14px 4px; color: var(--muted-foreground); font-family: var(--font-mono); font-feature-settings: normal; text-transform: uppercase; font-size: 10px; letter-spacing: .12em; }
+  .nav-link { width: 100%; height: 42px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); font-size: 13.5px; font-weight: 500; text-align: left; transition: background .15s, color .15s; }
+  .nav-link:hover { background: var(--soft); color: var(--foreground); }
+  .nav-link.active { background: var(--nav-active-bg); color: var(--primary); font-weight: 600; }
+  .nav-link .badge-small { margin-left: auto; font-family: var(--font-mono); font-feature-settings: normal; font-size: 11px; color: var(--primary); background: var(--card); border: 1px solid var(--border); min-width: 22px; height: 22px; display: grid; place-items: center; border-radius: 999px; }
+  .nav-link.is-disabled { opacity: .5; }
+  .nav-link.is-disabled:hover { background: transparent; color: var(--muted-foreground); }
+  .sidebar-bottom { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; border-top: 1px solid var(--border); position: relative; }
+  .profile-wrap { position: relative; }
+  .profile { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; border-radius: 999px; padding: 6px 8px 6px 4px; text-align: left; }
+  .profile:hover { background: var(--soft); }
+  .avatar { width: 36px; height: 36px; border-radius: 999px; display: grid; place-items: center; background: var(--color-secondary); color: var(--color-secondary-foreground); font-size: 12px; font-weight: 600; flex: none; }
+  .profile-info { flex: 1; min-width: 0; }
+  .profile-info strong { display: block; font-size: 12.5px; font-weight: 600; }
+  .profile-info small { display: block; font-size: 11px; color: var(--muted-foreground); margin-top: 1px; }
+  .profile-chevron { width: 15px; color: var(--muted-foreground); }
+  .footer-action { width: 100%; height: 42px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); font-size: 13.5px; text-align: left; }
+  .footer-action:hover { background: var(--soft); color: var(--foreground); }
+
+  /* Collapsed rail: soft circular icon buttons, as in the reference */
+  .sidebar.is-collapsed { width: 84px; padding-inline: 0; align-items: center; border-right-color: transparent; background: transparent; }
+  .sidebar.is-collapsed :is(.brand-copy, .tenant-label, .tenant > .icon, .nav-title, .nav-link span, .help-label, .profile-info, .profile-chevron) { display: none; }
+  .sidebar.is-collapsed .side-top { flex-direction: column; gap: 12px; padding: 0 0 16px; }
+  .sidebar.is-collapsed .rail-toggle { margin: 0; }
+  .sidebar.is-collapsed .tenant { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 999px; }
+  .sidebar.is-collapsed .sidebar-scroll { align-items: center; overflow: visible; gap: 10px; }
+  .sidebar.is-collapsed .nav-group { align-items: center; gap: 6px; }
+  .sidebar.is-collapsed .nav-group + .nav-group { padding-top: 10px; border-top: 1px solid var(--border); }
+  .sidebar.is-collapsed .nav-link { width: 42px; height: 42px; padding: 0; justify-content: center; background: var(--soft); color: var(--foreground); }
+  .sidebar.is-collapsed .nav-link:hover { background: color-mix(in srgb, var(--foreground) 12%, var(--background)); }
+  .sidebar.is-collapsed .nav-link.active { background: var(--primary); color: var(--primary-foreground); box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--color-primary) 80%, transparent); }
+  .sidebar.is-collapsed .nav-link.is-disabled { background: transparent; color: var(--muted-foreground); }
+  .sidebar.is-collapsed .sidebar-bottom { align-items: center; width: 100%; }
+  .sidebar.is-collapsed .footer-action { width: 44px; justify-content: center; padding: 0; }
+  .sidebar.is-collapsed .profile { width: 44px; justify-content: center; padding: 4px; }
+  .sidebar.is-collapsed [data-tooltip] { position: relative; }
+  .sidebar.is-collapsed [data-tooltip]:is(:hover, :focus-visible)::after { content: attr(data-tooltip); position: absolute; top: 50%; left: calc(100% + 12px); transform: translateY(-50%); white-space: nowrap; padding: 6px 10px; z-index: 95; color: var(--color-popover-foreground); background: var(--color-popover); border: 1px solid var(--color-border); border-radius: 999px; box-shadow: var(--shadow-md); font-size: 12px; font-weight: 500; pointer-events: none; }
+  .sidebar.is-collapsed .sidebar-account-menu { left: calc(100% + 12px); right: auto; bottom: 0; }
+  .sidebar.is-collapsed .tenant-wrap .popover { left: calc(100% + 12px) !important; top: 0 !important; }
+
+  /* ── Content column ── */
+  .shell { flex: 1; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent) transparent; }
+  .topbar { position: sticky; top: 0; z-index: 25; display: flex; align-items: center; gap: 16px; height: 76px; padding: 0 28px 0 16px; background: color-mix(in srgb, var(--background) 93%, transparent); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2); transition: box-shadow .2s; }
+  .topbar.scrolled { box-shadow: 0 1px 0 var(--border), 0 12px 24px -20px rgb(2 6 23 / .35); }
+  .mobile-menu { display: none; }
+  .has-thumb { position: relative; }
+  .has-thumb > .thumb { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; pointer-events: none; transition: transform .38s var(--ease), width .38s var(--ease); }
+  .has-thumb > :not(.thumb) { position: relative; z-index: 1; }
+  .pill-nav { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 1 1 auto; overflow-x: auto; scrollbar-width: none; }
+  .pill-nav::-webkit-scrollbar { display: none; }
+  .pill-nav > .thumb { background: var(--primary); box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--color-primary) 80%, transparent); }
+  .pill { flex: none; height: 40px; display: inline-flex; align-items: center; padding: 0 18px; border-radius: 999px; font-size: 14.5px; font-weight: 500; color: var(--foreground); white-space: nowrap; transition: color .25s, background .15s, transform .15s; }
+  .pill:hover:not(.active) { background: var(--soft); }
+  .pill.active { color: var(--primary-foreground); }
+  .pill-nav:not(.thumb-ready) .pill.active { background: var(--primary); }
+  .pill .count { font-family: var(--font-mono); font-feature-settings: normal; font-size: 10px; margin-left: 5px; opacity: .65; }
+  .top-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+  .theme-toggle { height: 44px; display: inline-flex; align-items: center; gap: 2px; padding: 4px; border: 0; border-radius: 999px; background: var(--soft); }
+  .theme-toggle .tt { width: 36px; height: 36px; border-radius: 999px; display: grid; place-items: center; color: var(--muted-foreground); transition: background .2s, color .2s; }
+  .theme-toggle .tt.sun, .dark .theme-toggle .tt.moon { background: var(--card); color: var(--foreground); box-shadow: var(--shadow-soft); }
+  .dark .theme-toggle .tt.sun { background: transparent; color: var(--muted-foreground); box-shadow: none; }
+  .top-actions .circle-btn { width: 44px; height: 44px; }
+  .notification-wrap { position: relative; }
+  .unread { position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 99px; background: var(--pink); box-shadow: 0 0 0 2px var(--soft); }
+  .user-top { border: 0; background: transparent; padding: 0; border-radius: 999px; }
+  .user-top .avatar { width: 44px; height: 44px; }
+
+  .popover { position: absolute; right: 0; top: calc(100% + 10px); width: min(300px, 88vw); background: var(--color-popover); color: var(--color-popover-foreground); border: 1px solid var(--color-border); border-radius: 18px; padding: 10px; box-shadow: var(--shadow-lg); z-index: 60; }
+  .popover h3 { margin: 2px 6px 4px; font-size: 13px; font-weight: 600; }
+  .popover p { font-size: 12px; color: var(--color-muted-foreground); line-height: 1.5; margin: 0 6px 8px; }
+  .popover-item { width: 100%; display: flex; gap: 9px; align-items: center; padding: 9px 10px; border: 0; border-radius: 12px; background: transparent; color: var(--color-popover-foreground); font-size: 12.5px; text-align: left; }
+  .popover-item:hover:not(:disabled) { background: var(--color-accent); }
+  .popover-item:disabled { opacity: .5; }
+  .sidebar-account-menu { top: auto; bottom: calc(100% + 8px); right: 0; width: 230px; }
+
+  .content { padding: 4px 28px 32px 16px; max-width: 1640px; }
+  section[id], div[id="overview"] { scroll-margin-top: 92px; }
+
+  /* ── Page intro ── */
+  .intro { display: flex; align-items: center; justify-content: space-between; gap: 18px 24px; flex-wrap: wrap; padding: 10px 0 26px; }
+  .intro-title { display: flex; align-items: center; gap: 18px; min-width: 0; }
+  .search-round { width: 56px; height: 56px; border-radius: 999px; border: 0; display: grid; place-items: center; background: var(--color-secondary); color: var(--color-secondary-foreground); flex: none; transition: transform .2s var(--ease); box-shadow: 0 10px 22px -12px rgb(0 0 0 / .55); }
+  .search-round:hover { transform: scale(1.05) rotate(-6deg); }
+  .search-round .icon { width: 22px; height: 22px; }
+  h1 { font-size: clamp(30px, 3.4vw, 50px); font-weight: 300; letter-spacing: -.04em; line-height: 1.05; text-wrap: balance; }
+  .intro-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .route { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 12.5px; color: var(--muted-foreground); }
+  .route .verb { font-size: 10.5px; font-weight: 500; letter-spacing: .06em; padding: 3px 7px; border-radius: 6px; background: var(--nav-active-bg); color: var(--primary); }
+  .route .path { color: var(--foreground); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--muted-foreground); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+  .chip.ghost { background: transparent; }
+  .chip .dot { width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
+  .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .segmented { display: inline-flex; align-items: center; gap: 2px; padding: 4px; border-radius: 999px; background: var(--soft); }
+  .segmented > .thumb { top: 4px; bottom: 4px; background: var(--card); box-shadow: var(--shadow-soft), 0 0 0 1px color-mix(in srgb, var(--foreground) 5%, transparent); }
+  .segmented button { height: 34px; padding: 0 14px; white-space: nowrap; border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); font-size: 13px; font-weight: 500; transition: color .2s; }
+  .segmented button:hover { color: var(--foreground); }
+  .segmented button.active { color: var(--foreground); font-weight: 600; }
+  .segmented:not(.thumb-ready) button.active { background: var(--card); box-shadow: var(--shadow-soft); }
+  .btn { height: 42px; display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; border-radius: 999px; border: 0; font-size: 13.5px; font-weight: 500; white-space: nowrap; transition: transform .15s, background .15s, filter .15s; }
+  .btn .icon { width: 17px; height: 17px; }
+  .btn-dark { background: var(--color-secondary); color: var(--color-secondary-foreground); }
+  .btn-primary { background: var(--primary); color: var(--primary-foreground); }
+  .btn-primary:hover:not(:disabled) { background: var(--color-primary-dark); }
+  .dark .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn:disabled { opacity: .5; }
+
+  /* ── Cards ── */
+  .card { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; }
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
+  .card-title { font-size: 19px; font-weight: 400; letter-spacing: -.015em; line-height: 1.25; }
+  .card-desc { margin-top: 4px; color: var(--muted-foreground); font-size: 12.5px; line-height: 1.45; }
+  .go { width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; background: var(--foreground); color: var(--card); flex: none; transition: transform .25s var(--ease); }
+  .go:hover { transform: rotate(45deg); }
+  .go .icon { width: 15px; height: 15px; stroke-width: 2.2; }
+  .on-dark {
+    --foreground: var(--color-secondary-foreground);
+    --muted-foreground: color-mix(in srgb, var(--color-secondary-foreground) 66%, transparent);
+    --border: color-mix(in srgb, var(--color-secondary-foreground) 13%, transparent);
+    --muted: color-mix(in srgb, var(--color-secondary-foreground) 10%, transparent);
+    --accent: color-mix(in srgb, var(--color-secondary-foreground) 7%, transparent);
+    --card: var(--color-secondary);
+    --primary: var(--on-dark-accent);
+    --primary-foreground: var(--on-dark-accent-ink);
+    --green: var(--on-dark-success);
+    --amber: var(--on-dark-warning);
+    --pink: var(--on-dark-danger);
+    background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--color-secondary-foreground) 7%, transparent), transparent 62%), var(--color-secondary);
+    border-color: transparent;
+    color: var(--foreground);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent), 0 18px 40px -26px rgb(2 6 23 / .55);
+  }
+  .glass { background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--color-secondary-foreground) 8%, transparent), transparent 62%), color-mix(in srgb, var(--color-secondary) 90%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .delta { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .delta.good { color: var(--green); }
+  .delta.bad { color: var(--pink); }
+
+  /* ── Hero: stats · map · region share ── */
+  .hero { display: grid; grid-template-columns: minmax(360px, 1.05fr) minmax(0, 1.55fr) minmax(250px, .8fr); grid-template-areas: 'left geo regions'; gap: 16px; align-items: stretch; margin-bottom: 16px; }
+  .hero-left { grid-area: left; display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 2; min-width: 0; }
+  .geo-wrap { grid-area: geo; position: relative; min-width: 0; z-index: 1; align-self: center; }
+  .regions-card { grid-area: regions; }
+  .overview-card { padding: 20px 22px 20px; flex: 1; container-type: inline-size; }
+  .ov-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .stat-value { display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap; }
+  .stat-value strong { font-size: clamp(24px, calc((100cqi - 28px) / 9.8), 38px); font-weight: 300; letter-spacing: -.045em; line-height: 1; }
+  .stat-value .delta { font-size: 11px; padding-top: 2px; }
+  .stat-label { display: block; margin-top: 8px; font-size: 12.5px; color: var(--muted-foreground); }
+  .status-mix { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .mix-head { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted-foreground); margin-bottom: 10px; }
+  .mix-bar { display: flex; gap: 2px; height: 8px; }
+  .mix-bar span { flex: 1 1 0; min-width: 3px; transition: flex-grow .5s var(--ease); }
+  .mix-bar span:first-child { border-radius: 4px 0 0 4px; }
+  .mix-bar span:last-child { border-radius: 0 4px 4px 0; }
+  .mix-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 11px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 11px; color: var(--muted-foreground); }
+  .mix-legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .mix-legend i { width: 8px; height: 8px; border-radius: 2px; }
+  .mix-legend b { color: var(--foreground); font-weight: 500; }
+
+  .mini-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .mini { padding: 15px 16px 13px; display: flex; flex-direction: column; gap: 9px; background: var(--glass-card); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .mini-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mini-title { font-size: 15px; font-weight: 400; }
+  .mini-value { display: flex; align-items: baseline; gap: 6px; }
+  .mini-value strong { font-size: 28px; font-weight: 300; letter-spacing: -.04em; line-height: 1; }
+  .mini-value small { font-family: var(--font-mono); font-feature-settings: normal; font-size: 11px; color: var(--muted-foreground); }
+  .mini-note { font-size: 11.5px; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+  .mini-note.mono { font-size: 11px; }
+  .mini-note.alert { color: var(--amber); }
+  .mini-note .icon { width: 14px; height: 14px; }
+  .spark, .histo { position: relative; }
+  .spark { height: 44px; }
+  .histo { height: 60px; }
+  .spark svg, .histo svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .histo text { font-family: var(--font-mono); font-size: 9.5px; fill: var(--muted-foreground); }
+  .histo text.mk { fill: var(--foreground); font-weight: 500; }
+
+  .geo { position: relative; width: calc(100% + 80px); margin-inline: -40px; aspect-ratio: 128 / 67; }
+  .geo canvas { position: absolute; inset: 0; width: 100%; height: 100%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); }
+  .geo .routes { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .geo-layer { position: absolute; inset: 0; }
+  .pin { position: absolute; width: 0; height: 0; }
+  .pin-mark { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; }
+  .pin-mark svg { display: block; width: 22px; height: 22px; overflow: visible; position: relative; }
+  .pin-mark path { fill: var(--primary); stroke: var(--background); stroke-width: 2.5; stroke-linejoin: round; }
+  .pin-mark circle { fill: var(--background); }
+  .pin-mark::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--primary); opacity: 0; animation: pulse 3s var(--ease) infinite; animation-delay: var(--d, 0s); }
+  .pin-card { position: absolute; bottom: 20px; left: 0; transform: translateX(-50%); padding: 7px 11px 8px; border-radius: 12px; background: var(--glass-card); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--border); box-shadow: var(--shadow-md); white-space: nowrap; }
+  .pin-card::after { content: ''; position: absolute; left: 50%; top: 100%; width: 1px; height: 9px; background: var(--primary); }
+  .pin-code { display: block; font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; color: var(--muted-foreground); }
+  .pin-code b { color: var(--primary); font-weight: 500; letter-spacing: .04em; }
+  .pin-card strong { display: block; font-size: 13.5px; font-weight: 500; letter-spacing: -.01em; margin: 2px 0 1px; }
+  .pin-time { display: block; font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; color: var(--muted-foreground); }
+  .pin.below .pin-card { bottom: auto; top: 20px; }
+  .pin.below .pin-card::after { top: auto; bottom: 100%; }
+  .pin.start .pin-card { transform: translateX(-16px); }
+  .pin.start .pin-card::after { left: 16px; }
+  .rtt { position: absolute; transform: translate(-50%, -50%); padding: 2px 8px; border-radius: 999px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; color: var(--foreground); background: var(--glass-card); border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); white-space: nowrap; }
+  .geo-caption { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: 16px; padding: 4px 12px; border-radius: 999px; background: var(--glass-card); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+  .geo-caption span { display: inline-flex; align-items: center; gap: 6px; }
+  .geo-caption .k-tint { width: 18px; height: 6px; border-radius: 9px; background: linear-gradient(90deg, var(--map-dot), var(--primary)); }
+  .geo-caption .k-rtt { font-family: var(--font-mono); font-feature-settings: normal; font-size: 9.5px; padding: 0 5px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)); color: var(--foreground); }
+
+  .regions-card { padding: 20px 20px 18px; position: relative; z-index: 2; display: flex; flex-direction: column; }
+  .regions-total { margin-top: 4px; font-size: 13px; color: var(--muted-foreground); }
+  .regions-total strong { color: var(--foreground); font-weight: 500; font-size: 15px; margin-right: 4px; }
+  .region-bars { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: end; min-height: 170px; margin-top: 18px; }
+  .region-col { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+  .region-col .share { font-size: clamp(22px, 2vw, 30px); font-weight: 300; letter-spacing: -.045em; line-height: 1; margin-bottom: 8px; }
+  .region-bar { position: relative; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, color-mix(in srgb, var(--foreground) 20%, transparent), color-mix(in srgb, var(--foreground) 4%, transparent)); border-top: 2px solid var(--primary); display: flex; flex-direction: column; justify-content: flex-end; padding: 0 8px 8px; transition: height .5s var(--ease); }
+  .region-bar span { font-size: 11.5px; color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .region-bar small { font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; color: var(--muted-foreground); }
+
+  /* ── Operations row ── */
+  .ops { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
+  .stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  .table-wrap { overflow-x: auto; padding: 10px 12px 4px; }
+  table { width: 100%; border-collapse: collapse; text-align: left; min-width: 700px; }
+  th { padding: 10px 10px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); white-space: nowrap; }
+  th .sort { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+  th .sort:hover { color: var(--foreground); }
+  th .sort .icon { width: 13px; height: 13px; opacity: .7; }
+  th[aria-sort="ascending"] .sort, th[aria-sort="descending"] .sort { color: var(--foreground); }
+  td { padding: 11px 10px; font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tbody tr { transition: background .15s; }
+  tbody tr:hover td { background: var(--accent); }
+  tbody tr td:first-child { border-radius: 14px 0 0 14px; }
+  tbody tr td:last-child { border-radius: 0 14px 14px 0; }
+  .node-cell { display: flex; align-items: center; gap: 12px; }
+  .node-glyph { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; background: var(--muted); color: var(--primary); flex: none; }
+  .node-glyph svg { width: 18px; height: 18px; }
+  .node-cell b { display: block; font-family: var(--font-mono); font-feature-settings: normal; font-size: 13px; font-weight: 500; }
+  .node-cell small { display: block; margin-top: 2px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 11px; color: var(--muted-foreground); }
+  .cc { margin-left: 7px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 10px; color: var(--muted-foreground); vertical-align: 1px; }
+  .traffic-cell { display: flex; align-items: center; gap: 12px; }
+  .traffic-cell svg { display: block; flex: none; }
+  .traffic-cell b { display: block; font-weight: 500; font-size: 13.5px; }
+  .traffic-cell small { display: block; font-family: var(--font-mono); font-feature-settings: normal; font-size: 11px; color: var(--muted-foreground); }
+  .meter { display: inline-flex; align-items: center; gap: 10px; }
+  .meter-track { position: relative; width: 84px; height: 2px; border-radius: 2px; background: var(--muted); }
+  .meter-track::after { content: ''; position: absolute; left: 0; right: 0; top: 5px; height: 3px; border-right: 1px solid var(--muted-foreground); background: repeating-linear-gradient(90deg, var(--muted-foreground) 0 1px, transparent 1px 25%); opacity: .45; }
+  .meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--primary); }
+  .meter-knob { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 99px; background: var(--card); border: 2px solid var(--primary); }
+  .status-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
+  .status-chip .dot { width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
+  .card-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 22px 16px; font-size: 12.5px; color: var(--muted-foreground); }
+
+  .log { margin: 14px 16px 16px; border-radius: 14px; background: var(--color-secondary); color: var(--color-secondary-foreground); padding: 0 0 13px; font-family: var(--font-mono); font-feature-settings: normal; font-size: 12px; overflow: hidden; }
+  .log-bar { display: flex; justify-content: space-between; gap: 10px; padding: 8px 14px; font-size: 11px; color: color-mix(in srgb, var(--color-secondary-foreground) 55%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--color-secondary-foreground) 10%, transparent); }
+  .log-bar span:first-child::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 9px; background: color-mix(in srgb, var(--color-secondary-foreground) 30%, transparent); vertical-align: 0; }
+  .log-line { display: flex; gap: 10px; padding: 9px 14px 0; line-height: 1.55; }
+  .log-line .ts { flex: none; color: color-mix(in srgb, var(--color-secondary-foreground) 45%, transparent); }
+  .log-line .prompt { flex: none; color: var(--on-dark-accent); }
+  .log-line.dim { color: color-mix(in srgb, var(--color-secondary-foreground) 58%, transparent); }
+  .caret { display: inline-block; width: 7px; height: 14px; margin-left: 5px; vertical-align: -2px; background: var(--on-dark-accent); animation: blink 1.1s steps(1) infinite; }
+
+  /* Traffic chart */
+  .view-toggle { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--muted); }
+  .view-toggle button { width: 32px; height: 30px; border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); display: grid; place-items: center; }
+  .view-toggle button[aria-pressed="true"] { background: var(--card); color: var(--foreground); box-shadow: var(--shadow-soft), 0 0 0 1px var(--border); }
+  .view-toggle .icon { width: 16px; height: 16px; }
+  .chart-summary { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; padding: 16px 22px 0; }
+  .cs-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .cs-main strong { font-size: 36px; font-weight: 300; letter-spacing: -.045em; line-height: 1; }
+  .cs-main span { font-size: 12.5px; color: var(--muted-foreground); }
+  .budget { width: 156px; }
+  .budget-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .budget-top b { font-size: 15px; font-weight: 500; }
+  .budget-track { height: 4px; border-radius: 4px; background: var(--muted); margin: 6px 0 5px; overflow: hidden; }
+  .budget-track span { display: block; height: 100%; border-radius: 4px; background: var(--primary); transition: width .5s var(--ease), background .3s; }
+  .budget-track span.warn { background: var(--amber); }
+  .budget-track span.low { background: var(--pink); }
+  .budget-sub { font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; color: var(--muted-foreground); }
+  .plot { position: relative; margin: 12px 16px 0; border-radius: 12px; outline-offset: 4px; touch-action: pan-y; }
+  .plot svg { display: block; width: 100%; overflow: visible; }
+  .plot text { font-family: var(--font-mono); font-size: 10px; fill: var(--muted-foreground); }
+  .plot .bar { fill: var(--primary); opacity: .55; transition: opacity .12s; }
+  .plot .bar.now { opacity: 1; }
+  .plot.has-active .bar { opacity: .3; }
+  .plot.has-active .bar.on { opacity: 1; }
+  .peak { position: absolute; transform: translate(-50%, -100%); padding: 3px 9px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-mono); font-feature-settings: normal; font-size: 10.5px; font-weight: 500; white-space: nowrap; pointer-events: none; transition: opacity .15s; }
+  .plot.has-active .peak { opacity: 0; }
+  .viz-tip { position: absolute; z-index: 5; min-width: 176px; padding: 9px 11px; border-radius: 14px; background: var(--color-popover); color: var(--color-popover-foreground); border: 1px solid var(--color-border); box-shadow: var(--shadow-lg); pointer-events: none; font-size: 12px; }
+  .viz-tip .tip-head { font-family: var(--font-mono); font-feature-settings: normal; color: var(--color-muted-foreground); font-size: 10.5px; margin-bottom: 6px; }
+  .viz-tip .tip-row { display: flex; align-items: center; gap: 8px; }
+  .viz-tip .tip-row + .tip-row { margin-top: 4px; }
+  .viz-tip .key { width: 12px; height: 2px; border-radius: 2px; flex: none; }
+  .viz-tip .tip-row span { color: var(--color-muted-foreground); }
+  .viz-tip .tip-row b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .viz-tip .tip-warn { margin-top: 6px; font-size: 11px; color: var(--color-danger); }
+  .data-table { margin: 12px 16px 0; max-height: 262px; overflow: auto; border-radius: 12px; }
+  .data-table table { min-width: 0; }
+  .data-table th { position: sticky; top: 0; background: var(--color-secondary); }
+  .data-table td { font-size: 13px; padding: 7px 10px; }
+  .data-table td:not(:first-child), .data-table th:not(:first-child) { text-align: right; }
+  .chart-legend { display: flex; gap: 8px 16px; flex-wrap: wrap; padding: 10px 22px 18px; font-size: 12px; color: var(--muted-foreground); }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--primary); }
+  .chart-legend i.line { height: 2px; width: 14px; }
+  .chart-legend i.dash { height: 0; width: 14px; border-top: 1.5px dashed var(--muted-foreground); background: none; }
+  .chart-legend i.breach { width: 8px; height: 8px; border-radius: 99px; background: var(--pink); }
+
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 18px 18px 22px; overflow: hidden; background: radial-gradient(55% 160% at 90% 50%, color-mix(in srgb, var(--on-dark-accent) 50%, transparent), transparent 70%), var(--color-secondary); }
+  .banner .rings { position: absolute; right: -44px; top: 50%; width: 230px; height: 230px; transform: translateY(-50%); pointer-events: none; }
+  .banner .rings circle { fill: none; stroke: var(--on-dark-accent); stroke-opacity: .3; stroke-width: 1; }
+  .banner .rings circle:nth-child(2) { stroke-dasharray: 2 5; stroke-opacity: .45; }
+  .banner-copy, .banner .btn { position: relative; }
+  .banner strong { display: block; font-size: 15px; font-weight: 500; margin-top: 4px; }
+  .banner p { margin-top: 2px; font-size: 12.5px; color: var(--muted-foreground); }
+  .banner .btn { background: var(--frame); color: #f9fafb; flex: none; }
+  .banner .btn:hover { filter: brightness(1.3); }
+
+  .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
+  .footer .mono { font-size: 11.5px; }
+  .footer a:hover { color: var(--primary); }
+
+  /* ── Overlays ── */
+  .mobile-backdrop, .command-backdrop { position: fixed; inset: 0; background: rgb(6 10 19 / .55); z-index: 65; }
+  .command-backdrop { display: grid; place-items: start center; padding: min(16vh, 125px) 16px 16px; }
+  .command { width: min(540px, 100%); background: var(--color-popover); color: var(--color-popover-foreground); border: 1px solid var(--color-border); border-radius: 22px; overflow: hidden; box-shadow: var(--shadow-lg); }
+  .command-input { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--color-border); color: var(--color-muted-foreground); }
+  .command-input input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--color-popover-foreground); font-size: 15px; }
+  .command-input input::placeholder { color: var(--color-muted-foreground); }
+  .command-input kbd { font-family: var(--font-mono); font-size: 11px; padding: 3px 7px; border: 1px solid var(--color-border); border-radius: 8px; }
+  .command-results { padding: 8px; max-height: 340px; overflow: auto; }
+  .command-results p { padding: 8px 12px 6px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-muted-foreground); }
+  .command-result { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--color-popover-foreground); font-size: 13.5px; text-align: left; }
+  .command-result:hover, .command-result:focus-visible { background: var(--color-accent); }
+  .help-dialog { margin: auto; width: min(440px, calc(100% - 32px)); border: 1px solid var(--color-border); border-radius: 22px; background: var(--color-popover); color: var(--color-popover-foreground); padding: 24px; box-shadow: var(--shadow-lg); }
+  .help-dialog::backdrop { background: rgb(6 10 19 / .55); }
+  .help-dialog h2 { font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+  .help-dialog h3 { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; margin: 18px 0 4px; color: var(--color-muted-foreground); }
+  .help-dialog p, .help-dialog li { color: var(--color-muted-foreground); font-size: 13px; line-height: 1.6; }
+  .help-dialog ul { list-style: disc; padding-left: 20px; margin: 6px 0 0; }
+  .help-dialog .btn { margin-top: 18px; }
+
+  /* ── Motion ── */
+  @keyframes rise { from { transform: translateY(14px); } }
+  @keyframes tick { from { transform: translateY(32%); opacity: .2; } }
+  @keyframes grow { from { transform: scaleY(.12); } }
+  @keyframes pulse { 0% { transform: scale(.7); opacity: .7; } 100% { transform: scale(2.7); opacity: 0; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  .rise { animation: rise .75s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  .num { display: inline-block; }
+  .num.tick { animation: tick .45s var(--ease); }
+  .bars-grow { animation: grow .7s var(--ease) both; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+  /* ── Responsive ── */
+  @media (max-width: 1320px) {
+    .hero { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-areas: 'left regions' 'geo geo'; }
+    .geo { width: min(100%, 780px); margin-inline: auto; max-width: 100%; }
+  }
+  @media (max-width: 1020px) {
+    .ops { grid-template-columns: minmax(0, 1fr); }
+    .bezel-brand span { display: none; }
+  }
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'left' 'geo' 'regions'; }
+    .intro { align-items: flex-start; }
+  }
+  @media (max-width: 720px) {
+    .app { padding: 0; }
+    .bezel { display: none; }
+    .frame-panel { border-radius: 0; box-shadow: none; }
+    .sidebar { position: fixed; left: 0; top: 0; bottom: 0; height: 100%; width: min(292px, calc(100vw - 48px)); transform: translateX(-102%); box-shadow: var(--shadow-lg); border-right: 0; background: var(--background); padding-top: calc(22px + env(safe-area-inset-top, 0px)); }
+    .sidebar.mobile-open { transform: translateX(0); }
+    .mobile-menu { display: inline-grid; }
+    .topbar { height: 64px; padding: 0 16px; gap: 10px; }
+    .pill-nav { display: none; }
+    .top-actions { margin-left: auto; }
+    .theme-toggle .tt { width: 32px; height: 32px; }
+    .content { padding: 4px 16px 28px; }
+    .search-round { width: 48px; height: 48px; }
+    .filters { width: 100%; }
+    .filters .segmented { flex: 1; }
+    .filters .segmented button { flex: 1; padding: 0 8px; }
+    .sidebar-account-menu { left: 0; right: 0; width: auto; }
+    .banner { flex-direction: column; align-items: flex-start; }
+    .geo-caption { display: none; }
+  }
+  @media (max-width: 480px) {
+    .stat-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .mini-row { grid-template-columns: minmax(0, 1fr); }
+    .pin-code, .pin-time { display: none; }
+    .pin-card { padding: 5px 8px; }
+    .pin-card strong { font-size: 12px; margin: 0; }
+    .rtt { display: none; }
+    .top-actions .user-top, .top-actions .notification-wrap { display: none; }
+    .filters .btn { flex: 1; justify-content: center; }
+    .budget { width: 100%; }
+  }
+  @media (max-height: 880px) and (min-width: 721px) {
+    .sidebar.is-collapsed .sidebar-scroll { overflow-y: auto; overflow-x: visible; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+    .pin-mark::before, .caret { animation: none !important; }
+  }
+</style>
+
+<a class="skip-link" href="#main">Skip to dashboard content</a>
+<svg class="sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m14 18-6-6 6-6"/><path d="m19 18-6-6 6-6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9Z"/><path d="M10 21h4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15a8 8 0 0 1-11-11A8 8 0 1 0 20 15Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Zm-9 5v10l9 5 9-5V7m-9 5v10"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="m11 11 9-9 2 2-2 2 1 1-2 2-1-1-2 2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 16v-5m5 5V7m5 9V5"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 10v10"/></symbol>
+  <symbol id="i-nodes" viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="8" cy="19" r="2"/><path d="m7 6 10 1M6 7l2 10M18 9l-8 9"/></symbol>
+  <symbol id="i-hex" viewBox="0 0 24 24"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><circle cx="12" cy="12" r="2.6"/><path d="M12 5.8v3.6M7.6 15.2l2.5-1.8M16.4 15.2l-2.5-1.8"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Zm-9 10 9 5 9-5M3 17l9 5 9-5"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2H3Zm14-15a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5v1h-3"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5a8 8 0 0 0 0-3l2-1.5-2-3-2.5 1a8 8 0 0 0-2.5-1.5L13.5 3h-3L10 5.5A8 8 0 0 0 7.5 7L5 6 3 9l2 1.5a8 8 0 0 0 0 3L3 15l2 3 2.5-1a8 8 0 0 0 2.5 1.5l.5 2.5h3l.5-2.5a8 8 0 0 0 2.5-1.5l2.5 1 2-3-2-1.5Z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.1 2l-1.6 1.5v1.2M12 17h.01"/></symbol>
+  <symbol id="i-arrow-ur" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-4M4 13a8 8 0 0 0 14.9 4"/><path d="M4 4v4h4M20 20v-4h-4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 5-3.5 8-9 10-5.5-2-9-5-9-10V6l9-4Z"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><path d="m8 9 4-4 4 4M8 15l4 4 4-4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <div class="mobile-backdrop" id="mobileBackdrop" hidden></div>
+  <div class="bezel">
+    <div class="bezel-brand"><b>MIRQB</b><span>OpenGateway · control plane</span></div>
+    <div class="bezel-meta"><span>Atlas Cloud</span><span class="demo">Demo data</span><span><time id="bezelClock">--:--</time> <span id="bezelZone">UTC</span></span></div>
+  </div>
+  <div class="frame-panel">
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+      <div class="side-top">
+        <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 4 27 10v12L16 28 5 22V10L16 4Z" stroke="currentColor" stroke-width="2.1"/><circle cx="16" cy="16" r="4" stroke="currentColor" stroke-width="2.1"/><path d="M16 7v5M9 22l4.2-3.4M23 22l-4.2-3.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div class="brand-copy"><div class="brand-text">MIRQB</div><div class="brand-caption">OpenGateway</div></div>
+        <button class="circle-btn rail-toggle" id="collapseButton" type="button" aria-label="Collapse sidebar" aria-expanded="true" aria-controls="sidebar" title="Collapse sidebar" data-tooltip="Collapse sidebar"><svg class="icon"><use href="#i-left" /></svg></button>
+      </div>
+      <div class="tenant-wrap workspace-wrap">
+        <button type="button" class="tenant" id="workspaceButton" aria-label="Choose workspace" aria-expanded="false" aria-controls="workspaceMenu" data-tooltip="Atlas Cloud"><span class="tenant-avatar">AC</span><span class="tenant-label"><strong id="workspaceName">Atlas Cloud</strong><small>Demo workspace</small></span><svg class="icon" style="width:15px;transform:rotate(90deg);color:var(--muted-foreground)"><use href="#i-chevron" /></svg></button>
+        <div class="popover" id="workspaceMenu" hidden style="top:calc(100% - 8px);left:0;right:auto;width:236px"><h3>Workspaces</h3><button class="popover-item" type="button" data-workspace="Atlas Cloud" aria-current="true">Atlas Cloud · Selected</button><button class="popover-item" type="button" disabled>Sandbox · Unavailable</button></div>
+      </div>
+      <nav class="sidebar-scroll" aria-label="Platform sections">
+        <div class="nav-group"><div class="nav-title">Workspace</div>
+          <a class="nav-link active" href="#overview" data-nav="Overview" aria-current="page"><svg class="icon"><use href="#i-grid" /></svg><span>Overview</span></a>
+          <a class="nav-link" href="#gateway-nodes" data-nav="Gateways"><svg class="icon"><use href="#i-nodes" /></svg><span>Gateways</span><span class="badge-small">3</span></a>
+          <a class="nav-link" href="#traffic" data-nav="Analytics"><svg class="icon"><use href="#i-chart" /></svg><span>Analytics</span></a>
+          <a class="nav-link" href="#activity" data-nav="Activity"><svg class="icon"><use href="#i-activity" /></svg><span>Activity</span></a>
+        </div>
+        <div class="nav-group"><div class="nav-title">Manage</div>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="APIs, unavailable" data-tooltip="APIs · unavailable"><svg class="icon"><use href="#i-layers" /></svg><span>APIs</span></button>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="Products and plans, unavailable" data-tooltip="Products & plans · unavailable"><svg class="icon"><use href="#i-box" /></svg><span>Products & plans</span></button>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="API keys, unavailable" data-tooltip="API keys · unavailable"><svg class="icon"><use href="#i-key" /></svg><span>API keys</span></button>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="Tenants, unavailable" data-tooltip="Tenants · unavailable"><svg class="icon"><use href="#i-users" /></svg><span>Tenants</span></button>
+        </div>
+        <div class="nav-group"><div class="nav-title">Trust & operations</div>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="Security, unavailable" data-tooltip="Security · unavailable"><svg class="icon"><use href="#i-shield" /></svg><span>Security</span></button>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="Audit logs, unavailable" data-tooltip="Audit logs · unavailable"><svg class="icon"><use href="#i-log" /></svg><span>Audit logs</span></button>
+          <button class="nav-link is-disabled" type="button" disabled aria-label="Settings, unavailable" data-tooltip="Settings · unavailable"><svg class="icon"><use href="#i-settings" /></svg><span>Settings</span></button>
+        </div>
+      </nav>
+      <div class="sidebar-bottom">
+        <button class="footer-action" id="helpButton" type="button" aria-label="Help and shortcuts" data-tooltip="Help & shortcuts"><svg class="icon"><use href="#i-help" /></svg><span class="help-label">Help & shortcuts</span></button>
+        <div class="profile-wrap"><button class="profile" type="button" id="sidebarProfileButton" aria-label="Account options" aria-expanded="false" aria-controls="sidebarProfileMenu" data-tooltip="Account"><span class="avatar" aria-hidden="true">MA</span><span class="profile-info"><strong>Platform Admin</strong><small>Workspace owner</small></span><svg class="icon profile-chevron"><use href="#i-chevron" /></svg></button>
+          <div class="popover sidebar-account-menu" id="sidebarProfileMenu" hidden><h3>Platform Admin</h3><p>Atlas Cloud · Workspace owner</p><button class="popover-item" type="button" id="sidebarThemeAction">Switch theme</button><button class="popover-item" type="button" id="sidebarHelpAction">Help & shortcuts</button><button class="popover-item" type="button" disabled>Account settings · unavailable</button><button class="popover-item" type="button" disabled>Sign out · unavailable</button></div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="shell" id="shell">
+      <header class="topbar">
+        <button type="button" class="circle-btn mobile-menu" id="mobileMenuButton" aria-label="Open navigation" aria-expanded="false"><svg class="icon"><use href="#i-menu" /></svg></button>
+        <nav class="pill-nav has-thumb" aria-label="Sections">
+          <span class="thumb" aria-hidden="true"></span>
+          <a class="pill active" href="#overview" data-nav="Overview" aria-current="page">Overview</a>
+          <a class="pill" href="#gateway-nodes" data-nav="Gateways">Gateways<span class="count" aria-hidden="true">3</span></a>
+          <a class="pill" href="#traffic" data-nav="Analytics">Analytics</a>
+          <a class="pill" href="#activity" data-nav="Activity">Activity</a>
+        </nav>
+        <span class="sr-only" aria-live="polite">Current section: <span id="breadcrumbCurrent">Overview</span></span>
+        <div class="top-actions">
+          <button type="button" class="theme-toggle" id="themeButton" aria-label="Switch to dark mode"><span class="tt sun" aria-hidden="true"><svg class="icon"><use href="#i-sun" /></svg></span><span class="tt moon" aria-hidden="true"><svg class="icon"><use href="#i-moon" /></svg></span></button>
+          <div class="notification-wrap"><button type="button" class="circle-btn" id="notificationButton" aria-label="Notifications, none unread" aria-expanded="false" aria-controls="notificationMenu"><svg class="icon"><use href="#i-bell" /></svg></button><span class="unread" id="notificationDot" hidden></span>
+            <div class="popover" id="notificationMenu" hidden><h3>Notifications</h3><p>You're all caught up. Alerts from your gateway nodes will appear here.</p></div>
+          </div>
+          <div class="profile-wrap"><button type="button" class="user-top" id="profileButton" aria-label="Open profile menu" aria-expanded="false" aria-controls="profileMenu"><span class="avatar">MA</span></button>
+            <div class="popover" id="profileMenu" hidden style="width:230px"><h3>Platform Admin</h3><p>Atlas Cloud · Workspace owner</p><button class="popover-item" type="button" id="profileThemeAction">Switch theme</button><button class="popover-item" type="button" id="profileHelpAction">Help & shortcuts</button><button class="popover-item" type="button" disabled>Account settings · unavailable</button><button class="popover-item" type="button" disabled>Sign out · unavailable</button></div>
+          </div>
+        </div>
+      </header>
+
+      <main id="main" class="content">
+        <div class="intro" id="overview">
+          <div class="intro-title">
+            <button class="search-round" type="button" id="searchButton" aria-label="Search the workspace (Ctrl or Cmd + K)" title="Search · ⌘K"><svg class="icon"><use href="#i-search" /></svg></button>
+            <div>
+              <h1 id="page-title">Gateway overview</h1>
+              <div class="intro-sub">
+                <span class="route" aria-hidden="true"><span class="verb">GET</span><span><span class="path" id="routePath">/overview</span><span id="routeQuery">?range=24h</span></span></span>
+                <span class="chip"><span class="dot"></span>Demo data</span>
+              </div>
+            </div>
+          </div>
+          <div class="filters" role="group" aria-label="Dashboard filters">
+            <div class="segmented has-thumb" role="group" aria-label="Time range">
+              <span class="thumb" aria-hidden="true"></span>
+              <button type="button" class="active" data-range="24h" aria-pressed="true">24h</button>
+              <button type="button" data-range="7d" aria-pressed="false">7 days</button>
+              <button type="button" data-range="30d" aria-pressed="false">30 days</button>
+            </div>
+            <button type="button" class="btn btn-dark" id="refreshButton" disabled title="Refresh needs live telemetry">Refresh <svg class="icon"><use href="#i-refresh" /></svg></button>
+            <button type="button" class="btn btn-primary" id="createButton" disabled title="Creating APIs isn't available in this demo"><svg class="icon"><use href="#i-plus" /></svg>Create API</button>
+          </div>
+        </div>
+
+        <section class="hero" aria-label="Summary">
+          <div class="hero-left">
+            <article class="card on-dark glass overview-card rise" style="--i:1" aria-labelledby="ov-title">
+              <div class="ov-head"><h2 class="card-title" id="ov-title">Overview</h2><span class="mono-label" id="ovScope">24h · all nodes</span></div>
+              <div class="stat-row">
+                <div><div class="stat-value"><strong class="num" id="requestsValue">24.8M</strong><span class="delta good" id="requestsDelta">↑ 12.6%</span></div><span class="stat-label">Total requests</span></div>
+                <div><div class="stat-value"><strong class="num" id="successValue">99.96%</strong><span class="delta good" id="successDelta">↑ 0.01 pt</span></div><span class="stat-label">Success rate</span></div>
+                <div><div class="stat-value"><strong class="num" id="latencyValue">84 ms</strong><span class="delta good" id="latencyDelta">↓ 9 ms</span></div><span class="stat-label">P95 latency</span></div>
+              </div>
+              <div class="status-mix">
+                <div class="mix-head"><span>Responses by status class</span></div>
+                <div class="mix-bar" id="mixBar" role="img" aria-label="Responses by status class"></div>
+                <div class="mix-legend" id="mixLegend"></div>
+              </div>
+            </article>
+            <div class="mini-row">
+              <article class="card mini rise" style="--i:2" aria-labelledby="mini-lat-title">
+                <div class="mini-top"><h2 class="mini-title" id="mini-lat-title">Latency</h2><a class="go" href="#traffic" aria-label="Open traffic analytics"><svg class="icon"><use href="#i-arrow-ur" /></svg></a></div>
+                <div class="mini-value"><strong class="num" id="p99Value">117</strong><small>ms · p99</small></div>
+                <div class="histo" id="histo" aria-hidden="true"></div>
+                <p class="mini-note mono" id="latNote">p50 38 ms · p95 84 ms</p>
+              </article>
+              <article class="card mini rise" style="--i:3" aria-labelledby="mini-err-title">
+                <div class="mini-top"><h2 class="mini-title" id="mini-err-title">5xx error rate</h2><a class="go" href="#traffic" aria-label="Open the error-rate chart"><svg class="icon"><use href="#i-arrow-ur" /></svg></a></div>
+                <div class="mini-value"><strong class="num" id="miniErrValue">0.035%</strong><small>latest</small></div>
+                <div class="spark" id="sparkErr" aria-hidden="true"></div>
+                <p class="mini-note" id="miniErrNote"></p>
+              </article>
+            </div>
+          </div>
+
+          <div class="geo-wrap rise" style="--i:0">
+            <div class="geo" id="geo" role="img" aria-label="Map of gateway nodes">
+              <canvas id="geoCanvas" aria-hidden="true"></canvas>
+              <svg class="routes" id="geoRoutes" viewBox="0 0 1000 523.4" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <div class="geo-layer" id="geoLayer" aria-hidden="true"></div>
+              <div class="geo-caption" aria-hidden="true"><span><i class="k-tint"></i>Share of requests</span><span><i class="k-rtt">ms</i>Round-trip time between nodes</span></div>
+            </div>
+          </div>
+
+          <aside class="card on-dark glass regions-card rise" style="--i:4" aria-labelledby="regions-title">
+            <div class="mini-top"><h2 class="card-title" id="regions-title">Traffic by region</h2><a class="go" href="#gateway-nodes" aria-label="Open gateway nodes"><svg class="icon"><use href="#i-arrow-ur" /></svg></a></div>
+            <p class="regions-total"><strong class="num" id="regionsTotal">24.8M</strong>requests across 3 nodes</p>
+            <div class="region-bars" id="regionBars"></div>
+          </aside>
+        </section>
+
+        <div class="ops">
+          <div class="stack">
+            <section class="card on-dark rise" style="--i:5" id="gateway-nodes" aria-labelledby="nodes-title">
+              <div class="card-head"><div><h2 class="card-title" id="nodes-title">Gateway nodes</h2><p class="card-desc">Traffic follows the time range. CPU and P95 are point-in-time samples.</p></div><span class="chip ghost">3 nodes · 3 regions</span></div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Gateway nodes. Columns with buttons can be sorted.</caption>
+                  <thead><tr>
+                    <th scope="col" aria-sort="ascending"><button type="button" class="sort" data-sort="node">Node<svg class="icon"><use href="#i-sort" /></svg></button></th>
+                    <th scope="col"><button type="button" class="sort" data-sort="city">Location<svg class="icon"><use href="#i-sort" /></svg></button></th>
+                    <th scope="col"><button type="button" class="sort" data-sort="share">Traffic<svg class="icon"><use href="#i-sort" /></svg></button></th>
+                    <th scope="col"><button type="button" class="sort" data-sort="cpu">CPU<svg class="icon"><use href="#i-sort" /></svg></button></th>
+                    <th scope="col"><button type="button" class="sort" data-sort="p95">P95<svg class="icon"><use href="#i-sort" /></svg></button></th>
+                    <th scope="col">Status</th>
+                  </tr></thead>
+                  <tbody id="nodeRows"></tbody>
+                </table>
+              </div>
+              <div class="card-foot"><span>Showing 3 of 3 nodes</span><span class="mono" id="nodesScope">traffic · last 24 hours</span></div>
+            </section>
+            <section class="card rise" style="--i:6" id="activity" aria-labelledby="activity-title">
+              <div class="card-head"><div><h2 class="card-title" id="activity-title">Recent activity</h2><p class="card-desc">Deploys, config changes and alerts</p></div><span class="chip ghost">No source connected</span></div>
+              <div class="log" role="log" aria-label="Activity log, no events yet">
+                <div class="log-bar"><span>activity.log</span><span>0 events</span></div>
+                <p class="log-line"><span class="ts" id="logTime">--:--:--</span><span class="prompt" aria-hidden="true">›</span><span>Waiting for an activity source<span class="caret" aria-hidden="true"></span></span></p>
+                <p class="log-line dim"><span class="ts" aria-hidden="true">········</span><span class="prompt" aria-hidden="true">›</span><span>Events stream here once a source is connected. Nothing is recorded yet.</span></p>
+              </div>
+            </section>
+          </div>
+
+          <div class="stack">
+            <section class="card on-dark rise" style="--i:7" id="traffic" aria-labelledby="traffic-title">
+              <div class="card-head">
+                <div><h2 class="card-title" id="traffic-title">Request volume</h2><p class="card-desc" id="trafficDesc">Requests per hour, all nodes</p></div>
+                <div class="view-toggle" role="group" aria-label="Chart or table view">
+                  <button type="button" data-view="chart" aria-pressed="true" aria-label="Chart view"><svg class="icon"><use href="#i-chart" /></svg></button>
+                  <button type="button" data-view="table" aria-pressed="false" aria-label="Table view"><svg class="icon"><use href="#i-table" /></svg></button>
+                </div>
+              </div>
+              <div class="chart-summary">
+                <div class="cs-main"><strong class="num" id="chartTotal">24.8M</strong><span id="chartSummaryText">requests · last 24 hours</span></div>
+                <div class="budget" id="budget" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" aria-label="Error budget left against a 99.9% SLO">
+                  <div class="budget-top"><span class="mono-label">Error budget</span><b class="num" id="budgetValue">62%</b></div>
+                  <div class="budget-track"><span id="budgetFill"></span></div>
+                  <span class="budget-sub">left · SLO 99.9%</span>
+                </div>
+              </div>
+              <div class="plot" id="plot" tabindex="0" role="group" aria-roledescription="chart" aria-label="Request volume and 5xx error rate by period. Use the left and right arrow keys to read values.">
+                <svg id="plotSvg" aria-hidden="true"></svg>
+                <span class="peak" id="peak"></span>
+                <div class="viz-tip" id="plotTip" hidden></div>
+              </div>
+              <div class="data-table" id="plotTable" hidden></div>
+              <p class="sr-only" aria-live="polite" id="plotLive"></p>
+              <div class="chart-legend"><span><i></i>Requests</span><span><i class="line"></i>5xx error rate</span><span><i class="dash"></i>0.05% alert threshold</span><span><i class="breach"></i>Above threshold</span></div>
+            </section>
+            <aside class="card on-dark banner rise" style="--i:8" aria-labelledby="banner-title">
+              <svg class="rings" viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="34"/><circle cx="100" cy="100" r="62"/><circle cx="100" cy="100" r="92"/></svg>
+              <div class="banner-copy"><span class="mono-label">Demo mode</span><strong id="banner-title">Live telemetry is off</strong><p>Every figure on this page is demo data.</p></div>
+              <button type="button" class="btn" id="bannerHelp">About demo data</button>
+            </aside>
+          </div>
+        </div>
+
+        <footer class="footer"><span>© 2026 MIRQB · <span class="mono">OpenGateway</span></span><a href="#main">Back to top ↑</a></footer>
+      </main>
+    </div>
+  </div>
+</div>
+
+<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle">
+  <h2 id="helpTitle">Help & shortcuts</h2>
+  <p>Move between sections with the sidebar or the tabs at the top, or search for a section or node.</p>
+  <h3>Shortcuts</h3>
+  <ul><li><strong>⌘/Ctrl + K</strong> opens search</li><li><strong>Esc</strong> closes menus and dialogs</li><li><strong>← →</strong> step through the traffic chart once it has focus</li></ul>
+  <h3>About the data</h3>
+  <p>This workspace isn't connected to live telemetry, so every figure is sample data. Traffic, status mix, latency, error rate and region share follow the time range you pick. Node CPU and P95 are fixed samples, and round-trip times between nodes are typical values, not measurements. The clocks show real local time.</p>
+  <form method="dialog"><button class="btn btn-dark" type="submit">Close</button></form>
+</dialog>
+<div class="command-backdrop" id="commandBackdrop" hidden><div class="command" role="dialog" aria-modal="true" aria-label="Search the workspace"><div class="command-input"><svg class="icon"><use href="#i-search" /></svg><input id="commandInput" type="search" placeholder="Search sections and nodes…" aria-label="Search sections and nodes" autocomplete="off" /><kbd>Esc</kbd></div><div class="command-results" id="commandResults"></div></div></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+  const sidebar = $('sidebar');
+  const shell = $('shell');
+  const mobile = () => matchMedia('(max-width: 720px)').matches;
+  const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  let lastDrawerFocus = null, lastCommandFocus = null, lastHelpFocus = null;
+
+  /* ── Demo data ─────────────────────────────────────────────── */
+  const MAP = { cols: 128, rows: 67, lon0: -92, lat1: 64, step: 0.75, k: 0.7771459614569709, data: '05110770003ff8000038000000bff1ff804003d0001ff0000000000003ffc7ff000bf020000ff0000000000007ff87ff0001f8000007e0000000000007ff83ff0001fe000000e0000000000007ffc3ff0001fe08000000000000000007ffe0070003ff1c000000000000000007dfc0ff0001ffbc0000000000000030031f82ff0000fffe0000000000000078000fa27fe000ffff000000000000007800cf07fff800ffff000000000000003000ce07fffe01ffff800000000000007c00b007ffffc7fffff0000000000003cc00406fffffc7fffff00000000000078e007fffffffe3fffff80000000000039f07ffffffffe3fffffc0000000000079f8ffffffffff3fffff80000000000041f0fffffffffffffffc80000000000001f7fffffffffffffc008000000000000407fffffffffffffc21d00000000000001ffffffffffffff781f00000000000017ffffffffffffffe03f0000000000001ffffffffffffffff00180000000000007fffffffffffffff68000000000000003fffffffeffffffff8000000000000003fffbfffcffffffce0000000000000003fff1fffcffffff100000000000000003ff71fff8fffffc0000000000000001ffe43cfff0fffffc0000000000000003ffe01c3ff0fffffc0000000000000003ffe08f1ff0ffffe00000000000000003ff80039ffeffffe00000000000000003ff0081df1fffffc00000000000000003fe20808e3fffff800000000000000003fe0000871ffffe000000000000000003fe0008079fffff000000000000000003fc0006020fffff800000000000000000603fe00006ffff80000000000000000001ffc00000fffe0000000000000000007fffe00060fffe000000000000000000ffffc00000fffc000000000000000001ffffc00000fff8000000000000000003fffff00000fff0000000000000000003fffffe0f00ffe0000000000000000007ffffff0ff1ffe0000000000000000007ffffffcfffe160000000000000000007ffffffffff0060000000000000000007ffffffffff003000000000000000001fffffffffff003000000000000000003fffffffffff003000000000000000007fffffffffff00100000000000000000ffffffffffff00100000000000000000ffffffffffff00020000000000000000ffffffffffff00000000000000000001ffffffffffff00204000000000000001ffffffffffff00bc0000000000000003ffffffffffff00460000000000000003ffffffffffff38038000000000000003ffffffffffff3801c000000000000001ffffffffffff78000e00000000000003ffffffffffff70002f80000000000001fffffffffffff0010400000000000001fffffffffffff0000002000000000003fffffffffffff0000000000000000003ffffffffffffff000000000000000003ffffffffffffff800000000000000007ffffffffffffff800000000000000003ffffffffffff' };
+  MAP.lonSpan = MAP.cols * MAP.step / MAP.k;
+  MAP.latSpan = MAP.rows * MAP.step;
+  const REGIONS = [
+    { city: 'Paris', code: 'eu-west-01', iata: 'PAR', tz: 'Europe/Paris', lat: 48.86, lon: 2.35, pin: '' },
+    { city: 'Virginia', code: 'us-east-01', iata: 'IAD', tz: 'America/New_York', lat: 39.04, lon: -77.49, pin: 'start' },
+    { city: 'Casablanca', code: 'ma-casa-01', iata: 'CMN', tz: 'Africa/Casablanca', lat: 33.57, lon: -7.59, pin: 'below' }
+  ];
+  // Typical round-trip times between the three regions (illustrative, not measured)
+  const ROUTES = [
+    { a: 1, b: 0, rtt: 76, packets: 4, dur: 4.2 },
+    { a: 1, b: 2, rtt: 98, packets: 3, dur: 4.8 },
+    { a: 0, b: 2, rtt: 34, packets: 3, dur: 2.6 }
+  ];
+  const NODES = [
+    { node: 'gw-eu-01', host: 'eu-west-01', ip: '10.20.1.11', city: 'Paris', cc: 'FR', region: 0, cpu: 42, p95: 72 },
+    { node: 'gw-ma-01', host: 'ma-casa-01', ip: '10.20.2.11', city: 'Casablanca', cc: 'MA', region: 2, cpu: 58, p95: 84 },
+    { node: 'gw-us-01', host: 'us-east-01', ip: '10.20.3.11', city: 'Virginia', cc: 'US', region: 1, cpu: 31, p95: 91 }
+  ];
+  const THRESHOLD = 0.05;   // % 5xx rate that raises an alert
+  const SLO_ERR = 0.1;      // 99.9% availability SLO → 0.1% error allowance
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const now = new Date(); now.setMinutes(0, 0, 0);
+  const hourLabel = (d) => String(d.getHours()).padStart(2, '0') + ':00';
+  const dayShort = (d) => d.getDate() + ' ' + MON[d.getMonth()];
+  const dayLong = (d) => WD[d.getDay()] + ' ' + dayShort(d);
+  const days = (n) => Array.from({ length: n }, (_, i) => { const d = new Date(now); d.setHours(12); d.setDate(d.getDate() - (n - 1 - i)); return d; });
+  const hours = Array.from({ length: 24 }, (_, i) => new Date(now.getTime() - (23 - i) * 3600e3));
+  const d7 = days(7), d30 = days(30);
+  const weekend = (d) => d.getDay() === 0 || d.getDay() === 6;
+  function series(shape, err, total) {
+    const sum = shape.reduce((a, b) => a + b, 0);
+    return { values: shape.map((v) => v / sum * total), err };
+  }
+  const RANGES = {
+    '24h': Object.assign(series(
+      [53,62,59,66,56,72,67,70,79,74,80,84,79,93,88,86,97,91,84,90,83,96,87,94],
+      [.034,.031,.036,.029,.041,.039,.033,.044,.037,.035,.040,.032,.036,.043,.035,.041,.034,.039,.058,.033,.041,.034,.037,.035], 24.8e6),
+      { label: 'Last 24 hours', per: 'hour', short: hours.map(hourLabel), long: hours.map((d) => dayLong(d) + ', ' + hourLabel(d)), reqDelta: 12.6, succDelta: '0.01 pt', p50: 38, p95: 84, p95Delta: 9, shares: [42, 31, 27], r3: 1.8, r4: 1.26 }),
+    '7d': Object.assign(series(
+      d7.map((d, i) => weekend(d) ? 54 + i : 78 + (i % 3) * 3),
+      [.036,.041,.038,.052,.039,.035,.037], 167e6),
+      { label: 'Last 7 days', per: 'day', short: d7.map((d) => WD[d.getDay()]), long: d7.map(dayLong), reqDelta: 8.4, succDelta: '0.02 pt', p50: 39, p95: 87, p95Delta: 4, shares: [41, 32, 27], r3: 1.7, r4: 1.31 }),
+    '30d': Object.assign(series(
+      d30.map((d, i) => 58 + i * 0.9 + (weekend(d) ? -14 : 0) + 3 * Math.sin(i * 1.3)),
+      d30.map((_, i) => +(0.036 + 0.005 * Math.sin(i * 1.7) + (i === 9 ? 0.024 : 0) + (i === 22 ? 0.017 : 0)).toFixed(3)), 721e6),
+      { label: 'Last 30 days', per: 'day', short: d30.map(dayShort), long: d30.map(dayLong), reqDelta: 10.1, succDelta: '0.01 pt', p50: 40, p95: 89, p95Delta: 6, shares: [40, 33, 27], r3: 1.75, r4: 1.22 })
+  };
+  let range = '24h', section = 'Overview';
+  const cur = () => RANGES[range];
+  const totalOf = (r) => r.values.reduce((a, b) => a + b, 0);
+  const errAvgOf = (r) => r.values.reduce((a, v, i) => a + v * r.err[i], 0) / totalOf(r);
+
+  /* ── Helpers ── */
+  function compact(n) {
+    const f = (v, s) => (v >= 100 ? v.toFixed(0) : v.toFixed(1)).replace(/\.0$/, '') + s;
+    if (n >= 1e9) return f(n / 1e9, 'B');
+    if (n >= 1e6) return f(n / 1e6, 'M');
+    if (n >= 1e3) return f(n / 1e3, 'K');
+    return String(Math.round(n));
+  }
+  const pct = (v, d = 3) => v.toFixed(d) + '%';
+  function niceScale(max, count = 3) {
+    const raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), norm = raw / mag;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+    const top = step * Math.ceil(max / step);
+    const ticks = []; for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    return { top, ticks };
+  }
+  function el(tag, attrs = {}, parent) {
+    const node = document.createElementNS(svgNS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  function html(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  const colTop = (x, y, w, base, r) => { r = Math.max(0, Math.min(r, w / 2, base - y)); return `M${x},${base}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${base}Z`; };
+  function setText(id, text, animate) {
+    const node = $(id); if (node.textContent === text) return;
+    node.textContent = text;
+    if (animate && !reducedMotion()) { node.classList.remove('tick'); void node.offsetWidth; node.classList.add('tick'); }
+  }
+  const hexIcon = () => { const s = el('svg', { viewBox: '0 0 24 24', class: 'icon' }); el('use', { href: '#i-hex' }, s); return s; };
+
+  /* ── Sliding thumbs for the tabs and the range control ── */
+  function placeThumb(group, instant) {
+    const thumb = group.querySelector(':scope > .thumb'), on = group.querySelector(':scope > .active');
+    if (!thumb || !on || !on.offsetWidth) return;
+    if (instant) thumb.style.transition = 'none';
+    thumb.style.width = on.offsetWidth + 'px';
+    thumb.style.transform = `translateX(${on.offsetLeft}px)`;
+    if (instant) { void thumb.offsetWidth; thumb.style.transition = ''; }
+    group.classList.add('thumb-ready');
+  }
+  const thumbs = () => document.querySelectorAll('.has-thumb').forEach((g) => placeThumb(g, true));
+
+  /* ── Theme ── */
+  function setTheme(theme) {
+    root.classList.toggle('dark', theme === 'dark');
+    $('themeButton').setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    drawMap();
+  }
+  let savedTheme = null;
+  try { savedTheme = localStorage.getItem('mirqb-theme'); } catch (_) {}
+  $('themeButton').setAttribute('aria-label', root.classList.contains('dark') ? 'Switch to light mode' : 'Switch to dark mode');
+  function switchTheme() {
+    const opener = document.activeElement.closest('#sidebarProfileMenu') ? $('sidebarProfileButton')
+      : document.activeElement.closest('#profileMenu') ? $('profileButton') : $('themeButton');
+    const next = root.classList.contains('dark') ? 'light' : 'dark';
+    savedTheme = next;
+    try { localStorage.setItem('mirqb-theme', next); } catch (_) {}
+    closeMenus();
+    const origin = ($('themeButton').getClientRects().length ? $('themeButton') : opener).getBoundingClientRect();
+    if (!document.startViewTransition || reducedMotion()) { setTheme(next); opener.focus(); return; }
+    // Reveal the new theme as a circle growing from the toggle
+    const x = origin.left + origin.width / 2, y = origin.top + origin.height / 2;
+    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const transition = document.startViewTransition(() => setTheme(next));
+    transition.ready.then(() => root.animate(
+      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+      { duration: 620, easing: 'cubic-bezier(.2,.7,.2,1)', pseudoElement: '::view-transition-new(root)' }
+    )).catch(() => {});
+    transition.finished.finally(() => opener.focus());
+  }
+  $('themeButton').addEventListener('click', switchTheme);
+  $('profileThemeAction').addEventListener('click', switchTheme);
+  $('sidebarThemeAction').addEventListener('click', switchTheme);
+  // Follow the host / OS theme until the viewer picks one here
+  const followSystem = () => { if (savedTheme) return; const host = root.getAttribute('data-theme'); setTheme(host ? host : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', followSystem);
+  new MutationObserver(followSystem).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+
+  /* ── Menus ── */
+  const MENUS = [['notificationButton','notificationMenu'],['profileButton','profileMenu'],['workspaceButton','workspaceMenu'],['sidebarProfileButton','sidebarProfileMenu']];
+  function closeMenus() { for (const [b, m] of MENUS) { $(m).hidden = true; $(b).setAttribute('aria-expanded', 'false'); } }
+  function toggleMenu(button, menu) {
+    const wasOpen = !$(menu).hidden;
+    closeMenus();
+    $(menu).hidden = wasOpen;
+    $(button).setAttribute('aria-expanded', String(!wasOpen));
+    if (!wasOpen) $(menu).querySelector('button:not(:disabled)')?.focus(); else $(button).focus();
+  }
+  MENUS.forEach(([b, m]) => $(b).addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(b, m); }));
+  document.addEventListener('click', (e) => { if (!e.target.closest('.notification-wrap, .profile-wrap, .workspace-wrap')) closeMenus(); });
+  document.querySelector('[data-workspace]').addEventListener('click', () => { closeMenus(); $('workspaceButton').focus(); });
+
+  /* ── Sidebar: collapsed rail by default, remembered per viewer ── */
+  let prefersCollapsed = true;
+  try { const s = localStorage.getItem('mirqb-sidebar-collapsed'); if (s !== null) prefersCollapsed = s === 'true'; } catch (_) {}
+  function setCollapseState() {
+    const collapsed = !mobile() && prefersCollapsed;
+    sidebar.classList.toggle('is-collapsed', collapsed);
+    const label = mobile() ? 'Close navigation' : collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    const btn = $('collapseButton');
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.setAttribute('aria-label', label);
+    btn.title = label; btn.dataset.tooltip = label;
+    btn.querySelector('.icon').style.transform = collapsed ? 'rotate(180deg)' : '';
+  }
+  function openDrawer() {
+    if (!mobile()) return;
+    lastDrawerFocus = document.activeElement;
+    closeMenus();
+    sidebar.inert = false;
+    sidebar.classList.add('mobile-open');
+    $('mobileBackdrop').hidden = false;
+    $('mobileMenuButton').setAttribute('aria-expanded', 'true');
+    shell.inert = true;
+    $('collapseButton').focus();
+  }
+  function closeDrawer(restoreFocus = true) {
+    if (!sidebar.classList.contains('mobile-open')) return;
+    closeMenus();
+    sidebar.classList.remove('mobile-open');
+    $('mobileBackdrop').hidden = true;
+    $('mobileMenuButton').setAttribute('aria-expanded', 'false');
+    shell.inert = false;
+    sidebar.inert = mobile();
+    if (restoreFocus) (lastDrawerFocus?.isConnected ? lastDrawerFocus : $('mobileMenuButton')).focus();
+  }
+  setCollapseState();
+  sidebar.inert = mobile();
+  $('collapseButton').addEventListener('click', () => {
+    if (mobile()) { closeDrawer(); return; }
+    closeMenus();
+    prefersCollapsed = !prefersCollapsed;
+    try { localStorage.setItem('mirqb-sidebar-collapsed', String(prefersCollapsed)); } catch (_) {}
+    setCollapseState();
+  });
+  $('mobileMenuButton').addEventListener('click', openDrawer);
+  $('mobileBackdrop').addEventListener('click', () => closeDrawer());
+  window.addEventListener('resize', () => {
+    if (!mobile()) closeDrawer(false);
+    sidebar.inert = mobile() && !sidebar.classList.contains('mobile-open');
+    setCollapseState();
+  });
+
+  /* ── Section nav: sidebar links and top tabs stay in sync; the header shows the route ── */
+  function renderRoute() {
+    $('routePath').textContent = '/' + section.toLowerCase();
+    $('routeQuery').textContent = '?range=' + range;
+  }
+  function setActiveNav(label) {
+    section = label;
+    document.querySelectorAll('[data-nav]').forEach((link) => {
+      const match = link.dataset.nav === label;
+      link.classList.toggle('active', match);
+      if (match) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+    });
+    $('breadcrumbCurrent').textContent = label;
+    placeThumb(document.querySelector('.pill-nav'));
+    renderRoute();
+  }
+  document.querySelectorAll('[data-nav]').forEach((item) => {
+    if (item.closest('.sidebar')) item.dataset.tooltip = item.dataset.nav;
+    item.addEventListener('click', () => {
+      setActiveNav(item.dataset.nav);
+      if (mobile() && item.closest('.sidebar')) {
+        closeDrawer(false);
+        const destination = document.querySelector(item.getAttribute('href'));
+        destination?.setAttribute('tabindex', '-1');
+        destination?.focus({ preventScroll: true });
+      }
+    });
+  });
+
+  /* ── Command palette ── */
+  const commands = [
+    ['Overview', 'overview', '#i-grid', 'Overview'], ['Traffic analytics', 'traffic', '#i-chart', 'Analytics'],
+    ['Gateway nodes', 'gateway-nodes', '#i-nodes', 'Gateways'], ['Recent activity', 'activity', '#i-activity', 'Activity'],
+    ['gw-eu-01 · Paris', 'gateway-nodes', '#i-hex', 'Gateways'], ['gw-ma-01 · Casablanca', 'gateway-nodes', '#i-hex', 'Gateways'], ['gw-us-01 · Virginia', 'gateway-nodes', '#i-hex', 'Gateways']
+  ];
+  function renderCommands(query = '') {
+    const list = $('commandResults');
+    list.replaceChildren(html('p', '', 'Jump to'));
+    const matches = commands.filter(([label]) => label.toLowerCase().includes(query.toLowerCase()));
+    if (!matches.length) { list.appendChild(html('p', '', 'No sections or nodes match')); return; }
+    for (const [label, target, icon, nav] of matches) {
+      const b = html('button', 'command-result');
+      b.type = 'button'; b.dataset.target = target; b.dataset.nav = nav;
+      const s = el('svg', { class: 'icon' }); el('use', { href: icon }, s);
+      b.append(s, document.createTextNode(label));
+      list.appendChild(b);
+    }
+  }
+  function openCommand() {
+    if (mobile() && sidebar.classList.contains('mobile-open')) closeDrawer(false);
+    lastCommandFocus = document.activeElement;
+    $('commandBackdrop').hidden = false;
+    $('commandInput').value = '';
+    renderCommands();
+    requestAnimationFrame(() => $('commandInput').focus());
+  }
+  function closeCommand(restoreFocus = true) {
+    $('commandBackdrop').hidden = true;
+    if (restoreFocus) (lastCommandFocus?.isConnected && !lastCommandFocus.inert ? lastCommandFocus : $('searchButton')).focus();
+  }
+  $('searchButton').addEventListener('click', openCommand);
+  $('commandInput').addEventListener('input', (e) => renderCommands(e.target.value));
+  $('commandResults').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-target]'); if (!t) return;
+    const target = $(t.dataset.target);
+    closeCommand(false);
+    setActiveNav(t.dataset.nav);
+    target.setAttribute('tabindex', '-1');
+    target.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'start' });
+    target.focus({ preventScroll: true });
+  });
+  $('commandBackdrop').addEventListener('click', (e) => { if (e.target === $('commandBackdrop')) closeCommand(); });
+
+  /* ── Help ── */
+  function openHelp() {
+    lastHelpFocus = document.activeElement.closest('#sidebarProfileMenu') ? $('sidebarProfileButton')
+      : document.activeElement.closest('#profileMenu') ? $('profileButton') : document.activeElement;
+    closeMenus();
+    $('helpDialog').showModal();
+  }
+  ['helpButton', 'profileHelpAction', 'sidebarHelpAction', 'bannerHelp'].forEach((id) => $(id).addEventListener('click', openHelp));
+  $('helpDialog').addEventListener('close', () => lastHelpFocus?.focus());
+
+  /* ── Keyboard ── */
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('commandBackdrop').hidden ? openCommand() : closeCommand(); }
+    if (e.key === 'Escape') {
+      if (!$('commandBackdrop').hidden) closeCommand();
+      const activeMenu = document.activeElement.closest('.popover');
+      const menuButton = activeMenu ? document.querySelector(`[aria-controls="${activeMenu.id}"]`) : null;
+      closeMenus();
+      if (mobile() && sidebar.classList.contains('mobile-open')) closeDrawer(); else menuButton?.focus();
+    }
+    if (e.key === 'Tab' && mobile() && sidebar.classList.contains('mobile-open')) trap(e, [...sidebar.querySelectorAll('button:not(:disabled), a[href]')].filter((x) => x.getClientRects().length && !x.closest('[hidden]')));
+    if (e.key === 'Tab' && !$('commandBackdrop').hidden) trap(e, [$('commandInput'), ...$('commandResults').querySelectorAll('button')]);
+  });
+  function trap(e, controls) {
+    const first = controls[0], last = controls[controls.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
+  /* ── Clocks: the viewer's local time and each region's local time (real, not demo) ── */
+  const clockFmt = {};
+  const fmtTime = (tz) => (clockFmt[tz || 'local'] ||= new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz })).format(new Date());
+  function tickClock() {
+    const d = new Date(), off = -d.getTimezoneOffset(), a = Math.abs(off);
+    $('bezelClock').textContent = fmtTime();
+    $('bezelZone').textContent = `UTC${off >= 0 ? '+' : '−'}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
+    document.querySelectorAll('[data-tz]').forEach((n) => { n.textContent = fmtTime(n.dataset.tz) + ' local'; });
+  }
+  $('logTime').textContent = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date());
+
+  /* ── Map: dot-matrix land (Natural Earth), nodes at real coordinates ── */
+  const project = (lat, lon) => [(lon - MAP.lon0) / MAP.lonSpan, (MAP.lat1 - lat) / MAP.latSpan];
+  const bit = (r, c) => (parseInt(MAP.data[r * (MAP.cols / 4) + (c >> 2)], 16) >> (3 - (c & 3))) & 1;
+  function hexToRgb(hex) { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.replace(/./g, '$&$&') : h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function drawMap() {
+    const canvas = $('geoCanvas');
+    const box = canvas.getBoundingClientRect();
+    if (!box.width) return;
+    const W = box.width, H = box.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const css = getComputedStyle(root);
+    const muted = css.getPropertyValue('--color-muted-foreground').trim() || '#475569';
+    const [pr, pg, pb] = hexToRgb(css.getPropertyValue('--color-primary').trim() || '#087482');
+    const glow = parseFloat(css.getPropertyValue('--map-glow')) || .1;
+    // Graticule: 10° parallels, 15° meridians
+    ctx.strokeStyle = muted; ctx.globalAlpha = .13; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let lat = 20; lat <= 60; lat += 10) { const y = Math.round(project(lat, 0)[1] * H) + .5; ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    for (let lon = -90; lon <= 30; lon += 15) { const x = Math.round(project(0, lon)[0] * W) + .5; ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Land
+    const cw = W / MAP.cols, ch = H / MAP.rows;
+    const r = Math.max(0.7, Math.min(cw, ch) * 0.34);
+    ctx.fillStyle = css.getPropertyValue('--map-dot').trim() || '#c4ceda';
+    ctx.beginPath();
+    for (let row = 0; row < MAP.rows; row++) for (let col = 0; col < MAP.cols; col++) {
+      if (!bit(row, col)) continue;
+      const x = (col + 0.5) * cw, y = (row + 0.5) * ch;
+      ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    // Tint the land around each node by its share of requests
+    const shares = cur().shares;
+    const spots = REGIONS.map((reg, i) => { const [fx, fy] = project(reg.lat, reg.lon); return { x: fx * W, y: fy * H, R: W * (0.05 + 0.24 * Math.sqrt(shares[i] / 100)) }; });
+    ctx.globalCompositeOperation = 'source-atop';
+    spots.forEach(({ x, y, R }) => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+      g.addColorStop(0, `rgba(${pr},${pg},${pb},1)`); g.addColorStop(0.45, `rgba(${pr},${pg},${pb},.55)`); g.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
+      ctx.fillStyle = g; ctx.fillRect(x - R, y - R, R * 2, R * 2);
+    });
+    // Soft phosphor halo behind the tinted land
+    ctx.globalCompositeOperation = 'destination-over';
+    spots.forEach(({ x, y, R }) => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R * 1.25);
+      g.addColorStop(0, `rgba(${pr},${pg},${pb},${glow})`); g.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
+      ctx.fillStyle = g; ctx.fillRect(x - R * 1.3, y - R * 1.3, R * 2.6, R * 2.6);
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    // Graticule labels over open ocean
+    ctx.fillStyle = muted; ctx.globalAlpha = .6;
+    ctx.font = '500 9.5px "IBM Plex Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'bottom';
+    const lx = project(0, -25)[0] * W;
+    for (let lat = 20; lat <= 50; lat += 10) ctx.fillText(lat + '°N', lx + 4, project(lat, 0)[1] * H - 3);
+    ctx.fillText('0°', project(0, 0)[0] * W + 4, project(60, 0)[1] * H - 3);
+    ctx.globalAlpha = 1;
+  }
+  const pinRefs = [];
+  function buildGeo() {
+    const layer = $('geoLayer'), routes = $('geoRoutes');
+    const pts = REGIONS.map((reg) => project(reg.lat, reg.lon).map((v, k) => v * (k ? 523.4 : 1000)));
+    const motion = !reducedMotion();
+    ROUTES.forEach((route, i) => {
+      const [x1, y1] = pts[route.a], [x2, y2] = pts[route.b];
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+      let nx = -dy / len, ny = dx / len; if (ny > 0) { nx = -nx; ny = -ny; }
+      const cx = (x1 + x2) / 2 + nx * len * 0.22, cy = (y1 + y2) / 2 + ny * len * 0.22;
+      el('path', { id: 'route-' + i, d: `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`, fill: 'none', stroke: 'var(--primary)', 'stroke-width': 1.5, 'stroke-opacity': .5, 'vector-effect': 'non-scaling-stroke', 'stroke-linecap': 'round' }, routes);
+      if (motion) for (let k = 0; k < route.packets; k++) {
+        const g = el('g', {}, routes);
+        el('circle', { r: 8, fill: 'var(--primary)', 'fill-opacity': .16 }, g);
+        el('circle', { r: 3.4, fill: 'var(--primary)' }, g);
+        const begin = (-k * route.dur / route.packets).toFixed(2) + 's', reverse = k % 2 === 1;
+        const move = el('animateMotion', { dur: route.dur + 's', begin, repeatCount: 'indefinite', keyPoints: reverse ? '1;0' : '0;1', keyTimes: '0;1', calcMode: 'linear' }, g);
+        el('mpath', { href: '#route-' + i }, move);
+        el('animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;.12;.88;1', dur: route.dur + 's', begin, repeatCount: 'indefinite' }, g);
+      }
+      const label = html('span', 'rtt', route.rtt + ' ms');
+      label.style.left = (0.25 * x1 + 0.5 * cx + 0.25 * x2) / 10 + '%';
+      label.style.top = (0.25 * y1 + 0.5 * cy + 0.25 * y2) / 5.234 + '%';
+      layer.appendChild(label);
+    });
+    REGIONS.forEach((reg, i) => {
+      const [fx, fy] = project(reg.lat, reg.lon);
+      const pin = html('div', 'pin' + (reg.pin ? ' ' + reg.pin : ''));
+      pin.style.left = fx * 100 + '%'; pin.style.top = fy * 100 + '%';
+      const mark = html('span', 'pin-mark'); mark.style.setProperty('--d', (i * 0.9) + 's');
+      const ms = el('svg', { viewBox: '0 0 24 24' }, mark);
+      el('path', { d: 'M12 2.2 20.6 7.1v9.8L12 21.8 3.4 16.9V7.1Z' }, ms); el('circle', { cx: 12, cy: 12, r: 3 }, ms);
+      const card = html('span', 'pin-card');
+      const code = html('span', 'pin-code'); code.append(html('b', '', reg.iata), document.createTextNode(' · ' + reg.code));
+      const req = html('strong');
+      const time = html('span', 'pin-time'); time.dataset.tz = reg.tz;
+      card.append(code, req, time); pin.append(card, mark); layer.appendChild(pin);
+      pinRefs[i] = req;
+    });
+    const names = REGIONS.map((r) => r.city);
+    $('geo').setAttribute('aria-label', `Map of gateway nodes in ${names.join(', ')}. Typical round-trip times: ` + ROUTES.map((r) => `${names[r.a]}–${names[r.b]} ${r.rtt} ms`).join(', ') + '.');
+  }
+  function updatePins() {
+    const r = cur(), total = totalOf(r);
+    REGIONS.forEach((_, i) => { pinRefs[i].textContent = compact(total * r.shares[i] / 100) + ' requests'; });
+  }
+
+  /* ── Region share bars (updated in place so heights animate) ── */
+  const regionRefs = [];
+  function buildRegions() {
+    const wrap = $('regionBars');
+    REGIONS.forEach((reg) => {
+      const col = html('div', 'region-col'), share = html('div', 'share num'), bar = html('div', 'region-bar');
+      const name = html('span', '', reg.city), abs = html('small');
+      bar.append(name, abs); col.append(share, bar); wrap.appendChild(col);
+      regionRefs.push({ share, bar, abs });
+    });
+  }
+  function renderRegions(animate) {
+    const r = cur(), total = totalOf(r), max = Math.max(...r.shares);
+    setText('regionsTotal', compact(total), animate);
+    regionRefs.forEach((ref, i) => {
+      ref.share.textContent = r.shares[i] + '%';
+      ref.bar.style.height = Math.round(r.shares[i] / max * 70) + '%';
+      ref.abs.textContent = compact(total * r.shares[i] / 100);
+    });
+  }
+
+  /* ── HTTP status mix ── */
+  const mixRefs = [];
+  function buildMix() {
+    const colors = ['color-mix(in srgb, var(--foreground) 34%, transparent)', 'var(--on-dark-info)', 'var(--on-dark-warning)', 'var(--on-dark-danger)'];
+    ['2xx', '3xx', '4xx', '5xx'].forEach((code, i) => {
+      const seg = html('span'); seg.style.background = colors[i]; $('mixBar').appendChild(seg);
+      const item = html('span'), key = html('i'), value = html('b');
+      key.style.background = colors[i];
+      item.append(key, document.createTextNode(code + ' '), value); $('mixLegend').appendChild(item);
+      mixRefs.push({ seg, value });
+    });
+  }
+  function renderMix() {
+    const r = cur(), e = errAvgOf(r);
+    const parts = [100 - r.r3 - r.r4 - e, r.r3, r.r4, e];
+    const text = [parts[0].toFixed(1) + '%', parts[1].toFixed(2) + '%', parts[2].toFixed(2) + '%', parts[3].toFixed(3) + '%'];
+    mixRefs.forEach((ref, i) => { ref.seg.style.flexGrow = parts[i]; ref.value.textContent = text[i]; });
+    $('mixBar').setAttribute('aria-label', 'Responses by status class: ' + ['2xx', '3xx', '4xx', '5xx'].map((c, i) => `${c} ${text[i]}`).join(', '));
+  }
+
+  /* ── Latency distribution (log-normal from p50 and p95) ── */
+  function renderHisto(animate) {
+    const host = $('histo'); host.replaceChildren();
+    const W = host.clientWidth, H = host.clientHeight; if (!W) return;
+    const r = cur(), mu = Math.log(r.p50), s = Math.log(r.p95 / r.p50) / 1.645, p99 = Math.exp(mu + 2.326 * s);
+    const bins = 18, maxMs = 180, bw = maxMs / bins;
+    const vals = Array.from({ length: bins }, (_, i) => { const x = (i + .5) * bw; return Math.exp(-((Math.log(x) - mu) ** 2) / (2 * s * s)) / (x * s * Math.sqrt(2 * Math.PI)) * bw; });
+    const vmax = Math.max(...vals), top = 14, base = H - 13, band = W / bins, barW = Math.max(2, Math.min(24, band - 2));
+    const x = (ms) => ms / maxMs * W;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, host);
+    const g = el('g', animate && !reducedMotion() ? { class: 'bars-grow', style: `transform-origin: 0 ${base}px` } : {}, svg);
+    vals.forEach((v, i) => {
+      const h = v / vmax * (base - top - 4), bx = i * band + (band - barW) / 2;
+      const p = el('path', { d: colTop(bx, base - h, barW, base, 2), fill: 'var(--primary)', 'fill-opacity': (i + .5) * bw <= r.p95 ? .55 : .2 }, g);
+      el('title', {}, p).textContent = `${i * bw}–${(i + 1) * bw} ms · ${(v * 100).toFixed(1)}% of requests`;
+    });
+    el('line', { x1: 0, x2: W, y1: base + .5, y2: base + .5, stroke: 'var(--border)', 'stroke-width': 1 }, svg);
+    [['p50', r.p50], ['p95', r.p95], ['p99', p99]].forEach(([name, ms]) => {
+      const mx = Math.round(x(ms)) + .5;
+      el('line', { x1: mx, x2: mx, y1: top - 1, y2: base, stroke: 'var(--foreground)', 'stroke-opacity': name === 'p99' ? .75 : .32, 'stroke-width': 1 }, svg);
+      el('text', { x: mx, y: top - 4, 'text-anchor': 'middle', class: 'mk' }, svg).textContent = name;
+    });
+    [[0, '0'], [50, '50'], [100, '100'], [150, '150 ms']].forEach(([ms, t], k) => { el('text', { x: x(ms), y: H - 1, 'text-anchor': k ? 'middle' : 'start' }, svg).textContent = t; });
+    setText('p99Value', String(Math.round(p99)), animate);
+    $('latNote').textContent = `p50 ${r.p50} ms · p95 ${r.p95} ms`;
+  }
+
+  /* ── 5xx sparkline ── */
+  function spark(host, values, { max, threshold }) {
+    host.replaceChildren();
+    const W = host.clientWidth, H = host.clientHeight; if (!W) return;
+    const pad = 5;
+    const x = (i) => pad + i / (values.length - 1) * (W - pad * 2);
+    const y = (v) => H - 3 - Math.min(v, max) / max * (H - 8);
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, host);
+    const line = values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    el('line', { x1: 0, x2: W, y1: y(threshold), y2: y(threshold), stroke: 'var(--muted-foreground)', 'stroke-width': 1, 'stroke-dasharray': '3 3', opacity: .7 }, svg);
+    el('path', { d: `${line}L${x(values.length - 1)},${H}L${x(0)},${H}Z`, fill: 'var(--primary)', 'fill-opacity': .08 }, svg);
+    el('path', { d: line, fill: 'none', stroke: 'var(--primary)', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    values.forEach((v, i) => { if (v > threshold) el('circle', { cx: x(i), cy: y(v), r: 4, fill: 'var(--pink)', stroke: 'var(--card)', 'stroke-width': 2 }, svg); });
+    const last = values.length - 1;
+    el('circle', { cx: x(last), cy: y(values[last]), r: 4, fill: 'var(--primary)', stroke: 'var(--card)', 'stroke-width': 2 }, svg);
+  }
+
+  /* ── Traffic chart: request columns + 5xx strip sharing one time axis ── */
+  let active = -1, geom = null;
+  function renderPlot(animate) {
+    const plot = $('plot'), svg = $('plotSvg');
+    const W = plot.clientWidth; if (!W) return;
+    const { values, err, short } = cur();
+    const n = values.length;
+    const padL = 44, padR = 6, top = 26, colH = 136, gap = 24, stripH = 44, axisH = 22;
+    const H = top + colH + gap + stripH + axisH;
+    const plotW = W - padL - padR, band = plotW / n;
+    const barW = Math.max(3, Math.min(24, band - 2));
+    const { top: vmax, ticks } = niceScale(Math.max(...values), 3);
+    const base = top + colH;
+    const yv = (v) => base - v / vmax * colH;
+    const sTop = base + gap, sBase = sTop + stripH, emax = 0.08;
+    const ye = (v) => sBase - Math.min(v, emax) / emax * stripH;
+    const cx = (i) => padL + band * (i + 0.5);
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('height', H);
+    svg.replaceChildren();
+    ticks.forEach((t) => {
+      el('line', { x1: padL, x2: W - padR, y1: yv(t), y2: yv(t), stroke: 'var(--border)', 'stroke-width': 1 }, svg);
+      el('text', { x: padL - 8, y: yv(t) + 3.5, 'text-anchor': 'end' }, svg).textContent = compact(t);
+    });
+    const g = el('g', animate && !reducedMotion() ? { class: 'bars-grow', style: `transform-origin: 0 ${base}px` } : {}, svg);
+    const bars = values.map((v, i) => el('path', { class: 'bar' + (i === n - 1 ? ' now' : ''), d: colTop(cx(i) - barW / 2, yv(v), barW, base, 4) }, g));
+    el('text', { x: padL, y: sTop - 8 }, svg).textContent = '5xx error rate';
+    [0, emax].forEach((t) => {
+      el('line', { x1: padL, x2: W - padR, y1: ye(t), y2: ye(t), stroke: 'var(--border)', 'stroke-width': 1 }, svg);
+      el('text', { x: padL - 8, y: ye(t) + 3.5, 'text-anchor': 'end' }, svg).textContent = t ? pct(t, 2) : '0%';
+    });
+    el('line', { x1: padL, x2: W - padR, y1: ye(THRESHOLD), y2: ye(THRESHOLD), stroke: 'var(--muted-foreground)', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
+    const eLine = err.map((v, i) => `${i ? 'L' : 'M'}${cx(i).toFixed(1)},${ye(v).toFixed(1)}`).join('');
+    el('path', { d: `${eLine}L${cx(n - 1)},${sBase}L${cx(0)},${sBase}Z`, fill: 'var(--primary)', 'fill-opacity': .1 }, svg);
+    el('path', { d: eLine, fill: 'none', stroke: 'var(--primary)', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    err.forEach((v, i) => { if (v > THRESHOLD) el('circle', { cx: cx(i), cy: ye(v), r: 4, fill: 'var(--pink)', stroke: 'var(--card)', 'stroke-width': 2 }, svg); });
+    const every = Math.ceil(n / 6);
+    short.forEach((label, i) => {
+      const isLast = i === n - 1;
+      if (!isLast && (i % every || n - 1 - i < every)) return;
+      el('text', { x: cx(i), y: H - 5, 'text-anchor': i === 0 ? 'start' : isLast ? 'end' : 'middle' }, svg).textContent = label;
+    });
+    const cross = el('line', { y1: top - 6, y2: sBase, stroke: 'var(--foreground)', 'stroke-opacity': .35, 'stroke-width': 1, visibility: 'hidden' }, svg);
+    const marker = el('circle', { r: 4, fill: 'var(--primary)', stroke: 'var(--card)', 'stroke-width': 2, visibility: 'hidden' }, svg);
+    geom = { padL, band, n, cx, yv, ye, bars, cross, marker, W };
+    const peakI = values.indexOf(Math.max(...values));
+    const peak = $('peak');
+    peak.textContent = 'peak ' + compact(values[peakI]);
+    const pw = peak.offsetWidth;
+    peak.style.left = Math.min(Math.max(cx(peakI), pw / 2), W - pw / 2) + 'px';
+    peak.style.top = (yv(values[peakI]) - 6) + 'px';
+    if (active >= n) active = -1;
+    setActive(active, false);
+    renderPlotTable();
+  }
+  function setActive(i, announce) {
+    active = i;
+    const plot = $('plot'), tip = $('plotTip');
+    if (!geom) return;
+    plot.classList.toggle('has-active', i >= 0);
+    geom.bars.forEach((b, j) => b.classList.toggle('on', j === i));
+    if (i < 0) { tip.hidden = true; geom.cross.setAttribute('visibility', 'hidden'); geom.marker.setAttribute('visibility', 'hidden'); return; }
+    const { values, err, long } = cur();
+    const x = geom.cx(i);
+    geom.cross.setAttribute('x1', x); geom.cross.setAttribute('x2', x); geom.cross.setAttribute('visibility', 'visible');
+    geom.marker.setAttribute('cx', x); geom.marker.setAttribute('cy', geom.ye(err[i])); geom.marker.setAttribute('visibility', 'visible');
+    tip.replaceChildren(html('div', 'tip-head', long[i]));
+    [['Requests', compact(values[i]), true], ['5xx error rate', pct(err[i]), false]].forEach(([name, val, box]) => {
+      const row = html('div', 'tip-row'), key = html('i', 'key');
+      key.style.background = 'var(--on-dark-accent)';
+      if (box) { key.style.width = '8px'; key.style.height = '8px'; }
+      row.append(key, html('span', '', name), html('b', '', val)); tip.appendChild(row);
+    });
+    if (err[i] > THRESHOLD) tip.appendChild(html('div', 'tip-warn', '▲ Above the 0.05% alert threshold'));
+    tip.hidden = false;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let left = x + 14; if (left + tw > geom.W) left = x - tw - 14;
+    tip.style.left = Math.max(0, left) + 'px';
+    tip.style.top = Math.max(0, geom.yv(values[i]) - th / 2) + 'px';
+    if (announce) $('plotLive').textContent = `${long[i]}: ${compact(values[i])} requests, 5xx error rate ${pct(err[i])}.`;
+  }
+  const plotEl = $('plot');
+  plotEl.addEventListener('pointermove', (e) => {
+    if (!geom) return;
+    const rect = plotEl.getBoundingClientRect();
+    const i = Math.floor((e.clientX - rect.left - geom.padL) / geom.band);
+    setActive(i >= 0 && i < geom.n ? i : -1, false);
+  });
+  plotEl.addEventListener('pointerleave', () => { if (document.activeElement !== plotEl) setActive(-1); });
+  plotEl.addEventListener('focus', () => { if (active < 0 && plotEl.matches(':focus-visible')) setActive(cur().values.length - 1, true); });
+  plotEl.addEventListener('blur', () => setActive(-1));
+  plotEl.addEventListener('keydown', (e) => {
+    const n = cur().values.length, step = { ArrowLeft: -1, ArrowRight: 1 };
+    if (e.key in step) { e.preventDefault(); setActive(Math.min(n - 1, Math.max(0, (active < 0 ? n - 1 : active) + step[e.key])), true); }
+    if (e.key === 'Home') { e.preventDefault(); setActive(0, true); }
+    if (e.key === 'End') { e.preventDefault(); setActive(n - 1, true); }
+  });
+  function renderPlotTable() {
+    const { values, err, long, per } = cur();
+    const table = document.createElement('table');
+    const head = table.createTHead().insertRow();
+    [per === 'hour' ? 'Hour' : 'Day', 'Requests', '5xx rate'].forEach((h) => { const th = document.createElement('th'); th.scope = 'col'; th.textContent = h; head.appendChild(th); });
+    const body = table.createTBody();
+    values.forEach((v, i) => {
+      const row = body.insertRow();
+      [long[i], Math.round(v).toLocaleString('en-US'), pct(err[i]) + (err[i] > THRESHOLD ? ' ▲' : '')].forEach((t) => { row.insertCell().textContent = t; });
+    });
+    $('plotTable').replaceChildren(table);
+  }
+  document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+    const table = b.dataset.view === 'table';
+    document.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('plot').hidden = table; $('plotTable').hidden = !table;
+    if (!table) renderPlot(false);
+  }));
+
+  /* ── Node table: sortable, with per-node traffic that follows the range ── */
+  let sort = { key: 'node', dir: 1 };
+  function nodeSeries(i) {
+    const r = cur();
+    const w = r.values.map((v, t) => v * (1 + 0.14 * Math.sin(t * 0.8 + i * 1.9)));
+    const sum = w.reduce((a, b) => a + b, 0), target = totalOf(r) * r.shares[i] / 100;
+    return w.map((v) => v / sum * target);
+  }
+  function sparkbars(values) {
+    const W = 84, H = 24, n = values.length, band = W / n, bw = Math.max(1, band - (band > 4 ? 1.5 : 1)), max = Math.max(...values);
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, 'aria-hidden': 'true' });
+    let past = '', last = '';
+    values.forEach((v, i) => { const h = Math.max(1.5, v / max * H); const d = `M${(i * band).toFixed(2)},${H}v${(-h).toFixed(2)}h${bw.toFixed(2)}v${h.toFixed(2)}z`; if (i === n - 1) last = d; else past += d; });
+    el('path', { d: past, fill: 'var(--primary)', 'fill-opacity': .45 }, svg);
+    el('path', { d: last, fill: 'var(--primary)' }, svg);
+    return svg;
+  }
+  function renderNodes() {
+    const r = cur(), total = totalOf(r);
+    const rows = NODES.map((n) => ({ ...n, share: r.shares[n.region] }));
+    rows.sort((a, b) => (typeof a[sort.key] === 'number' ? a[sort.key] - b[sort.key] : a[sort.key].localeCompare(b[sort.key])) * sort.dir);
+    const body = $('nodeRows'); body.replaceChildren();
+    rows.forEach((n) => {
+      const tr = body.insertRow();
+      const nodeCell = html('div', 'node-cell'), glyph = html('span', 'node-glyph'), id = html('div');
+      glyph.appendChild(hexIcon());
+      id.append(html('b', '', n.node), html('small', '', `${n.host} · ${n.ip}`));
+      nodeCell.append(glyph, id); tr.insertCell().appendChild(nodeCell);
+      const loc = tr.insertCell(); loc.append(document.createTextNode(n.city), html('span', 'cc', n.cc));
+      const traffic = html('div', 'traffic-cell'), tv = html('div');
+      tv.append(html('b', '', compact(total * n.share / 100)), html('small', '', n.share + '% of total'));
+      traffic.append(sparkbars(nodeSeries(n.region)), tv); tr.insertCell().appendChild(traffic);
+      const cpu = tr.insertCell();
+      const meter = html('span', 'meter'), track = html('span', 'meter-track'), fill = html('span', 'meter-fill'), knob = html('span', 'meter-knob');
+      track.setAttribute('role', 'meter'); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', n.cpu); track.setAttribute('aria-label', `CPU ${n.cpu}%`);
+      fill.style.width = n.cpu + '%'; knob.style.left = n.cpu + '%';
+      track.append(fill, knob); meter.append(track, html('span', '', n.cpu + '%')); cpu.appendChild(meter);
+      tr.insertCell().textContent = n.p95 + ' ms';
+      const status = html('span', 'status-chip'); status.append(html('span', 'dot'), document.createTextNode('Demo')); tr.insertCell().appendChild(status);
+    });
+    document.querySelectorAll('#gateway-nodes th').forEach((th) => {
+      const key = th.querySelector('[data-sort]')?.dataset.sort; if (!key) return;
+      if (key === sort.key) th.setAttribute('aria-sort', sort.dir > 0 ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort');
+    });
+    $('nodesScope').textContent = 'traffic · ' + r.label.toLowerCase();
+  }
+  document.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
+    const key = b.dataset.sort;
+    sort = { key, dir: sort.key === key ? -sort.dir : (key === 'share' || key === 'cpu' ? -1 : 1) };
+    renderNodes();
+  }));
+
+  /* ── Range filter: scopes every stat, chart, map and table figure ── */
+  function renderStats(animate) {
+    const r = cur(), total = totalOf(r), e = errAvgOf(r);
+    setText('requestsValue', compact(total), animate);
+    $('requestsDelta').textContent = '↑ ' + r.reqDelta + '%';
+    setText('successValue', (100 - e).toFixed(2) + '%', animate);
+    $('successDelta').textContent = '↑ ' + r.succDelta;
+    setText('latencyValue', r.p95 + ' ms', animate);
+    $('latencyDelta').textContent = '↓ ' + r.p95Delta + ' ms';
+    $('ovScope').textContent = { '24h': '24h', '7d': '7 days', '30d': '30 days' }[range] + ' · all nodes';
+    setText('miniErrValue', pct(r.err[r.err.length - 1]), animate);
+    const breaches = r.err.filter((v) => v > THRESHOLD).length;
+    const note = $('miniErrNote');
+    note.classList.toggle('alert', breaches > 0);
+    note.replaceChildren();
+    if (breaches) { const s = el('svg', { class: 'icon' }); el('use', { href: '#i-alert' }, s); note.appendChild(s); }
+    note.appendChild(document.createTextNode(breaches ? `${breaches} ${r.per}${breaches > 1 ? 's' : ''} above 0.05%` : 'Below the 0.05% threshold'));
+    setText('chartTotal', compact(total), animate);
+    $('chartSummaryText').textContent = 'requests · ' + r.label.toLowerCase();
+    $('trafficDesc').textContent = `Requests per ${r.per}, all nodes`;
+    const left = Math.max(0, Math.round((1 - e / SLO_ERR) * 100));
+    setText('budgetValue', left + '%', animate);
+    $('budget').setAttribute('aria-valuenow', left);
+    const fill = $('budgetFill'); fill.style.width = left + '%';
+    fill.className = left < 10 ? 'low' : left < 25 ? 'warn' : '';
+    renderRoute();
+  }
+  function renderSized(animate) {
+    spark($('sparkErr'), cur().err, { max: 0.08, threshold: THRESHOLD });
+    renderHisto(animate);
+    drawMap();
+    if (!$('plot').hidden) renderPlot(animate); else renderPlotTable();
+  }
+  function showRange(next, animate = true) {
+    range = next;
+    document.querySelectorAll('[data-range]').forEach((b) => { const on = b.dataset.range === next; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
+    placeThumb(document.querySelector('.segmented'));
+    active = -1;
+    renderStats(animate); renderMix(); renderRegions(animate); updatePins(); renderNodes(); renderSized(animate);
+  }
+  document.querySelectorAll('[data-range]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.range !== range) showRange(b.dataset.range); }));
+
+  buildGeo(); buildRegions(); buildMix();
+  showRange('24h', true);
+  tickClock(); setInterval(tickClock, 20000);
+  thumbs();
+  let resizeTimer;
+  new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { renderSized(false); thumbs(); }, 60); }).observe(shell);
+  document.fonts?.ready.then(() => { renderSized(false); thumbs(); });
+  shell.addEventListener('scroll', () => document.querySelector('.topbar').classList.toggle('scrolled', shell.scrollTop > 4), { passive: true });
+})();
+</script>

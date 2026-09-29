@@ -233,11 +233,67 @@ export interface AnalyticsOverview {
   errorRate: number;
   avgLatencyMs: number;
   avgUpstreamLatencyMs: number;
+  /** Percentiles over per-request latency (ms). */
+  p50LatencyMs: number;
+  p95LatencyMs: number;
+  p99LatencyMs: number;
   activeApis: number;
   activeKeys: number;
   range: AnalyticsRange;
   /** ISO timestamp */
   generatedAt: string;
+}
+
+/** Filters of `GET /analytics/traffic`; every field is optional and narrows the same window. */
+export interface TrafficFilters {
+  range: AnalyticsRange;
+  apiId?: string;
+  keyId?: string;
+  method?: string;
+  statusClass?: '2xx' | '3xx' | '4xx' | '5xx';
+  status?: number;
+  path?: string;
+  minLatencyMs?: number;
+  auth?: 'authenticated' | 'anonymous';
+}
+
+export interface TrafficEndpoint {
+  method: string;
+  path: string;
+  requests: number;
+  errors: number;
+  errorRate: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+}
+
+export interface AnalyticsTraffic {
+  range: AnalyticsRange;
+  windowSeconds: number;
+  summary: {
+    requests: number;
+    requestsPerSecond: number;
+    errors: number;
+    errorRate: number;
+    clientErrors: number;
+    serverErrors: number;
+    avgLatencyMs: number;
+    avgUpstreamLatencyMs: number;
+    p50LatencyMs: number;
+    p95LatencyMs: number;
+    p99LatencyMs: number;
+    uniqueClients: number;
+    uniqueKeys: number;
+    anonymousShare: number;
+    bytesIn: number;
+    lastRequestAt: string | null;
+  };
+  timeseries: { bucket: string; requests: number; errors: number; avgLatencyMs: number; p95LatencyMs: number }[];
+  statusClasses: { class: '2xx' | '3xx' | '4xx' | '5xx'; count: number }[];
+  statusCodes: { code: number; count: number }[];
+  methods: { method: string; count: number }[];
+  topEndpoints: TrafficEndpoint[];
+  slowestEndpoints: TrafficEndpoint[];
 }
 
 export interface AnalyticsTimeSeriesPoint {

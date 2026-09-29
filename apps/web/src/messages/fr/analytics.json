@@ -125,5 +125,88 @@
       "SYNC_FAILED": "Synchronisation échouée",
       "SPEC_UPDATE_DETECTED": "Mise à jour de spécification détectée"
     }
+  },
+  "traffic": {
+    "title": "Trafic",
+    "subtitle": "Filtrez le trafic de la passerelle par API, clé, méthode, statut, chemin et latence.",
+    "filters": {
+      "title": "Filtres du trafic",
+      "api": "API",
+      "allApis": "Toutes les API",
+      "key": "Clé API",
+      "allKeys": "Toutes les clés",
+      "method": "Méthode",
+      "allMethods": "Toutes les méthodes",
+      "statusClass": "Classe de statut",
+      "allStatuses": "Tous les statuts",
+      "statusCode": "Statut exact",
+      "statusCodePlaceholder": "ex. 429",
+      "path": "Le chemin contient",
+      "pathPlaceholder": "/v1/orders",
+      "auth": "Authentification",
+      "allTraffic": "Tout le trafic",
+      "authenticated": "Avec une clé API",
+      "anonymous": "Sans clé",
+      "minLatency": "Latence",
+      "anyLatency": "Toute latence",
+      "slowerThan": "Plus lent que {ms} ms",
+      "reset": "Réinitialiser les filtres",
+      "active": "{count, plural, one {# filtre actif} other {# filtres actifs}}"
+    },
+    "statusClasses": {
+      "2xx": "Succès (2xx)",
+      "3xx": "Redirection (3xx)",
+      "4xx": "Erreur client (4xx)",
+      "5xx": "Erreur serveur (5xx)"
+    },
+    "kpis": {
+      "requests": "Requêtes",
+      "lastRequest": "Dernière {when}",
+      "noRequests": "Aucune requête ne correspond",
+      "throughput": "Débit",
+      "perSecond": "requêtes / seconde",
+      "errorRate": "Taux d'erreur",
+      "errorSplit": "{client} client · {server} serveur",
+      "avgLatency": "Latence moy.",
+      "upstream": "amont {value}",
+      "p95": "Latence P95",
+      "p50": "médiane {value}",
+      "p99": "Latence P99",
+      "slowestOnePercent": "1 % de requêtes les plus lentes",
+      "clients": "Clients",
+      "clientsHint": "{keys} clés · {share} anonymes",
+      "dataIn": "Données reçues",
+      "dataInHint": "corps des requêtes"
+    },
+    "charts": {
+      "volume": "Requêtes dans le temps",
+      "volumeDescription": "Requêtes et erreurs par intervalle",
+      "latency": "Latence dans le temps",
+      "latencyDescription": "Moyenne et 95e centile par intervalle",
+      "requests": "Requêtes",
+      "errors": "Erreurs",
+      "avg": "Moyenne",
+      "p95": "P95",
+      "empty": "Aucune requête ne correspond à ces filtres."
+    },
+    "mix": {
+      "title": "Répartition du trafic",
+      "empty": "Aucune requête ne correspond à ces filtres.",
+      "byClass": "Par classe de statut",
+      "byMethod": "Par méthode",
+      "byCode": "Codes de statut principaux"
+    },
+    "endpoints": {
+      "topTitle": "Points de terminaison les plus sollicités",
+      "topDescription": "Couples méthode et chemin les plus demandés",
+      "slowTitle": "Points de terminaison les plus lents",
+      "slowDescription": "P95 le plus élevé parmi les plus sollicités, avec au moins 5 requêtes",
+      "empty": "Aucun point de terminaison ne correspond à ces filtres.",
+      "endpoint": "Point de terminaison",
+      "requests": "Requêtes",
+      "errorRate": "Erreurs",
+      "avg": "Moy.",
+      "p95": "P95"
+    }
   }
 }

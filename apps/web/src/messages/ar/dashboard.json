@@ -28,7 +28,11 @@
       "24h": "24 س",
       "7d": "7 أيام",
       "30d": "30 يومًا"
-    }
+    },
+    "search": "البحث في مساحة العمل",
+    "searchHint": "بحث · Ctrl/⌘ K",
+    "refresh": "تحديث",
+    "createApi": "إنشاء واجهة برمجة"
   },
   "gatewayHealth": {
     "title": "سلامة البوابة",
@@ -48,7 +52,10 @@
     "title": "النشاط الأخير",
     "viewAll": "عرض الكل",
     "empty": "لا يوجد نشاط مسجل حتى الآن.",
-    "system": "النظام"
+    "system": "النظام",
+    "logLabel": "سجل النشاط الأخير",
+    "logName": "activity.log",
+    "events": "{count, plural, zero {# أحداث} one {حدث #} two {حدثان} few {# أحداث} many {# حدثًا} other {# حدث}}"
   },
   "syncSummary": {
     "title": "حالة مزامنة واجهات البرمجة",
@@ -107,7 +114,9 @@
     "cardView": "عرض البطاقات"
   },
   "layout": {
-    "skipToContent": "انتقل إلى المحتوى الرئيسي"
+    "skipToContent": "انتقل إلى المحتوى الرئيسي",
+    "footer": "© {year} MIRQAB",
+    "backToTop": "العودة إلى الأعلى ↑"
   },
   "errorBoundary": {
     "home": "الذهاب إلى لوحة التحكم"
@@ -164,7 +173,8 @@
       "pass": "سليم",
       "fail": "متعطّل",
       "unknown": "غير معروف"
-    }
+    },
+    "mapLabel": "خريطة عقد البوابة: {nodes}"
   },
   "topApis": {
     "title": "أكثر الواجهات استخدامًا",
@@ -194,6 +204,43 @@
     "readout": "{time}: {requests} طلب، معدل الأخطاء {rate}",
     "roleDescription": "مخطط",
     "ariaLabel": "الطلبات ومعدل الأخطاء حسب الفترة الزمنية. استخدم مفتاحي السهمين الأيمن والأيسر لقراءة القيم.",
-    "bucket": "الوقت (UTC)"
+    "bucket": "الوقت (UTC)",
+    "budget": "ميزانية الأخطاء",
+    "budgetLeft": "المتبقي · SLO {slo}",
+    "budgetAria": "ميزانية الأخطاء المتبقية مقابل SLO بنسبة {slo}"
+  },
+  "palette": {
+    "title": "البحث في مساحة العمل",
+    "description": "انتقل إلى صفحة.",
+    "placeholder": "ابحث عن صفحات…",
+    "empty": "لا توجد صفحة مطابقة.",
+    "pages": "الصفحات"
+  },
+  "help": {
+    "title": "المساعدة والاختصارات",
+    "intro": "تنقّل بين الصفحات عبر الشريط الجانبي أو ابحث عن إحداها.",
+    "shortcuts": "الاختصارات",
+    "search": "فتح البحث",
+    "searchKeys": "Ctrl/⌘ + K",
+    "close": "إغلاق القوائم والنوافذ",
+    "closeKeys": "Esc",
+    "chart": "التنقل في مخطط الحركة",
+    "chartKeys": "← →",
+    "done": "إغلاق"
+  },
+  "kpis": {
+    "title": "الأرقام الرئيسية",
+    "throughput": "المعدل",
+    "perSecond": "طلب / ثانية",
+    "p95": "زمن P95",
+    "p99": "زمن P99",
+    "p50": "الوسيط {value}",
+    "slowestOnePercent": "أبطأ 1٪ من الطلبات",
+    "apis": "الواجهات النشطة",
+    "keys": "{count} مفاتيح نشطة",
+    "nodes": "عقد البوابة",
+    "nodesHint": "{up} من {total} متاحة",
+    "nodesNone": "لا شيء مضبوط",
+    "openTraffic": "فتح عرض الحركة"
   }
 }

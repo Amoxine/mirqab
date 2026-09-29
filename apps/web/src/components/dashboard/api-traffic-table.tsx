@@ -28,7 +28,7 @@ export function ApiTrafficTable({ range }: { range: AnalyticsRange }) {
   const max = Math.max(...(data ?? []).map((row) => row.requests), 1);
 
   return (
-    <Card className="surface-ink overflow-hidden rounded-[1.25rem]">
+    <Card variant="ink" className="overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 sm:px-6">
         <div>
           <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>

@@ -28,7 +28,11 @@
       "24h": "24 h",
       "7d": "7 j",
       "30d": "30 j"
-    }
+    },
+    "search": "Rechercher dans l'espace de travail",
+    "searchHint": "Rechercher · Ctrl/⌘ K",
+    "refresh": "Actualiser",
+    "createApi": "Créer une API"
   },
   "gatewayHealth": {
     "title": "État de la passerelle",
@@ -48,7 +52,10 @@
     "title": "Activité récente",
     "viewAll": "Tout voir",
     "empty": "Aucune activité enregistrée pour le moment.",
-    "system": "Système"
+    "system": "Système",
+    "logLabel": "Journal d'activité récente",
+    "logName": "activity.log",
+    "events": "{count, plural, one {# événement} other {# événements}}"
   },
   "syncSummary": {
     "title": "État de synchronisation des API",
@@ -107,7 +114,9 @@
     "cardView": "Vue cartes"
   },
   "layout": {
-    "skipToContent": "Aller au contenu principal"
+    "skipToContent": "Aller au contenu principal",
+    "footer": "© {year} MIRQAB",
+    "backToTop": "Haut de page ↑"
   },
   "errorBoundary": {
     "home": "Aller au tableau de bord"
@@ -164,7 +173,8 @@
       "pass": "sain",
       "fail": "en échec",
       "unknown": "inconnu"
-    }
+    },
+    "mapLabel": "Carte des nœuds de la passerelle : {nodes}"
   },
   "topApis": {
     "title": "API principales",
@@ -194,6 +204,43 @@
     "readout": "{time} : {requests} requêtes, taux d’erreur {rate}",
     "roleDescription": "graphique",
     "ariaLabel": "Requêtes et taux d’erreur par tranche de temps. Utilisez les flèches gauche et droite pour lire les valeurs.",
-    "bucket": "Heure (UTC)"
+    "bucket": "Heure (UTC)",
+    "budget": "Budget d'erreurs",
+    "budgetLeft": "restant · SLO {slo}",
+    "budgetAria": "Budget d'erreurs restant pour un SLO de {slo}"
+  },
+  "palette": {
+    "title": "Rechercher dans l'espace de travail",
+    "description": "Accéder à une page.",
+    "placeholder": "Rechercher des pages…",
+    "empty": "Aucune page correspondante.",
+    "pages": "Pages"
+  },
+  "help": {
+    "title": "Aide et raccourcis",
+    "intro": "Naviguez entre les pages avec la barre latérale, ou recherchez-en une.",
+    "shortcuts": "Raccourcis",
+    "search": "Ouvrir la recherche",
+    "searchKeys": "Ctrl/⌘ + K",
+    "close": "Fermer les menus et boîtes de dialogue",
+    "closeKeys": "Échap",
+    "chart": "Parcourir le graphique de trafic",
+    "chartKeys": "← →",
+    "done": "Fermer"
+  },
+  "kpis": {
+    "title": "Chiffres clés",
+    "throughput": "Débit",
+    "perSecond": "requêtes / seconde",
+    "p95": "Latence P95",
+    "p99": "Latence P99",
+    "p50": "médiane {value}",
+    "slowestOnePercent": "1 % de requêtes les plus lentes",
+    "apis": "API actives",
+    "keys": "{count} clés actives",
+    "nodes": "Nœuds de la passerelle",
+    "nodesHint": "{up} sur {total} joignables",
+    "nodesNone": "aucun configuré",
+    "openTraffic": "Ouvrir la vue du trafic"
   }
 }

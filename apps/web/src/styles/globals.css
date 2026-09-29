@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import '../../../../packages/ui/src/styles.css';
+/* Tailwind scans the shared package's sources for the utilities its components use. */
+@source '../../../../packages/ui/src';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -189,52 +192,6 @@
   }
 }
 
-@layer components {
-  /* Emphasis surface: a dark card in BOTH themes (the Overview, Top APIs, traffic and API-table
-     cards). It re-points the colour tokens for everything inside it, so `Badge`, `Button`, `Table`
-     and the `text-muted-foreground`/`border` utilities keep working on the dark fill without
-     per-component overrides. Accent and status values are the `.dark` ones, which are the shades
-     that clear contrast on a dark surface. */
-  .surface-ink {
-    --color-card: var(--color-ink);
-    --color-card-foreground: var(--color-secondary-foreground);
-    --color-foreground: var(--color-secondary-foreground);
-    --color-muted-foreground: color-mix(in srgb, var(--color-secondary-foreground) 70%, transparent);
-    --color-border: color-mix(in srgb, var(--color-secondary-foreground) 14%, transparent);
-    --color-muted: color-mix(in srgb, var(--color-secondary-foreground) 10%, transparent);
-    --color-accent: color-mix(in srgb, var(--color-secondary-foreground) 8%, transparent);
-    --color-accent-foreground: var(--color-secondary-foreground);
-    --color-secondary: color-mix(in srgb, var(--color-secondary-foreground) 16%, transparent);
-    --color-primary: #22b8c9;
-    --color-primary-foreground: #042f2e;
-    --color-ring: #22b8c9;
-    --color-success: #4ade80;
-    --color-success-foreground: #052e16;
-    --color-warning: #fbbf24;
-    --color-warning-foreground: #422006;
-    --color-info: #93c5fd;
-    --color-info-foreground: #172554;
-    --color-destructive: #f87171;
-    --color-destructive-foreground: #450a0a;
-    --color-danger: #f87171;
-
-    color: var(--color-foreground);
-    border-color: transparent;
-    background:
-      radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--color-secondary-foreground) 7%, transparent), transparent 62%),
-      var(--color-ink);
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.06),
-      0 18px 40px -26px rgb(2 6 23 / 0.55);
-  }
-  /* The start corner of the gradient follows the reading direction. */
-  [dir='rtl'] .surface-ink {
-    background:
-      radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--color-secondary-foreground) 7%, transparent), transparent 62%),
-      var(--color-ink);
-  }
-}
-
 @layer utilities {
   /* Fine film grain for the dark frame; decorative, 7% white noise. */
   .bg-grain {
@@ -261,14 +218,9 @@
 }
 
 /* Dashboard motion. Each is decorative and collapses under the reduced-motion rule above. */
-@keyframes mq-pulse {
-  0% { transform: scale(0.7); opacity: 0.7; }
-  100% { transform: scale(2.6); opacity: 0; }
-}
 @keyframes mq-grow {
   from { transform: scaleY(0.12); }
 }
 @layer utilities {
-  .motion-pulse-ring { animation: mq-pulse 3s cubic-bezier(0.2, 0.7, 0.2, 1) infinite; }
   .motion-grow { animation: mq-grow 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 }

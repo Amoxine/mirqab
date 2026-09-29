@@ -2,6 +2,7 @@
   "extends": "@open-gateway/config/tsconfig/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "lib": ["dom", "dom.iterable", "esnext"],
     "baseUrl": ".",
     "paths": {
       "@ui/*": ["./src/*"]

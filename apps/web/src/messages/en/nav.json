@@ -12,5 +12,12 @@
   "collapseSidebar": "Collapse sidebar",
   "brand": "MIRQAB",
   "brandShort": "OG",
-  "brandCaption": "Gateway control plane"
+  "brandCaption": "Gateway control plane",
+  "groups": {
+    "workspace": "Workspace",
+    "manage": "Manage",
+    "trust": "Trust & operations"
+  },
+  "help": "Help & shortcuts",
+  "traffic": "Traffic"
 }

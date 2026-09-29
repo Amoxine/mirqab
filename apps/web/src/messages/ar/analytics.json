@@ -125,5 +125,88 @@
       "SYNC_FAILED": "فشلت المزامنة",
       "SPEC_UPDATE_DETECTED": "اكتُشف تحديث للمواصفة"
     }
+  },
+  "traffic": {
+    "title": "الحركة",
+    "subtitle": "صفِّ حركة البوابة حسب الواجهة والمفتاح والطريقة والحالة والمسار وزمن الاستجابة.",
+    "filters": {
+      "title": "مرشحات الحركة",
+      "api": "الواجهة",
+      "allApis": "كل الواجهات",
+      "key": "مفتاح الواجهة",
+      "allKeys": "كل المفاتيح",
+      "method": "الطريقة",
+      "allMethods": "كل الطرق",
+      "statusClass": "فئة الحالة",
+      "allStatuses": "كل الحالات",
+      "statusCode": "الحالة المحددة",
+      "statusCodePlaceholder": "مثال: 429",
+      "path": "المسار يحتوي",
+      "pathPlaceholder": "/v1/orders",
+      "auth": "المصادقة",
+      "allTraffic": "كل الحركة",
+      "authenticated": "بمفتاح واجهة",
+      "anonymous": "بدون مفتاح",
+      "minLatency": "زمن الاستجابة",
+      "anyLatency": "أي زمن",
+      "slowerThan": "أبطأ من {ms} م.ث",
+      "reset": "إعادة ضبط المرشحات",
+      "active": "{count, plural, zero {لا مرشحات} one {مرشح واحد نشط} two {مرشحان نشطان} few {# مرشحات نشطة} many {# مرشحًا نشطًا} other {# مرشح نشط}}"
+    },
+    "statusClasses": {
+      "2xx": "نجاح (2xx)",
+      "3xx": "إعادة توجيه (3xx)",
+      "4xx": "خطأ من العميل (4xx)",
+      "5xx": "خطأ من الخادم (5xx)"
+    },
+    "kpis": {
+      "requests": "الطلبات",
+      "lastRequest": "آخر طلب {when}",
+      "noRequests": "لا طلبات مطابقة",
+      "throughput": "المعدل",
+      "perSecond": "طلب / ثانية",
+      "errorRate": "معدل الأخطاء",
+      "errorSplit": "{client} عميل · {server} خادم",
+      "avgLatency": "متوسط الزمن",
+      "upstream": "المصدر {value}",
+      "p95": "زمن P95",
+      "p50": "الوسيط {value}",
+      "p99": "زمن P99",
+      "slowestOnePercent": "أبطأ 1٪ من الطلبات",
+      "clients": "العملاء",
+      "clientsHint": "{keys} مفاتيح · {share} مجهولة",
+      "dataIn": "البيانات المستلمة",
+      "dataInHint": "محتوى الطلبات"
+    },
+    "charts": {
+      "volume": "الطلبات عبر الزمن",
+      "volumeDescription": "الطلبات والأخطاء لكل فترة",
+      "latency": "زمن الاستجابة عبر الزمن",
+      "latencyDescription": "المتوسط والمئين 95 لكل فترة",
+      "requests": "الطلبات",
+      "errors": "الأخطاء",
+      "avg": "المتوسط",
+      "p95": "P95",
+      "empty": "لا طلبات تطابق هذه المرشحات."
+    },
+    "mix": {
+      "title": "تركيبة الحركة",
+      "empty": "لا طلبات تطابق هذه المرشحات.",
+      "byClass": "حسب فئة الحالة",
+      "byMethod": "حسب الطريقة",
+      "byCode": "أكثر رموز الحالة"
+    },
+    "endpoints": {
+      "topTitle": "أكثر النقاط طلبًا",
+      "topDescription": "أكثر أزواج الطريقة والمسار طلبًا",
+      "slowTitle": "أبطأ النقاط",
+      "slowDescription": "أعلى P95 بين الأكثر طلبًا، بشرط 5 طلبات على الأقل",
+      "empty": "لا نقاط نهاية تطابق هذه المرشحات.",
+      "endpoint": "نقطة النهاية",
+      "requests": "الطلبات",
+      "errorRate": "الأخطاء",
+      "avg": "المتوسط",
+      "p95": "P95"
+    }
   }
 }

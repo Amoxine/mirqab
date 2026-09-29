@@ -109,6 +109,7 @@ export const queryKeys = {
     keys: (range: string) => [...queryKeys.analytics.all, 'keys', range] as const,
     timeseries: (metric: string, range: string) => [...queryKeys.analytics.all, 'timeseries', metric, range] as const,
     statusCodes: (range: string) => [...queryKeys.analytics.all, 'status-codes', range] as const,
+    traffic: (filters: object) => [...queryKeys.analytics.all, 'traffic', filters] as const,
     get health() {
       return scoped('analytics', 'health');
     },

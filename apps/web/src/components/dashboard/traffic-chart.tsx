@@ -10,10 +10,11 @@ import {
 } from '@/components/analytics/analytics-empty-state';
 import { StateMessage } from '@/components/shared/state-card';
 import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAnalyticsTimeSeries } from '@/hooks/use-analytics';
+import { useAnalyticsOverview, useAnalyticsTimeSeries } from '@/hooks/use-analytics';
 import { useFormat } from '@/hooks/use-format';
-import { cn } from '@/lib/utils';
 import type { AnalyticsRange, AnalyticsTimeSeriesPoint } from '@/types';
 import { Figure } from './figure';
 import {
@@ -327,6 +328,48 @@ function DataTable({ points, range }: PlotProps) {
 }
 
 /** Request volume over the range (UTC buckets) with its error-rate strip; chart or table view. */
+/** Availability objective the budget is measured against: at most this share of requests may fail. */
+const SLO_PERCENT = 99.9;
+
+/** What is left of the error budget in this range, from the overview's error rate (0-100). */
+function ErrorBudget({ range }: { range: AnalyticsRange }) {
+  const t = useTranslations('dashboard.trafficChart');
+  const locale = useLocale();
+  const { data } = useAnalyticsOverview(range);
+  if (!data || data.totalRequests === 0) return null;
+
+  const left = Math.max(0, Math.round((1 - data.errorRate / (100 - SLO_PERCENT)) * 100));
+  const pct = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
+  const slo = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 });
+  return (
+    <div
+      role="meter"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={left}
+      aria-valuetext={pct.format(left / 100)}
+      aria-label={t('budgetAria', { slo: slo.format(SLO_PERCENT / 100) })}
+      className="w-full sm:w-40"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-muted-foreground font-mono text-[0.66rem] uppercase tracking-[0.08em]">
+          {t('budget')}
+        </span>
+        <b className="text-[0.95rem] font-medium">{pct.format(left / 100)}</b>
+      </div>
+      <Progress
+        value={left}
+        aria-hidden="true"
+        className="mb-1 mt-1.5"
+        indicatorClassName={left < 10 ? 'bg-destructive' : left < 25 ? 'bg-warning' : 'bg-primary'}
+      />
+      <span className="text-muted-foreground font-mono text-[0.66rem]">
+        {t('budgetLeft', { slo: slo.format(SLO_PERCENT / 100) })}
+      </span>
+    </div>
+  );
+}
+
 export function TrafficChart({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('dashboard.trafficChart');
   const { data, isLoading, error, refetch } = useAnalyticsTimeSeries('requests', range);
@@ -334,40 +377,28 @@ export function TrafficChart({ range }: { range: AnalyticsRange }) {
   const total = (data ?? []).reduce((sum, p) => sum + p.requests, 0);
 
   return (
-    <Card className="surface-ink overflow-hidden rounded-[1.25rem] pb-4">
+    <Card variant="ink" className="overflow-hidden pb-3">
       <div className="flex items-start justify-between gap-3 px-5 pt-5 sm:px-6">
         <div>
           <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>
           <p className="text-muted-foreground mt-0.5 text-sm">{t('description')}</p>
         </div>
-        <div
-          role="group"
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(next) => {
+            if (next) setView(next as 'chart' | 'table');
+          }}
           aria-label={t('viewLabel')}
-          className="bg-muted inline-flex gap-0.5 rounded-full p-1"
+          className="bg-muted"
         >
-          {(['chart', 'table'] as const).map((v) => {
-            const Icon = v === 'chart' ? BarChart3 : Table2;
-            return (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={view === v}
-                aria-label={v === 'chart' ? t('chartView') : t('tableView')}
-                onClick={() => {
-                  setView(v);
-                }}
-                className={cn(
-                  'pointer-coarse:min-h-11 grid h-8 w-9 place-items-center rounded-full transition-colors',
-                  view === v
-                    ? 'bg-card text-foreground ring-border shadow-sm ring-1'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Icon className="h-4 w-4" aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
+          <ToggleGroupItem value="chart" aria-label={t('chartView')} className="w-9 px-0">
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="table" aria-label={t('tableView')} className="w-9 px-0">
+            <Table2 className="h-4 w-4" aria-hidden="true" />
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {isLoading ? (
@@ -385,13 +416,16 @@ export function TrafficChart({ range }: { range: AnalyticsRange }) {
         />
       ) : (
         <>
-          <div className="flex items-baseline gap-2.5 px-5 pt-4 sm:px-6">
-            <Figure
-              value={total}
-              kind="compact"
-              className="text-[2.2rem] font-light leading-none tracking-[-0.045em]"
-            />
-            <span className="text-muted-foreground text-sm">{t('totalCaption')}</span>
+          <div className="flex flex-wrap items-end justify-between gap-x-5 gap-y-3 px-5 pt-4 sm:px-6">
+            <div className="flex items-baseline gap-2.5">
+              <Figure
+                value={total}
+                kind="compact"
+                className="text-[2.2rem] font-light leading-none tracking-[-0.045em]"
+              />
+              <span className="text-muted-foreground text-sm">{t('totalCaption')}</span>
+            </div>
+            <ErrorBudget range={range} />
           </div>
           {view === 'chart' ? (
             <Plot points={data} range={range} />

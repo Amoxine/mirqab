@@ -10,6 +10,8 @@ import type {
   AnalyticsRange,
   AnalyticsStatusCode,
   AnalyticsTimeSeriesPoint,
+  AnalyticsTraffic,
+  TrafficFilters,
 } from '@/types';
 
 /** Range selector options, in display order. Values are the `range` query param the API accepts. */
@@ -57,6 +59,22 @@ export function useAnalyticsStatusCodes(range: AnalyticsRange = '24h') {
     queryKey: queryKeys.analytics.statusCodes(range),
     queryFn: () =>
       api.get<AnalyticsStatusCode[]>(`/analytics/status-codes?range=${range}`).then((res) => res.data),
+  });
+}
+
+/** Filtered traffic KPIs, series and endpoint breakdowns. Empty filters are dropped from the query string. */
+export function useAnalyticsTraffic(filters: TrafficFilters) {
+  return useQuery({
+    queryKey: queryKeys.analytics.traffic(filters),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+      }
+      return api.get<AnalyticsTraffic>(`/analytics/traffic?${params.toString()}`).then((res) => res.data);
+    },
+    // Keep the previous numbers on screen while a filter change loads, instead of flashing skeletons.
+    placeholderData: (previous) => previous,
   });
 }
 
