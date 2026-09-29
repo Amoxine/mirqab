@@ -181,13 +181,15 @@
     "open": "Ouvrir l’analytique",
     "others": "Autres",
     "empty": "Aucun trafic d’API sur cette période.",
-    "total": "<b>{count}</b> requêtes sur cette période"
+    "total": "<b>{count}</b> requêtes sur cette période",
+    "titleEndpoints": "Endpoints principaux"
   },
   "apiTraffic": {
     "title": "Trafic par API",
     "description": "Volume, taux d’erreur et latence des API les plus sollicitées",
     "status": "Statut",
-    "highErrorRate": "taux d’erreur élevé"
+    "highErrorRate": "taux d’erreur élevé",
+    "focus": "Afficher uniquement {name}"
   },
   "trafficChart": {
     "title": "Volume de requêtes",
@@ -242,5 +244,20 @@
     "nodesHint": "{up} sur {total} joignables",
     "nodesNone": "aucun configuré",
     "openTraffic": "Ouvrir la vue du trafic"
+  },
+  "endpointTraffic": {
+    "title": "Trafic par endpoint",
+    "description": "Volume, taux d’erreur et latence des endpoints les plus sollicités de cette API",
+    "empty": "Aucun trafic sur les endpoints pour cette période.",
+    "endpoint": "Endpoint",
+    "requests": "Requêtes",
+    "errorRate": "Taux d’erreur",
+    "avgLatency": "Latence moy.",
+    "p95": "P95",
+    "highErrorRate": "taux d’erreur élevé"
+  },
+  "scope": {
+    "chip": "Affichage de",
+    "clear": "Afficher toutes les API"
   }
 }

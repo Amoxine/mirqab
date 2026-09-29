@@ -6,19 +6,40 @@ import { useLocale, useTranslations } from 'next-intl';
 import { AnalyticsErrorState, formatCount } from '@/components/analytics/analytics-empty-state';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAnalyticsApis, useAnalyticsOverview } from '@/hooks/use-analytics';
+import { useAnalyticsApis, useAnalyticsOverview, useAnalyticsTraffic } from '@/hooks/use-analytics';
 import type { AnalyticsRange } from '@/types';
+import { ScopeTag } from './scope-tag';
 
-/** Share of requests for the three busiest APIs plus everything else, as columns. */
-export function TopApisCard({ range }: { range: AnalyticsRange }) {
+/**
+ * Share of requests for the three busiest APIs plus everything else, as columns. Narrowed to one
+ * API (`scope`) the columns are that API's busiest endpoints instead.
+ */
+export function TopApisCard({
+  range,
+  scope,
+}: {
+  range: AnalyticsRange;
+  scope?: { id: string; name: string } | null;
+}) {
   const t = useTranslations('dashboard.topApis');
   const locale = useLocale();
-  const apis = useAnalyticsApis(range);
-  const overview = useAnalyticsOverview(range);
+  const apis = useAnalyticsApis(range, !scope);
+  const traffic = useAnalyticsTraffic({ range, apiId: scope?.id }, !!scope);
+  const overview = useAnalyticsOverview(range, scope?.id);
+  const rows = scope ? traffic : apis;
   const pct = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
 
   const total = overview.data?.totalRequests ?? 0;
-  const top = (apis.data ?? []).filter((row) => row.requests > 0).slice(0, 3);
+  const ranked = scope
+    ? (traffic.data?.topEndpoints ?? []).map((row) => ({
+        apiDefId: `${row.method} ${row.path}`,
+        name: `${row.method} ${row.path}`,
+        slug: row.path,
+        requests: row.requests,
+        href: null,
+      }))
+    : (apis.data ?? []).map((row) => ({ ...row, href: `/apis/${row.apiDefId}` }));
+  const top = ranked.filter((row) => row.requests > 0).slice(0, 3);
   const topSum = top.reduce((sum, row) => sum + row.requests, 0);
   // The rest of the range's traffic, from the overview total (the per-API list is capped).
   const others = Math.max(0, total - topSum);
@@ -28,7 +49,7 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
       label: row.name,
       sub: row.slug,
       value: row.requests,
-      href: `/apis/${row.apiDefId}`,
+      href: row.href,
     })),
     ...(others > 0
       ? [{ key: 'others', label: t('others'), sub: null, value: others, href: null }]
@@ -39,9 +60,12 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
   return (
     <Card variant="ink" className="flex flex-col p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>
+        <h2 className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-lg font-normal tracking-tight">
+          {scope ? t('titleEndpoints') : t('title')}
+          <ScopeTag name={scope?.name} />
+        </h2>
         <Link
-          href="/analytics"
+          href={scope ? `/analytics/traffic?apiId=${scope.id}` : '/analytics'}
           aria-label={t('open')}
           className="bg-foreground text-card grid size-8 shrink-0 place-items-center rounded-full transition-transform duration-300 hover:rotate-45 rtl:-scale-x-100"
         >
@@ -49,7 +73,7 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
         </Link>
       </div>
 
-      {apis.isLoading || overview.isLoading ? (
+      {rows.isLoading || overview.isLoading ? (
         <div className="mt-4 grid flex-1 grid-cols-3 items-end gap-2" aria-hidden="true">
           {[80, 60, 45].map((h) => (
             <Skeleton
@@ -59,10 +83,10 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
             />
           ))}
         </div>
-      ) : apis.error || overview.error ? (
+      ) : rows.error || overview.error ? (
         <AnalyticsErrorState
-          message={(apis.error ?? overview.error)?.message ?? t('empty')}
-          onRetry={() => void apis.refetch()}
+          message={(rows.error ?? overview.error)?.message ?? t('empty')}
+          onRetry={() => void rows.refetch()}
         />
       ) : total === 0 || columns.length === 0 ? (
         <p className="text-muted-foreground mt-6 text-sm">{t('empty')}</p>
@@ -109,7 +133,7 @@ export function TopApisCard({ range }: { range: AnalyticsRange }) {
                       {inner}
                     </Link>
                   ) : (
-                    <div className={barClass} style={barStyle}>
+                    <div className={barClass} style={barStyle} title={c.label}>
                       {inner}
                     </div>
                   )}

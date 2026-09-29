@@ -23,11 +23,19 @@ const RANGE_SECONDS: Record<AnalyticsRange, number> = {
  * APIs and keys are live and whether the gateway nodes answer. Requests, success rate and average
  * latency stay in the overview card, so nothing here repeats them.
  */
-export function KpiStrip({ range, showNodes }: { range: AnalyticsRange; showNodes: boolean }) {
+export function KpiStrip({
+  range,
+  showNodes,
+  apiId,
+}: {
+  range: AnalyticsRange;
+  showNodes: boolean;
+  apiId?: string;
+}) {
   const t = useTranslations('dashboard.kpis');
   const locale = useLocale();
   const fmt = useFormat();
-  const overview = useAnalyticsOverview(range);
+  const overview = useAnalyticsOverview(range, apiId);
   const nodes = useNodeHealth();
   const data = overview.data;
   const has = (data?.totalRequests ?? 0) > 0;

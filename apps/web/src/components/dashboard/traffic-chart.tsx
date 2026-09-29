@@ -17,6 +17,7 @@ import { useAnalyticsOverview, useAnalyticsTimeSeries } from '@/hooks/use-analyt
 import { useFormat } from '@/hooks/use-format';
 import type { AnalyticsRange, AnalyticsTimeSeriesPoint } from '@/types';
 import { Figure } from './figure';
+import { ScopeTag } from './scope-tag';
 import {
   bucketErrorRate,
   columnPath,
@@ -332,10 +333,10 @@ function DataTable({ points, range }: PlotProps) {
 const SLO_PERCENT = 99.9;
 
 /** What is left of the error budget in this range, from the overview's error rate (0-100). */
-function ErrorBudget({ range }: { range: AnalyticsRange }) {
+function ErrorBudget({ range, apiId }: { range: AnalyticsRange; apiId?: string }) {
   const t = useTranslations('dashboard.trafficChart');
   const locale = useLocale();
-  const { data } = useAnalyticsOverview(range);
+  const { data } = useAnalyticsOverview(range, apiId);
   if (!data || data.totalRequests === 0) return null;
 
   const left = Math.max(0, Math.round((1 - data.errorRate / (100 - SLO_PERCENT)) * 100));
@@ -370,9 +371,16 @@ function ErrorBudget({ range }: { range: AnalyticsRange }) {
   );
 }
 
-export function TrafficChart({ range }: { range: AnalyticsRange }) {
+export function TrafficChart({
+  range,
+  scope,
+}: {
+  range: AnalyticsRange;
+  /** The API the series is narrowed to; the gateway-wide view when omitted. */
+  scope?: { id: string; name: string } | null;
+}) {
   const t = useTranslations('dashboard.trafficChart');
-  const { data, isLoading, error, refetch } = useAnalyticsTimeSeries('requests', range);
+  const { data, isLoading, error, refetch } = useAnalyticsTimeSeries('requests', range, scope?.id);
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const total = (data ?? []).reduce((sum, p) => sum + p.requests, 0);
 
@@ -380,7 +388,10 @@ export function TrafficChart({ range }: { range: AnalyticsRange }) {
     <Card variant="ink" className="overflow-hidden pb-3">
       <div className="flex items-start justify-between gap-3 px-5 pt-5 sm:px-6">
         <div>
-          <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>
+          <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg font-normal tracking-tight">
+            {t('title')}
+            <ScopeTag name={scope?.name} />
+          </h2>
           <p className="text-muted-foreground mt-0.5 text-sm">{t('description')}</p>
         </div>
         <ToggleGroup
@@ -425,7 +436,7 @@ export function TrafficChart({ range }: { range: AnalyticsRange }) {
               />
               <span className="text-muted-foreground text-sm">{t('totalCaption')}</span>
             </div>
-            <ErrorBudget range={range} />
+            <ErrorBudget range={range} apiId={scope?.id} />
           </div>
           {view === 'chart' ? (
             <Plot points={data} range={range} />

@@ -42,11 +42,11 @@ function MiniSkeleton() {
 }
 
 /** Average latency, split into time spent upstream and the gateway's own overhead. */
-export function LatencyMini({ range }: { range: AnalyticsRange }) {
+export function LatencyMini({ range, apiId }: { range: AnalyticsRange; apiId?: string }) {
   const t = useTranslations('dashboard.latency');
   const fmt = useFormat();
-  const overview = useAnalyticsOverview(range);
-  const series = useAnalyticsTimeSeries('requests', range);
+  const overview = useAnalyticsOverview(range, apiId);
+  const series = useAnalyticsTimeSeries('requests', range, apiId);
   const data = overview.data;
 
   let body: React.ReactNode;
@@ -88,11 +88,11 @@ export function LatencyMini({ range }: { range: AnalyticsRange }) {
 }
 
 /** Error rate for the range with its per-bucket trend. */
-export function ErrorsMini({ range }: { range: AnalyticsRange }) {
+export function ErrorsMini({ range, apiId }: { range: AnalyticsRange; apiId?: string }) {
   const t = useTranslations('dashboard.errors');
   const fmt = useFormat();
-  const overview = useAnalyticsOverview(range);
-  const series = useAnalyticsTimeSeries('requests', range);
+  const overview = useAnalyticsOverview(range, apiId);
+  const series = useAnalyticsTimeSeries('requests', range, apiId);
   const data = overview.data;
 
   let body: React.ReactNode;

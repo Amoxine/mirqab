@@ -181,13 +181,15 @@
     "open": "Open analytics",
     "others": "Others",
     "empty": "No API traffic in this range.",
-    "total": "<b>{count}</b> requests in this range"
+    "total": "<b>{count}</b> requests in this range",
+    "titleEndpoints": "Top endpoints"
   },
   "apiTraffic": {
     "title": "Traffic by API",
     "description": "Volume, error rate and latency for the busiest APIs",
     "status": "Status",
-    "highErrorRate": "high error rate"
+    "highErrorRate": "high error rate",
+    "focus": "Show only {name}"
   },
   "trafficChart": {
     "title": "Request volume",
@@ -242,5 +244,20 @@
     "nodesHint": "{up} of {total} reachable",
     "nodesNone": "none configured",
     "openTraffic": "Open the traffic view"
+  },
+  "endpointTraffic": {
+    "title": "Traffic by endpoint",
+    "description": "Volume, error rate and latency for the busiest endpoints of this API",
+    "empty": "No endpoint traffic in this range.",
+    "endpoint": "Endpoint",
+    "requests": "Requests",
+    "errorRate": "Error rate",
+    "avgLatency": "Avg latency",
+    "p95": "P95",
+    "highErrorRate": "high error rate"
+  },
+  "scope": {
+    "chip": "Showing",
+    "clear": "Show all APIs"
   }
 }

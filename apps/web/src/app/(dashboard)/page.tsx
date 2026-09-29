@@ -23,6 +23,8 @@ import { isPipelineStale } from '@/components/analytics/pipeline-status';
 import { ApiFormSheet } from '@/components/apis/api-form-sheet';
 import { PermissionGate } from '@/components/auth/permission-gate';
 import { ApiTrafficTable } from '@/components/dashboard/api-traffic-table';
+import { EndpointTrafficTable } from '@/components/dashboard/endpoint-traffic-table';
+import { ScopeChip } from '@/components/dashboard/scope-chip';
 import { GatewayMap } from '@/components/dashboard/gateway-map';
 import { KpiStrip } from '@/components/dashboard/kpi-strip';
 import { OverviewPanel } from '@/components/dashboard/overview-panel';
@@ -38,6 +40,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsHealth } from '@/hooks/use-analytics';
+import { useDashboardScope, type DashboardScope } from '@/hooks/use-dashboard-scope';
 import { usePermissions } from '@/hooks/use-permissions';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
@@ -72,10 +75,12 @@ function RequestLine({ range }: { range: AnalyticsRange }) {
 function Hero({
   range,
   canSettings,
+  scope,
   children,
 }: {
   range: AnalyticsRange;
   canSettings: boolean;
+  scope: DashboardScope['api'];
   children?: React.ReactNode;
 }) {
   const t = useTranslations('dashboard.page');
@@ -90,10 +95,10 @@ function Hero({
       <div className="motion-enter flex min-w-0 flex-col gap-3" style={rise(1)}>
         {children ?? (
           <>
-            <OverviewPanel range={range} />
+            <OverviewPanel range={range} scope={scope} />
             <div className="grid gap-3 sm:grid-cols-2">
-              <LatencyMini range={range} />
-              <ErrorsMini range={range} />
+              <LatencyMini range={range} apiId={scope?.id} />
+              <ErrorsMini range={range} apiId={scope?.id} />
             </div>
           </>
         )}
@@ -111,7 +116,7 @@ function Hero({
       )}
       {!children && (
         <div className="motion-enter flex min-w-0" style={rise(2)}>
-          <TopApisCard range={range} />
+          <TopApisCard range={range} scope={scope} />
         </div>
       )}
     </section>
@@ -131,11 +136,16 @@ function Plain({ syncSpec, activity }: { syncSpec: ReactNode; activity: ReactNod
 function AnalyticsDashboard({
   range,
   canSettings,
+  scope,
+  onSelectApi,
   syncSpec,
   activity,
 }: {
   range: AnalyticsRange;
   canSettings: boolean;
+  /** The API the API cards are narrowed to (the only managed API, or the one picked); null for the gateway-wide view. */
+  scope: DashboardScope['api'];
+  onSelectApi: (apiId: string) => void;
   /** API sync status and pending spec updates: stacked under the traffic table. */
   syncSpec: ReactNode;
   /** Recent activity: stacked under the request-volume chart. */
@@ -170,7 +180,7 @@ function AnalyticsDashboard({
   if (!health.pipelineReady && !isPipelineStale(health)) {
     return (
       <div className="space-y-3">
-        <Hero range={range} canSettings={canSettings}>
+        <Hero range={range} canSettings={canSettings} scope={scope}>
           <Card className="rounded-[1.25rem]">
             <AnalyticsEmptyState health={health} />
           </Card>
@@ -182,22 +192,26 @@ function AnalyticsDashboard({
   return (
     <div className="space-y-3">
       {!health.pipelineReady && <AnalyticsStaleNotice health={health} />}
-      <Hero range={range} canSettings={canSettings} />
+      <Hero range={range} canSettings={canSettings} scope={scope} />
       <div className="motion-enter" style={rise(2)}>
-        <KpiStrip range={range} showNodes={canSettings} />
+        <KpiStrip range={range} showNodes={canSettings} apiId={scope?.id} />
       </div>
       {/* Two stacks of near-equal height: the table grows and the activity log grows to absorb
           the difference, so neither column ends in a blank strip. */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(22rem,1fr)]">
         <div className="flex min-w-0 flex-col gap-3">
           <div className="motion-enter flex-1 [&>*]:h-full" style={rise(3)}>
-            <ApiTrafficTable range={range} />
+            {scope ? (
+              <EndpointTrafficTable range={range} scope={scope} />
+            ) : (
+              <ApiTrafficTable range={range} onSelect={onSelectApi} />
+            )}
           </div>
           {syncSpec}
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           <div className="motion-enter" style={rise(4)}>
-            <TrafficChart range={range} />
+            <TrafficChart range={range} scope={scope} />
           </div>
           <div className="flex-1 [&>*]:h-full">{activity}</div>
         </div>
@@ -255,6 +269,7 @@ export default function DashboardPage() {
   const { openSearch } = useOverlays();
   const canAnalytics = can('analytics:read');
   const canSettings = can('settings:read');
+  const scope = useDashboardScope();
 
   // Cards that do not depend on analytics; where they sit is decided by the layout that wraps them.
   const syncSpec = (
@@ -303,6 +318,9 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canAnalytics && !scope.auto && scope.api && (
+            <ScopeChip name={scope.api.name} onClear={scope.clear} />
+          )}
           {canAnalytics && <RangeControl value={range} onChange={setRange} />}
           {canAnalytics && <RefreshButton />}
           <PermissionGate permission="api:create">
@@ -324,6 +342,8 @@ export default function DashboardPage() {
         <AnalyticsDashboard
           range={range}
           canSettings={canSettings}
+          scope={scope.api}
+          onSelectApi={scope.select}
           syncSpec={syncSpec}
           activity={activity}
         />

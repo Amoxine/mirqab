@@ -22,28 +22,93 @@ export const ANALYTICS_RANGES: { value: AnalyticsRange; label: string }[] = [
   { value: '30d', label: 'Last 30 days' },
 ];
 
-export function useAnalyticsOverview(range: AnalyticsRange = '24h') {
-  return useQuery({
+/** `/analytics/traffic` for one filter set; the scoped dashboard cards all read (and share) this one request. */
+function trafficQuery(filters: TrafficFilters) {
+  return {
+    queryKey: queryKeys.analytics.traffic(filters),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+      }
+      return api.get<AnalyticsTraffic>(`/analytics/traffic?${params.toString()}`).then((res) => res.data);
+    },
+  };
+}
+
+const overviewOf = (traffic: AnalyticsTraffic): AnalyticsOverview => ({
+  totalRequests: traffic.summary.requests,
+  successCount: traffic.summary.requests - traffic.summary.errors,
+  errorCount: traffic.summary.errors,
+  errorRate: traffic.summary.errorRate,
+  avgLatencyMs: traffic.summary.avgLatencyMs,
+  avgUpstreamLatencyMs: traffic.summary.avgUpstreamLatencyMs,
+  p50LatencyMs: traffic.summary.p50LatencyMs,
+  p95LatencyMs: traffic.summary.p95LatencyMs,
+  p99LatencyMs: traffic.summary.p99LatencyMs,
+  activeApis: 1,
+  activeKeys: traffic.summary.uniqueKeys,
+  range: traffic.range,
+  generatedAt: traffic.summary.lastRequestAt ?? '',
+});
+
+const seriesOf = (traffic: AnalyticsTraffic): AnalyticsTimeSeriesPoint[] =>
+  traffic.timeseries.map(({ bucket, requests, errors, avgLatencyMs }) => ({
+    bucket,
+    requests,
+    errors,
+    avgLatencyMs,
+  }));
+
+const statusCodesOf = (traffic: AnalyticsTraffic): AnalyticsStatusCode[] =>
+  traffic.statusCodes.map(({ code, count }) => ({ code: String(code), count }));
+
+/**
+ * The analytics hooks below take an optional `apiId`: without it they read the gateway-wide
+ * endpoints, with it they read the same figures for that one API from `/analytics/traffic`, mapped
+ * to the same shapes, so a card works unchanged in both modes.
+ */
+export function useAnalyticsOverview(range: AnalyticsRange = '24h', apiId?: string) {
+  const overall = useQuery({
     queryKey: queryKeys.analytics.overview(range),
     queryFn: () =>
       api.get<AnalyticsOverview>(`/analytics/overview?range=${range}`).then((res) => res.data),
+    enabled: !apiId,
   });
+  const scoped = useQuery({
+    ...trafficQuery({ range, apiId }),
+    select: overviewOf,
+    enabled: !!apiId,
+  });
+  return apiId ? scoped : overall;
 }
 
-export function useAnalyticsTimeSeries(metric: AnalyticsMetric = 'requests', range: AnalyticsRange = '24h') {
-  return useQuery({
+export function useAnalyticsTimeSeries(
+  metric: AnalyticsMetric = 'requests',
+  range: AnalyticsRange = '24h',
+  apiId?: string,
+) {
+  const overall = useQuery({
     queryKey: queryKeys.analytics.timeseries(metric, range),
     queryFn: () =>
       api
         .get<AnalyticsTimeSeriesPoint[]>(`/analytics/timeseries?metric=${metric}&range=${range}`)
         .then((res) => res.data),
+    enabled: !apiId,
   });
+  const scoped = useQuery({
+    ...trafficQuery({ range, apiId }),
+    select: seriesOf,
+    enabled: !!apiId,
+  });
+  return apiId ? scoped : overall;
 }
 
-export function useAnalyticsApis(range: AnalyticsRange = '24h') {
+export function useAnalyticsApis(range: AnalyticsRange = '24h', enabled = true) {
   return useQuery({
     queryKey: queryKeys.analytics.apis(range),
     queryFn: () => api.get<AnalyticsApiRow[]>(`/analytics/apis?range=${range}`).then((res) => res.data),
+    enabled,
   });
 }
 
@@ -54,25 +119,26 @@ export function useAnalyticsKeys(range: AnalyticsRange = '24h') {
   });
 }
 
-export function useAnalyticsStatusCodes(range: AnalyticsRange = '24h') {
-  return useQuery({
+export function useAnalyticsStatusCodes(range: AnalyticsRange = '24h', apiId?: string) {
+  const overall = useQuery({
     queryKey: queryKeys.analytics.statusCodes(range),
     queryFn: () =>
       api.get<AnalyticsStatusCode[]>(`/analytics/status-codes?range=${range}`).then((res) => res.data),
+    enabled: !apiId,
   });
+  const scoped = useQuery({
+    ...trafficQuery({ range, apiId }),
+    select: statusCodesOf,
+    enabled: !!apiId,
+  });
+  return apiId ? scoped : overall;
 }
 
 /** Filtered traffic KPIs, series and endpoint breakdowns. Empty filters are dropped from the query string. */
-export function useAnalyticsTraffic(filters: TrafficFilters) {
+export function useAnalyticsTraffic(filters: TrafficFilters, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.analytics.traffic(filters),
-    queryFn: () => {
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(filters)) {
-        if (value !== undefined && value !== '') params.set(key, String(value));
-      }
-      return api.get<AnalyticsTraffic>(`/analytics/traffic?${params.toString()}`).then((res) => res.data);
-    },
+    ...trafficQuery(filters),
+    enabled,
     // Keep the previous numbers on screen while a filter change loads, instead of flashing skeletons.
     placeholderData: (previous) => previous,
   });

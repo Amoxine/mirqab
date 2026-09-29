@@ -10,6 +10,7 @@ import { useFormat } from '@/hooks/use-format';
 import { cn } from '@/lib/utils';
 import type { AnalyticsRange, AnalyticsStatusCode } from '@/types';
 import { Figure } from './figure';
+import { ScopeTag } from './scope-tag';
 
 type StatusClass = '2xx' | '4xx' | '5xx';
 
@@ -38,11 +39,11 @@ function summarise(codes: AnalyticsStatusCode[]) {
   return { totals, sum, topError };
 }
 
-function StatusMix({ range }: { range: AnalyticsRange }) {
+function StatusMix({ range, apiId }: { range: AnalyticsRange; apiId?: string }) {
   const t = useTranslations('dashboard.overview');
   const locale = useLocale();
   const fmt = useFormat();
-  const { data, isLoading, error } = useAnalyticsStatusCodes(range);
+  const { data, isLoading, error } = useAnalyticsStatusCodes(range, apiId);
   const pct = useMemo(
     () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }),
     [locale],
@@ -118,18 +119,28 @@ function Stat({ value, label, hint }: { value: React.ReactNode; label: string; h
 }
 
 /** Headline figures for the range plus the HTTP status mix, on the dark emphasis surface. */
-export function OverviewPanel({ range }: { range: AnalyticsRange }) {
+export function OverviewPanel({
+  range,
+  scope,
+}: {
+  range: AnalyticsRange;
+  /** The API the figures are narrowed to; the gateway-wide view when omitted. */
+  scope?: { id: string; name: string } | null;
+}) {
   const t = useTranslations('dashboard.overview');
   const tRanges = useTranslations('analytics.ranges');
   const fmt = useFormat();
-  const { data, isLoading, error, refetch } = useAnalyticsOverview(range);
+  const { data, isLoading, error, refetch } = useAnalyticsOverview(range, scope?.id);
 
   return (
     <Card variant="ink" className="@container flex flex-1 flex-col p-4 sm:p-5">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-normal tracking-tight">{t('title')}</h2>
-        <span className="text-muted-foreground truncate font-mono text-[0.68rem] uppercase tracking-[0.08em]">
-          {tRanges(range)}
+        <span className="flex min-w-0 items-center gap-2">
+          <ScopeTag name={scope?.name} />
+          <span className="text-muted-foreground truncate font-mono text-[0.68rem] uppercase tracking-[0.08em]">
+            {tRanges(range)}
+          </span>
         </span>
       </div>
 
@@ -172,7 +183,7 @@ export function OverviewPanel({ range }: { range: AnalyticsRange }) {
 
       <div className="mt-4 border-t pt-3">
         <div className="text-muted-foreground mb-2.5 text-[0.8rem]">{t('statusMix')}</div>
-        <StatusMix range={range} />
+        <StatusMix range={range} apiId={scope?.id} />
       </div>
     </Card>
   );

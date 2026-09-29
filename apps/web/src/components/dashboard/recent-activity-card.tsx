@@ -25,7 +25,7 @@ export function RecentActivityCard() {
   const fmt = useFormat();
 
   return (
-    <Card>
+    <Card variant="ink">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-base">{t('title')}</CardTitle>
         <Link
@@ -54,7 +54,7 @@ export function RecentActivityCard() {
           <div
             role="log"
             aria-label={t('logLabel')}
-            className="bg-ink text-secondary-foreground overflow-hidden rounded-[0.875rem] pb-3 font-mono text-xs"
+            className="border-border text-secondary-foreground overflow-hidden rounded-[0.875rem] border pb-3 font-mono text-xs"
           >
             <div className="text-secondary-foreground/55 flex justify-between gap-3 border-b border-white/10 px-3.5 py-2 text-[0.68rem]">
               <span>{t('logName')}</span>
