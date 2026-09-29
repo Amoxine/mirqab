@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
 import { Check, Copy, Trash2, UserPlus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -8,14 +8,21 @@ import { PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
 import { FormattedDate } from '@/components/shared/formatted';
 import { InviteMemberSheet } from '@/components/tenants/invite-member-sheet';
 import { RemoveMemberDialog } from '@/components/tenants/remove-member-dialog';
 import { useTenantMembers, useUpdateMemberRole, type TenantMember } from '@/hooks/use-tenants';
+import { PageFilter } from '@open-gateway/ui';
+import { usePageFilterLabels } from '@/hooks/use-page-filter-labels';
 import { usePermissions } from '@/hooks/use-permissions';
 
 /** Roles an admin can hand out from this page. `super_admin` is a system-wide bypass keyed only on
@@ -55,7 +62,9 @@ function MemberRoleCell({ tenantId, member }: { tenantId: string; member: Tenant
       onValueChange={(role) => {
         void updateRole.mutateAsync({ userId: member.userId, role }).then(
           () => {
-            toast.success(t('members.roleUpdatedToast', { email: member.email, role: t(`roles.${role}`) }));
+            toast.success(
+              t('members.roleUpdatedToast', { email: member.email, role: t(`roles.${role}`) }),
+            );
           },
           (error: unknown) => {
             // The server refuses (400) demoting the tenant's last admin — its message names that.
@@ -64,7 +73,10 @@ function MemberRoleCell({ tenantId, member }: { tenantId: string; member: Tenant
         );
       }}
     >
-      <SelectTrigger className="w-[130px]" aria-label={t('members.roleAriaLabel', { email: member.email })}>
+      <SelectTrigger
+        className="w-[130px]"
+        aria-label={t('members.roleAriaLabel', { email: member.email })}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -95,7 +107,7 @@ function PendingInstructions({ email }: { email: string }) {
 
   return (
     <div className="mt-1 flex items-start gap-1.5">
-      <p className="text-xs text-muted-foreground">{text}</p>
+      <p className="text-muted-foreground text-xs">{text}</p>
       <Button
         type="button"
         variant="ghost"
@@ -106,7 +118,11 @@ function PendingInstructions({ email }: { email: string }) {
           void handleCopy();
         }}
       >
-        {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
       </Button>
     </div>
   );
@@ -115,9 +131,9 @@ function PendingInstructions({ email }: { email: string }) {
 export function MembersCard({ tenantId }: { tenantId: string }) {
   const t = useTranslations('tenants');
   const { can } = usePermissions();
+  const filterLabels = usePageFilterLabels();
   const [page, setPage] = useState(1);
-  // `q` is what the box shows; `searchTerm` is what the query uses, one debounce behind.
-  const [q, setQ] = useState('');
+  // What the query uses: the search box (PageFilter) reports it one debounce after the last keystroke.
   const [searchTerm, setSearchTerm] = useState('');
   const { data, isLoading, isError, error, refetch } = useTenantMembers(tenantId, {
     page,
@@ -126,17 +142,6 @@ export function MembersCard({ tenantId }: { tenantId: string }) {
   });
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ userId: string; email: string } | null>(null);
-
-  useEffect(() => {
-    if (q === searchTerm) return;
-    const timer = setTimeout(() => {
-      setSearchTerm(q);
-      setPage(1);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [q, searchTerm]);
 
   const columns = useMemo<ColumnDef<TenantMember>[]>(
     () => [
@@ -149,14 +154,18 @@ export function MembersCard({ tenantId }: { tenantId: string }) {
               <p className="font-medium">{row.original.name}</p>
               {row.original.pending && <Badge variant="outline">{t('members.pendingBadge')}</Badge>}
             </div>
-            <p className="break-all text-xs text-muted-foreground">
+            <p className="text-muted-foreground break-all text-xs">
               <span dir="ltr">{row.original.email}</span>
             </p>
             {row.original.pending && <PendingInstructions email={row.original.email} />}
           </div>
         ),
       },
-      { id: 'role', header: t('fields.role'), cell: ({ row }) => <MemberRoleCell tenantId={tenantId} member={row.original} /> },
+      {
+        id: 'role',
+        header: t('fields.role'),
+        cell: ({ row }) => <MemberRoleCell tenantId={tenantId} member={row.original} />,
+      },
       {
         accessorKey: 'createdAt',
         header: t('members.columnJoined'),
@@ -183,7 +192,11 @@ export function MembersCard({ tenantId }: { tenantId: string }) {
     ],
     [t, tenantId],
   );
-  const table = useReactTable({ data: data?.data ?? NO_MEMBERS, columns, getCoreRowModel: getCoreRowModel() });
+  const table = useReactTable({
+    data: data?.data ?? NO_MEMBERS,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   return (
     <Card>
@@ -203,14 +216,30 @@ export function MembersCard({ tenantId }: { tenantId: string }) {
         </PermissionGate>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Input
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
+        <PageFilter
+          layout="inline"
+          showReset={false}
+          fields={[
+            {
+              type: 'search',
+              key: 'q',
+              label: t('members.searchAriaLabel'),
+              placeholder: t('members.searchPlaceholder'),
+              debounceMs: SEARCH_DEBOUNCE_MS,
+              className: 'w-full sm:w-72',
+            },
+          ]}
+          values={{ q: searchTerm }}
+          // Fires once per pause in typing, so the page resets after the debounce, not per key.
+          onChange={(patch) => {
+            setSearchTerm(typeof patch.q === 'string' ? patch.q : '');
+            setPage(1);
           }}
-          placeholder={t('members.searchPlaceholder')}
-          aria-label={t('members.searchAriaLabel')}
-          className="max-w-sm"
+          onReset={() => {
+            setSearchTerm('');
+            setPage(1);
+          }}
+          labels={filterLabels}
         />
         <DataTable
           table={table}
@@ -233,7 +262,9 @@ export function MembersCard({ tenantId }: { tenantId: string }) {
           }}
         />
       </CardContent>
-      {can('user:create') && <InviteMemberSheet tenantId={tenantId} open={inviteOpen} onOpenChange={setInviteOpen} />}
+      {can('user:create') && (
+        <InviteMemberSheet tenantId={tenantId} open={inviteOpen} onOpenChange={setInviteOpen} />
+      )}
       <RemoveMemberDialog
         tenantId={tenantId}
         member={removeTarget}

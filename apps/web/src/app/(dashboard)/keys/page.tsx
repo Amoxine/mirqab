@@ -20,23 +20,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
+import { PageFilter, type FilterField, type FilterValues } from '@open-gateway/ui';
 import { useApis } from '@/hooks/use-apis';
 import { useKeys, type ApiKey } from '@/hooks/use-keys';
+import { usePageFilterLabels } from '@/hooks/use-page-filter-labels';
 import { usePlans } from '@/hooks/use-plans';
 import { FormattedDate } from '@/components/shared/formatted';
 
 const PAGE_SIZE = 20;
-/** Radix Select forbids empty-string item values, so "no filter" is a sentinel. */
-const ALL = 'ALL';
 
 interface KeyTarget {
   id: string;
@@ -162,7 +155,13 @@ function getColumns(
     {
       id: 'actions',
       cell: ({ row }) => (
-        <KeyRowActions apiKey={row.original} onRevoke={onRevoke} onRotate={onRotate} onDelete={onDelete} t={t} />
+        <KeyRowActions
+          apiKey={row.original}
+          onRevoke={onRevoke}
+          onRotate={onRotate}
+          onDelete={onDelete}
+          t={t}
+        />
       ),
     },
   ];
@@ -172,8 +171,7 @@ function KeysPage() {
   const t = useTranslations('keys');
   const tCommon = useTranslations('common');
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState(ALL);
-  const [apiFilter, setApiFilter] = useState(ALL);
+  const [filters, setFilters] = useState<FilterValues>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<KeyTarget | null>(null);
   const [rotateTarget, setRotateTarget] = useState<KeyTarget | null>(null);
@@ -185,8 +183,8 @@ function KeysPage() {
   const { data, isLoading, isError, error, refetch } = useKeys(
     page,
     PAGE_SIZE,
-    statusFilter === ALL ? undefined : statusFilter,
-    apiFilter === ALL ? undefined : apiFilter,
+    typeof filters.status === 'string' ? filters.status : undefined,
+    typeof filters.apiDefId === 'string' ? filters.apiDefId : undefined,
   );
   // ponytail: one page of 100 APIs/plans feeds the filter and the create picker; add search past that.
   const { data: apis, isLoading: apisLoading } = useApis(1, 100);
@@ -222,7 +220,36 @@ function KeysPage() {
   });
 
   const totalPages = Math.max(1, data?.meta.totalPages ?? 1);
-  const filtered = statusFilter !== ALL || apiFilter !== ALL;
+  const filtered = Object.values(filters).some((value) => value !== undefined);
+  const filterLabels = usePageFilterLabels();
+  const filterFields: FilterField[] = [
+    {
+      type: 'select',
+      key: 'status',
+      label: t('list.filters.statusLabel'),
+      allLabel: t('list.filters.allStatuses'),
+      options: [
+        { value: 'ACTIVE', label: t('status.ACTIVE') },
+        { value: 'REVOKED', label: t('status.REVOKED') },
+        { value: 'EXPIRED', label: t('status.EXPIRED') },
+      ],
+    },
+    {
+      type: 'select',
+      key: 'apiDefId',
+      label: t('list.filters.apiLabel'),
+      allLabel: t('list.filters.allApis'),
+      options: apiList.map((api) => ({ value: api.id, label: api.name })),
+    },
+  ];
+  const changeFilters = (patch: FilterValues) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setPage(1);
+  };
+  const resetFilters = () => {
+    setFilters({});
+    setPage(1);
+  };
 
   const createButton = (
     <PermissionGate permission="key:create">
@@ -239,7 +266,11 @@ function KeysPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('list.title')} description={t('list.description')} actions={createButton} />
+      <PageHeader
+        title={t('list.title')}
+        description={t('list.description')}
+        actions={createButton}
+      />
 
       <KeyFormSheet
         mode="create"
@@ -277,45 +308,14 @@ function KeysPage() {
         }}
       />
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => {
-            setStatusFilter(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-full sm:w-[180px]" aria-label={t('list.filters.statusLabel')}>
-            <SelectValue placeholder={t('list.filters.statusLabel')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('list.filters.allStatuses')}</SelectItem>
-            <SelectItem value="ACTIVE">{t('status.ACTIVE')}</SelectItem>
-            <SelectItem value="REVOKED">{t('status.REVOKED')}</SelectItem>
-            <SelectItem value="EXPIRED">{t('status.EXPIRED')}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={apiFilter}
-          onValueChange={(v) => {
-            setApiFilter(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-full sm:w-[220px]" aria-label={t('list.filters.apiLabel')}>
-            <SelectValue placeholder={t('list.filters.apiLabel')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('list.filters.allApis')}</SelectItem>
-            {apiList.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <PageFilter
+        layout="inline"
+        fields={filterFields}
+        values={filters}
+        onChange={changeFilters}
+        onReset={resetFilters}
+        labels={filterLabels}
+      />
 
       <DataTable
         table={table}
@@ -326,15 +326,7 @@ function KeysPage() {
         emptyMessage={filtered ? t('list.emptyFiltered') : t('list.empty')}
         emptyAction={
           filtered ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setStatusFilter(ALL);
-                setApiFilter(ALL);
-                setPage(1);
-              }}
-            >
+            <Button type="button" variant="outline" onClick={resetFilters}>
               {tCommon('clearFilters')}
             </Button>
           ) : (

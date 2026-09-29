@@ -23,5 +23,7 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System"
-  }
+  },
+  "filters": "Filters",
+  "activeFilters": "{count, plural, one {# filter} other {# filters}} active"
 }

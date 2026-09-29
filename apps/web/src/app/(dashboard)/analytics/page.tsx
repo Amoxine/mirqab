@@ -21,11 +21,17 @@ import { StatCard, StatCardSkeleton } from '@/components/dashboard/stat-card';
 import { keyStatusVariant } from '@/components/keys/key-utils';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RangeControl } from '@/components/dashboard/range-control';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  ANALYTICS_RANGES,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
   useAnalyticsApis,
   useAnalyticsHealth,
   useAnalyticsKeys,
@@ -51,7 +57,10 @@ function OverviewTiles({ range }: { range: AnalyticsRange }) {
   if (error || !data) {
     return (
       <Card>
-        <AnalyticsErrorState message={error?.message ?? t('noData')} onRetry={() => void refetch()} />
+        <AnalyticsErrorState
+          message={error?.message ?? t('noData')}
+          onRetry={() => void refetch()}
+        />
       </Card>
     );
   }
@@ -60,7 +69,11 @@ function OverviewTiles({ range }: { range: AnalyticsRange }) {
   const hasTraffic = data.totalRequests > 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <StatCard title={t('overview.totalRequests')} value={fmt.number(data.totalRequests)} icon={Activity} />
+      <StatCard
+        title={t('overview.totalRequests')}
+        value={fmt.number(data.totalRequests)}
+        icon={Activity}
+      />
       <StatCard
         title={t('table.columns.errorRate')}
         value={hasTraffic ? fmt.percent(data.errorRate) : '—'}
@@ -71,11 +84,27 @@ function OverviewTiles({ range }: { range: AnalyticsRange }) {
         title={t('table.columns.avgLatency')}
         value={hasTraffic ? fmt.ms(data.avgLatencyMs) : '—'}
         icon={Clock}
-        description={hasTraffic ? t('overview.upstreamLatency', { value: fmt.ms(data.avgUpstreamLatencyMs) }) : undefined}
+        description={
+          hasTraffic
+            ? t('overview.upstreamLatency', { value: fmt.ms(data.avgUpstreamLatencyMs) })
+            : undefined
+        }
       />
-      <StatCard title={t('table.columns.errors')} value={fmt.number(data.errorCount)} icon={AlertTriangle} />
-      <StatCard title={t('overview.activeApis')} value={fmt.number(data.activeApis)} icon={ShieldCheck} />
-      <StatCard title={t('overview.activeKeys')} value={fmt.number(data.activeKeys)} icon={KeyRound} />
+      <StatCard
+        title={t('table.columns.errors')}
+        value={fmt.number(data.errorCount)}
+        icon={AlertTriangle}
+      />
+      <StatCard
+        title={t('overview.activeApis')}
+        value={fmt.number(data.activeApis)}
+        icon={ShieldCheck}
+      />
+      <StatCard
+        title={t('overview.activeKeys')}
+        value={fmt.number(data.activeKeys)}
+        icon={KeyRound}
+      />
     </div>
   );
 }
@@ -95,7 +124,13 @@ interface MetricsTableCardProps<T> {
 }
 
 /** A read-only table card with loading, error and empty states. */
-function MetricsTableCard<T>({ title, query, columns, rowKey, emptyMessage }: MetricsTableCardProps<T>) {
+function MetricsTableCard<T>({
+  title,
+  query,
+  columns,
+  rowKey,
+  emptyMessage,
+}: MetricsTableCardProps<T>) {
   const { data, isLoading, error, refetch } = query;
 
   let body: ReactNode;
@@ -127,7 +162,10 @@ function MetricsTableCard<T>({ title, query, columns, rowKey, emptyMessage }: Me
     body = data.map((row) => (
       <TableRow key={rowKey(row)}>
         {columns.map((column) => (
-          <TableCell key={column.header} className={column.numeric ? 'text-end tabular-nums' : undefined}>
+          <TableCell
+            key={column.header}
+            className={column.numeric ? 'text-end tabular-nums' : undefined}
+          >
             {column.cell(row)}
           </TableCell>
         ))}
@@ -171,15 +209,23 @@ function apiColumns(
       cell: (row) => (
         <>
           <div className="font-medium">{row.name}</div>
-          <div className="font-mono text-xs text-muted-foreground">{row.slug}</div>
+          <div className="text-muted-foreground font-mono text-xs">{row.slug}</div>
         </>
       ),
     },
     { header: tStatus('status'), cell: (row) => <ApiStatusBadge status={row.status} /> },
     { header: t('table.columns.requests'), numeric: true, cell: (row) => fmt.number(row.requests) },
     { header: t('table.columns.errors'), numeric: true, cell: (row) => fmt.number(row.errors) },
-    { header: t('table.columns.errorRate'), numeric: true, cell: (row) => fmt.percent(row.errorRate) },
-    { header: t('table.columns.avgLatency'), numeric: true, cell: (row) => fmt.ms(row.avgLatencyMs) },
+    {
+      header: t('table.columns.errorRate'),
+      numeric: true,
+      cell: (row) => fmt.percent(row.errorRate),
+    },
+    {
+      header: t('table.columns.avgLatency'),
+      numeric: true,
+      cell: (row) => fmt.ms(row.avgLatencyMs),
+    },
   ];
 }
 
@@ -195,13 +241,24 @@ function keyColumns(
   fmt: Format,
 ): Column<AnalyticsKeyRow>[] {
   return [
-    { header: t('table.columns.key'), cell: (row) => <span className="font-medium">{row.name}</span> },
+    {
+      header: t('table.columns.key'),
+      cell: (row) => <span className="font-medium">{row.name}</span>,
+    },
     { header: t('table.columns.api'), cell: (row) => row.apiDefName ?? '—' },
     { header: tStatus('status'), cell: (row) => <KeyStatus status={row.status} /> },
     { header: t('table.columns.requests'), numeric: true, cell: (row) => fmt.number(row.requests) },
     { header: t('table.columns.errors'), numeric: true, cell: (row) => fmt.number(row.errors) },
-    { header: t('table.columns.errorRate'), numeric: true, cell: (row) => fmt.percent(row.errorRate) },
-    { header: t('table.columns.avgLatency'), numeric: true, cell: (row) => fmt.ms(row.avgLatencyMs) },
+    {
+      header: t('table.columns.errorRate'),
+      numeric: true,
+      cell: (row) => fmt.percent(row.errorRate),
+    },
+    {
+      header: t('table.columns.avgLatency'),
+      numeric: true,
+      cell: (row) => fmt.ms(row.avgLatencyMs),
+    },
   ];
 }
 
@@ -242,30 +299,12 @@ function AnalyticsView() {
   const [range, setRange] = useState<AnalyticsRange>('24h');
   const { data: health } = useAnalyticsHealth();
 
-  const handleRangeChange = (value: string) => {
-    const next = ANALYTICS_RANGES.find((option) => option.value === value);
-    if (next) setRange(next.value);
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('title')}
         description={t('subtitle')}
-        actions={
-          <Select value={range} onValueChange={handleRangeChange}>
-            <SelectTrigger className="w-full sm:w-[180px]" aria-label={t('rangeLabel')}>
-              <SelectValue placeholder={t('rangePlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {ANALYTICS_RANGES.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {t(`ranges.${option.value}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
+        actions={<RangeControl value={range} onChange={setRange} />}
       />
 
       {health && !health.pipelineReady && !isPipelineStale(health) ? (

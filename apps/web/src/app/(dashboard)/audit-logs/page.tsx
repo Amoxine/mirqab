@@ -7,25 +7,18 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { Download, Filter } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
 import { AuditTrafficAction } from '@/components/audit/audit-traffic-action';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { PageFilter, type FilterField, type FilterValues } from '@open-gateway/ui';
 import { toast } from '@/components/ui/sonner';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
+import { usePageFilterLabels } from '@/hooks/use-page-filter-labels';
 import { api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useQuery } from '@tanstack/react-query';
@@ -77,32 +70,40 @@ function useAuditLogColumns(): ColumnDef<AuditLog>[] {
       {
         accessorKey: 'createdAt',
         header: t('auditLogs.columns.timestamp'),
-        cell: ({ row }) => format(new Date(row.original.createdAt), 'MMM dd, yyyy HH:mm', { locale }),
+        cell: ({ row }) =>
+          format(new Date(row.original.createdAt), 'MMM dd, yyyy HH:mm', { locale }),
       },
       {
         id: 'user',
         header: t('auditLogs.columns.user'),
         cell: ({ row }) =>
-          row.original.user ? <span dir="ltr">{row.original.user.email}</span> : t('auditLogs.systemUser'),
+          row.original.user ? (
+            <span dir="ltr">{row.original.user.email}</span>
+          ) : (
+            t('auditLogs.systemUser')
+          ),
       },
       {
         accessorKey: 'action',
         header: t('auditLogs.action'),
         cell: ({ row }) => (
-          <Badge variant={actionColor(row.original.action)}>{auditActionLabel(t, row.original.action)}</Badge>
+          <Badge variant={actionColor(row.original.action)}>
+            {auditActionLabel(t, row.original.action)}
+          </Badge>
         ),
       },
       {
         accessorKey: 'resource',
         header: t('auditLogs.columns.resource'),
         cell: ({ row }) => (
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{row.original.resource}</code>
+          <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{row.original.resource}</code>
         ),
       },
       {
         accessorKey: 'ipAddress',
         header: t('auditLogs.columns.ipAddress'),
-        cell: ({ row }) => (row.original.ipAddress ? <span dir="ltr">{row.original.ipAddress}</span> : '—'),
+        cell: ({ row }) =>
+          row.original.ipAddress ? <span dir="ltr">{row.original.ipAddress}</span> : '—',
       },
       {
         id: 'actions',
@@ -140,18 +141,18 @@ function AuditLogsView() {
   const t = useTranslations('analytics');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
-  const [resourceFilter, setResourceFilter] = useState('');
-  const [actionFilter, setActionFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [filters, setFilters] = useState<FilterValues>({});
+  const str = (value: FilterValues[string]) => (typeof value === 'string' ? value : undefined);
+  const dateFrom = str(filters.dateFrom);
+  const dateTo = str(filters.dateTo);
 
   const [exporting, setExporting] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useAuditLogs(page, pageSize, {
-    resource: resourceFilter || undefined,
-    action: actionFilter || undefined,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    resource: str(filters.resource),
+    action: str(filters.action),
+    dateFrom,
+    dateTo,
   });
 
   const columns = useAuditLogColumns();
@@ -187,14 +188,35 @@ function AuditLogsView() {
   };
 
   const clearFilters = () => {
-    setResourceFilter('');
-    setActionFilter('');
-    setDateFrom('');
-    setDateTo('');
+    setFilters({});
     setPage(1);
   };
 
-  const hasActiveFilters = resourceFilter || actionFilter || dateFrom || dateTo;
+  const hasActiveFilters = Object.values(filters).some((value) => value !== undefined);
+  const filterLabels = {
+    ...usePageFilterLabels(t('auditLogs.clearAll')),
+    title: t('auditLogs.filters'),
+  };
+  const filterFields: FilterField[] = [
+    {
+      type: 'search',
+      key: 'resource',
+      label: t('auditLogs.resource'),
+      placeholder: t('auditLogs.resourcePlaceholder'),
+    },
+    {
+      type: 'select',
+      key: 'action',
+      label: t('auditLogs.action'),
+      allLabel: t('auditLogs.allActions'),
+      options: AUDIT_ACTION_VALUES.map((value) => ({
+        value,
+        label: auditActionLabel(t, value),
+      })),
+    },
+    { type: 'date', key: 'dateFrom', label: t('auditLogs.dateFrom') },
+    { type: 'date', key: 'dateTo', label: t('auditLogs.dateTo') },
+  ];
 
   return (
     <div className="space-y-6">
@@ -218,104 +240,18 @@ function AuditLogsView() {
         }
       />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4" aria-hidden="true" />
-              {t('auditLogs.filters')}
-              {hasActiveFilters && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs text-primary-foreground tabular-nums">
-                  {[resourceFilter, actionFilter, dateFrom, dateTo].filter(Boolean).length}
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]" align="start">
-            <div className="space-y-4">
-              <h4 className="font-medium">{t('auditLogs.filterOptions')}</h4>
-              <div className="space-y-2">
-                <label htmlFor="audit-filter-resource" className="text-muted-foreground text-sm">
-                  {t('auditLogs.resource')}
-                </label>
-                <Input
-                  id="audit-filter-resource"
-                  placeholder={t('auditLogs.resourcePlaceholder')}
-                  value={resourceFilter}
-                  onChange={(e) => {
-                    setResourceFilter(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="audit-filter-action" className="text-muted-foreground text-sm">
-                  {t('auditLogs.action')}
-                </label>
-                <Select
-                  value={actionFilter || 'ALL'}
-                  onValueChange={(v) => {
-                    setActionFilter(v === 'ALL' ? '' : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger id="audit-filter-action">
-                    <SelectValue placeholder={t('auditLogs.actionPlaceholder')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">{t('auditLogs.allActions')}</SelectItem>
-                    {AUDIT_ACTION_VALUES.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {auditActionLabel(t, value)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-2">
-                  <label htmlFor="audit-filter-from" className="text-muted-foreground text-sm">
-                    {t('auditLogs.dateFrom')}
-                  </label>
-                  <Input
-                    id="audit-filter-from"
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setPage(1);
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="audit-filter-to" className="text-muted-foreground text-sm">
-                    {t('auditLogs.dateTo')}
-                  </label>
-                  <Input
-                    id="audit-filter-to"
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => {
-                      setDateTo(e.target.value);
-                      setPage(1);
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  disabled={!hasActiveFilters}
-                >
-                  {t('auditLogs.clearAll')}
-                </Button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
+      <div>
+        <PageFilter
+          layout="popover"
+          fields={filterFields}
+          values={filters}
+          onChange={(patch) => {
+            setFilters((current) => ({ ...current, ...patch }));
+            setPage(1);
+          }}
+          onReset={clearFilters}
+          labels={filterLabels}
+        />
       </div>
 
       <DataTable

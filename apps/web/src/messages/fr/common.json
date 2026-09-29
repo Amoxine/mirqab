@@ -23,5 +23,7 @@
     "light": "Clair",
     "dark": "Sombre",
     "system": "Système"
-  }
+  },
+  "filters": "Filtres",
+  "activeFilters": "{count, plural, one {# filtre actif} other {# filtres actifs}}"
 }

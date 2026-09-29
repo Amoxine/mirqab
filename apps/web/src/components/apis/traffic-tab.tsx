@@ -7,8 +7,14 @@ import { AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { RangeControl } from '@/components/dashboard/range-control';
 import { DataTable } from '@/components/shared/data-table';
 import { StateMessage } from '@/components/shared/state-card';
 import { FormattedDateTime } from '@/components/shared/formatted';
@@ -16,7 +22,6 @@ import { useApiTraffic, type HttpDump, type TrafficEntry } from '@/hooks/use-api
 import type { AnalyticsRange } from '@/types';
 
 const NO_ROWS: TrafficEntry[] = [];
-const RANGES: AnalyticsRange[] = ['1h', '24h', '7d', '30d'];
 
 function statusVariant(code: number): 'default' | 'secondary' | 'destructive' {
   if (code >= 500) return 'destructive';
@@ -25,13 +30,21 @@ function statusVariant(code: number): 'default' | 'secondary' | 'destructive' {
 }
 
 /** One request or response side of the detail dialog: its start line, headers, then its body. */
-function DumpSection({ label, dump, empty }: { label: string; dump: HttpDump | null; empty: string }) {
+function DumpSection({
+  label,
+  dump,
+  empty,
+}: {
+  label: string;
+  dump: HttpDump | null;
+  empty: string;
+}) {
   const t = useTranslations('apis');
   if (!dump) {
     return (
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">{label}</h3>
-        <p className="text-xs text-muted-foreground">{empty}</p>
+        <p className="text-muted-foreground text-xs">{empty}</p>
       </div>
     );
   }
@@ -44,19 +57,29 @@ function DumpSection({ label, dump, empty }: { label: string; dump: HttpDump | n
         <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs">
           {entries.map(([name, value]) => (
             <div key={name} className="contents">
-              <dt className="font-mono text-muted-foreground">{name}</dt>
+              <dt className="text-muted-foreground font-mono">{name}</dt>
               <dd className="min-w-0 break-all font-mono">{value}</dd>
             </div>
           ))}
         </dl>
       )}
-      {dump.body && <pre className="max-h-40 overflow-auto rounded bg-muted p-2 text-xs">{dump.body}</pre>}
-      {dump.truncated && <p className="text-xs text-muted-foreground">{t('trafficTab.truncated')}</p>}
+      {dump.body && (
+        <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs">{dump.body}</pre>
+      )}
+      {dump.truncated && (
+        <p className="text-muted-foreground text-xs">{t('trafficTab.truncated')}</p>
+      )}
     </div>
   );
 }
 
-function TrafficDetailDialog({ entry, onClose }: { entry: TrafficEntry | null; onClose: () => void }) {
+function TrafficDetailDialog({
+  entry,
+  onClose,
+}: {
+  entry: TrafficEntry | null;
+  onClose: () => void;
+}) {
   const t = useTranslations('apis');
 
   return (
@@ -73,8 +96,16 @@ function TrafficDetailDialog({ entry, onClose }: { entry: TrafficEntry | null; o
         </DialogHeader>
         {entry && (
           <div className="space-y-4">
-            <DumpSection label={t('trafficTab.request')} dump={entry.request} empty={t('trafficTab.noRequest')} />
-            <DumpSection label={t('trafficTab.response')} dump={entry.response} empty={t('trafficTab.noResponse')} />
+            <DumpSection
+              label={t('trafficTab.request')}
+              dump={entry.request}
+              empty={t('trafficTab.noRequest')}
+            />
+            <DumpSection
+              label={t('trafficTab.response')}
+              dump={entry.response}
+              empty={t('trafficTab.noResponse')}
+            />
           </div>
         )}
       </DialogContent>
@@ -117,7 +148,9 @@ export function TrafficTab({ apiId }: { apiId: string }) {
       accessorKey: 'responseCode',
       header: t('trafficTab.status'),
       cell: ({ row }) => (
-        <Badge variant={statusVariant(row.original.responseCode)}>{row.original.responseCode}</Badge>
+        <Badge variant={statusVariant(row.original.responseCode)}>
+          {row.original.responseCode}
+        </Badge>
       ),
     },
     {
@@ -177,25 +210,14 @@ export function TrafficTab({ apiId }: { apiId: string }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{t('trafficTab.description')}</p>
-        <Select
+        <p className="text-muted-foreground text-sm">{t('trafficTab.description')}</p>
+        <RangeControl
           value={range}
-          onValueChange={(v) => {
-            setRange(v as AnalyticsRange);
+          onChange={(next) => {
+            setRange(next);
             setPage(1);
           }}
-        >
-          <SelectTrigger className="w-full sm:w-[180px]" aria-label={t('trafficTab.rangeLabel')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {RANGES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {t(`trafficTab.ranges.${r}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </div>
 
       <DataTable
@@ -210,7 +232,7 @@ export function TrafficTab({ apiId }: { apiId: string }) {
 
       {data?.status === 'OK' && (page > 1 || data.hasMore) && (
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">{t('trafficTab.pageLabel', { page })}</p>
+          <p className="text-muted-foreground text-sm">{t('trafficTab.pageLabel', { page })}</p>
           <div className="flex items-center gap-2">
             <Button
               type="button"

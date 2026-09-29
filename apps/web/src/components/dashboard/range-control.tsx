@@ -1,11 +1,14 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { SegmentedControl } from '@open-gateway/ui';
 import { ANALYTICS_RANGES } from '@/hooks/use-analytics';
 import type { AnalyticsRange } from '@/types';
 
-/** The dashboard's one time-range filter: every analytics figure on the page follows it. */
+/**
+ * The one analytics time-range picker (1h / 24h / 7d / 30d): every page or card that scopes
+ * analytics to a range uses this, so the labels, tooltips and behaviour cannot drift apart.
+ */
 export function RangeControl({
   value,
   onChange,
@@ -17,25 +20,15 @@ export function RangeControl({
   const tAnalytics = useTranslations('analytics');
 
   return (
-    <ToggleGroup
-      type="single"
+    <SegmentedControl
       value={value}
-      // A single-select group reports '' when the active item is clicked again; a range is always selected.
-      onValueChange={(next) => {
-        if (next) onChange(next as AnalyticsRange);
-      }}
-      aria-label={tAnalytics('rangeLabel')}
-    >
-      {ANALYTICS_RANGES.map((range) => (
-        <ToggleGroupItem
-          key={range.value}
-          value={range.value}
-          title={tAnalytics(`ranges.${range.value}`)}
-          className="px-3.5"
-        >
-          {t(`rangeShort.${range.value}`)}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+      onChange={onChange}
+      ariaLabel={tAnalytics('rangeLabel')}
+      options={ANALYTICS_RANGES.map((range) => ({
+        value: range.value,
+        label: t(`rangeShort.${range.value}`),
+        title: tAnalytics(`ranges.${range.value}`),
+      }))}
+    />
   );
 }

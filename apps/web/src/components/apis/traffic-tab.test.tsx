@@ -74,11 +74,18 @@ describe('TrafficTab', () => {
   });
 
   it('sends the selected range and resets to page 1', async () => {
-    const calls = mockFetch(() => ok(okPage()));
+    const calls = mockFetch((c) => ok(okPage({ hasMore: !c.path.includes('page=2') })));
     renderUi(<TrafficTab apiId="api-1" />);
     await screen.findByText('/orders');
-    fireEvent.click(screen.getByRole('combobox'));
-    fireEvent.click(await screen.findByRole('option', { name: M.trafficTab.ranges['1h'] }));
+
+    // Move off page 1 first, so "resets to page 1" is a real reset and not the starting value.
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => {
+      expect(calls.some((c) => c.path === '/apis/api-1/traffic?range=24h&page=2')).toBe(true);
+    });
+
+    // The range is the shared segmented control now (it was a Select).
+    fireEvent.click(screen.getByRole('radio', { name: '1h' }));
     await waitFor(() => {
       expect(calls.some((c) => c.path === '/apis/api-1/traffic?range=1h&page=1')).toBe(true);
     });

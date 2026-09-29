@@ -2,14 +2,24 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { getCoreRowModel, useReactTable, type ColumnDef, type RowSelectionState } from '@tanstack/react-table';
+import {
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef,
+  type RowSelectionState,
+} from '@tanstack/react-table';
 import { AlertTriangle, ChevronDown, FileUp, FileX, Pencil, Eye } from 'lucide-react';
 import { SyncStatusBadge } from '@/components/apis/sync-status-badge';
 import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 import { SpecSourceCard } from '@/components/apis/spec-source/spec-source-card';
 import { SpecUpdateBanner } from '@/components/apis/spec-source/spec-update-banner';
 import { SpecUpdateSheet } from '@/components/apis/spec-update/spec-update-sheet';
-import { DataTable, DataTablePagination, useViewMode, ViewModeToggle } from '@/components/shared/data-table';
+import {
+  DataTable,
+  DataTablePagination,
+  useViewMode,
+  ViewModeToggle,
+} from '@/components/shared/data-table';
 import { StateCard } from '@/components/shared/state-card';
 import {
   AlertDialog,
@@ -32,13 +42,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PageFilter } from '@open-gateway/ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import type { ApiDetail } from '@/hooks/use-apis';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { usePageFilterLabels } from '@/hooks/use-page-filter-labels';
 import { usePermissions } from '@/hooks/use-permissions';
 import {
   appliesTo,
@@ -67,15 +77,28 @@ const NO_ROWS: GovernedEndpoint[] = [];
 type Translate = ReturnType<typeof useTranslations>;
 
 /** What is governed on an endpoint, as short chips. Empty = inherits everything from the API. */
-function governanceChips(g: EndpointGovernance | null, t: Translate): { label: string; tone: 'destructive' | 'secondary' }[] {
+function governanceChips(
+  g: EndpointGovernance | null,
+  t: Translate,
+): { label: string; tone: 'destructive' | 'secondary' }[] {
   if (!g) return [];
   const chips: { label: string; tone: 'destructive' | 'secondary' }[] = [];
   if (g.enabled === false) chips.push({ label: t('chips.blocked'), tone: 'destructive' });
   if (g.auth === 'public') chips.push({ label: t('chips.public'), tone: 'secondary' });
-  if (g.rateLimit) chips.push({ label: t('chips.rateLimit', { rate: g.rateLimit.rate, per: g.rateLimit.per }), tone: 'secondary' });
-  if (g.cache) chips.push({ label: t('chips.cache', { seconds: g.cache.timeoutSeconds }), tone: 'secondary' });
-  if (g.timeoutSeconds !== undefined) chips.push({ label: t('chips.timeout', { seconds: g.timeoutSeconds }), tone: 'secondary' });
-  if (g.requestSizeLimitBytes !== undefined) chips.push({ label: t('chips.sizeLimit', { bytes: g.requestSizeLimitBytes }), tone: 'secondary' });
+  if (g.rateLimit)
+    chips.push({
+      label: t('chips.rateLimit', { rate: g.rateLimit.rate, per: g.rateLimit.per }),
+      tone: 'secondary',
+    });
+  if (g.cache)
+    chips.push({ label: t('chips.cache', { seconds: g.cache.timeoutSeconds }), tone: 'secondary' });
+  if (g.timeoutSeconds !== undefined)
+    chips.push({ label: t('chips.timeout', { seconds: g.timeoutSeconds }), tone: 'secondary' });
+  if (g.requestSizeLimitBytes !== undefined)
+    chips.push({
+      label: t('chips.sizeLimit', { bytes: g.requestSizeLimitBytes }),
+      tone: 'secondary',
+    });
   if (g.mock) chips.push({ label: t('chips.mock', { code: g.mock.code }), tone: 'secondary' });
   if (g.validateRequestSchema) chips.push({ label: t('chips.validate'), tone: 'secondary' });
   return chips;
@@ -84,7 +107,8 @@ function governanceChips(g: EndpointGovernance | null, t: Translate): { label: s
 function GovernanceChips({ governance }: { governance: EndpointGovernance | null }) {
   const t = useTranslations('openapi');
   const chips = governanceChips(governance, t);
-  if (chips.length === 0) return <span className="text-sm text-muted-foreground">{t('chips.inherits')}</span>;
+  if (chips.length === 0)
+    return <span className="text-muted-foreground text-sm">{t('chips.inherits')}</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {chips.map((c) => (
@@ -106,7 +130,7 @@ function EndpointPath({ row }: { row: GovernedEndpoint }) {
         </span>
         {row.deprecated && <Badge variant="outline">{t('table.deprecated')}</Badge>}
       </div>
-      {row.summary && <p className="text-xs text-muted-foreground">{row.summary}</p>}
+      {row.summary && <p className="text-muted-foreground text-xs">{row.summary}</p>}
     </div>
   );
 }
@@ -148,9 +172,18 @@ function EndpointsBody({ api }: { api: ApiDetail }) {
     // No stored spec: a user who may update the API can attach one (expectedVersion 0 creates version 1).
     return (
       <>
-        <StateCard icon={<FileX aria-hidden="true" />} title={t('noSpec.title')} message={t('noSpec.message')}>
+        <StateCard
+          icon={<FileX aria-hidden="true" />}
+          title={t('noSpec.title')}
+          message={t('noSpec.message')}
+        >
           {can('api:update') && (
-            <Button type="button" onClick={() => { setSpecOpen(true); }}>
+            <Button
+              type="button"
+              onClick={() => {
+                setSpecOpen(true);
+              }}
+            >
               <FileUp className="h-4 w-4" aria-hidden="true" />
               {t('noSpec.upload')}
             </Button>
@@ -177,8 +210,20 @@ function EndpointsBody({ api }: { api: ApiDetail }) {
 
   return (
     <>
-      <EndpointsView api={api} list={data} canUpdate={can('api:update')} onUpdateSpec={() => { setSpecOpen(true); }} />
-      <SpecUpdateSheet apiId={api.id} versionNo={data.versionNo} open={specOpen} onOpenChange={setSpecOpen} />
+      <EndpointsView
+        api={api}
+        list={data}
+        canUpdate={can('api:update')}
+        onUpdateSpec={() => {
+          setSpecOpen(true);
+        }}
+      />
+      <SpecUpdateSheet
+        apiId={api.id}
+        versionNo={data.versionNo}
+        open={specOpen}
+        onOpenChange={setSpecOpen}
+      />
     </>
   );
 }
@@ -209,6 +254,7 @@ function EndpointsView({
   const t = useTranslations('openapi');
   const tApis = useTranslations('apis');
   const tCommon = useTranslations('common');
+  const filterLabels = usePageFilterLabels();
   const mutation = useUpdateEndpoints(api.id);
   const [viewMode, setViewMode] = useViewMode(VIEW_STORAGE_KEY);
   const isNarrow = useMediaQuery('(max-width: 639px)');
@@ -218,21 +264,33 @@ function EndpointsView({
   const [page, setPage] = useState(1);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [editing, setEditing] = useState<GovernedEndpoint | null>(null);
-  const [bulkValue, setBulkValue] = useState<{ control: BulkValueControl; revision: string; target: BulkTarget; count: number } | null>(null);
+  const [bulkValue, setBulkValue] = useState<{
+    control: BulkValueControl;
+    revision: string;
+    target: BulkTarget;
+    count: number;
+  } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const apiWideCache = !!api.config?.cache;
 
-  const tags = useMemo(() => [...new Set(list.endpoints.flatMap((e) => e.tags))].sort(), [list.endpoints]);
+  const tags = useMemo(
+    () => [...new Set(list.endpoints.flatMap((e) => e.tags))].sort(),
+    [list.endpoints],
+  );
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return list.endpoints.filter(
       (e) =>
         (tag === 'ALL' || e.tags.includes(tag)) &&
-        (q === '' || [e.path, e.method, e.key, e.summary ?? ''].some((s) => s.toLowerCase().includes(q))),
+        (q === '' ||
+          [e.path, e.method, e.key, e.summary ?? ''].some((s) => s.toLowerCase().includes(q))),
     );
   }, [list.endpoints, search, tag]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
+  const pageRows = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  );
 
   const resetView = () => {
     setPage(1);
@@ -241,7 +299,11 @@ function EndpointsView({
 
   /** One PATCH compare-and-set on `revision`; a stale one reloads the list and says why. */
   const patch = useCallback(
-    async (body: Omit<UpdateEndpointsBody, 'expectedRevision'>, savedMessage: string, revision: string): Promise<boolean> => {
+    async (
+      body: Omit<UpdateEndpointsBody, 'expectedRevision'>,
+      savedMessage: string,
+      revision: string,
+    ): Promise<boolean> => {
       try {
         const saved = await mutation.mutateAsync({ expectedRevision: revision, ...body });
         toastSyncOutcome(tApis, saved, savedMessage);
@@ -262,7 +324,11 @@ function EndpointsView({
   const target: BulkTarget = useTag ? { tag } : { keys: selectedRows.map((r) => r.key) };
   const savedToast = t('bulk.savedToast', { count: targetRows.length });
 
-  const bulk = async (body: { set?: EndpointGovernanceInput; clear?: GovernanceControl[] }, revision = list.revision, to = target) => {
+  const bulk = async (
+    body: { set?: EndpointGovernanceInput; clear?: GovernanceControl[] },
+    revision = list.revision,
+    to = target,
+  ) => {
     if (await patch({ ...to, ...body }, savedToast, revision)) {
       setRowSelection({});
       return true;
@@ -321,7 +387,11 @@ function EndpointsView({
               setEditing(row.original);
             }}
           >
-            {canUpdate ? <Pencil className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+            {canUpdate ? (
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Eye className="h-4 w-4" aria-hidden="true" />
+            )}
           </Button>
         ),
       },
@@ -332,7 +402,9 @@ function EndpointsView({
         id: 'select',
         header: ({ table }) => (
           <Checkbox
-            checked={table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && 'indeterminate')}
+            checked={
+              table.getIsAllRowsSelected() || (table.getIsSomeRowsSelected() && 'indeterminate')
+            }
             onCheckedChange={(v) => {
               table.toggleAllRowsSelected(v === true);
             }}
@@ -345,7 +417,9 @@ function EndpointsView({
             onCheckedChange={(v) => {
               row.toggleSelected(v === true);
             }}
-            aria-label={t('table.selectRow', { endpoint: `${row.original.method} ${row.original.path}` })}
+            aria-label={t('table.selectRow', {
+              endpoint: `${row.original.method} ${row.original.path}`,
+            })}
           />
         ),
       },
@@ -378,12 +452,19 @@ function EndpointsView({
             <p className="text-sm font-medium">
               {t('summary.version', { version: list.versionNo, count: list.endpointCount })}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {t('summary.format', { format: list.format.toUpperCase(), version: list.openapiVersion })}
+            <p className="text-muted-foreground text-sm">
+              {t('summary.format', {
+                format: list.format.toUpperCase(),
+                version: list.openapiVersion,
+              })}
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
               <span className="text-muted-foreground">{t('summary.gateway')}</span>
-              <SyncStatusBadge apiId={api.id} syncStatus={list.syncStatus} syncError={list.syncError} />
+              <SyncStatusBadge
+                apiId={api.id}
+                syncStatus={list.syncStatus}
+                syncError={list.syncError}
+              />
             </div>
           </div>
           {canUpdate && (
@@ -401,14 +482,16 @@ function EndpointsView({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-0.5">
               <Label htmlFor="restrict-to-spec">{t('restrict.label')}</Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 {list.restrictToSpec ? t('restrict.onHelp') : t('restrict.offHelp')}
               </p>
             </div>
             <Switch
               id="restrict-to-spec"
               checked={list.restrictToSpec}
-              disabled={!canUpdate || mutation.isPending || (restrictBlocked && !list.restrictToSpec)}
+              disabled={
+                !canUpdate || mutation.isPending || (restrictBlocked && !list.restrictToSpec)
+              }
               onCheckedChange={(v) => {
                 ask(
                   v
@@ -432,7 +515,11 @@ function EndpointsView({
             <p>{t('restrict.boundary')}</p>
             <p>{t('restrict.methods')}</p>
           </WarningNotice>
-          {restrictBlocked && <p className="text-sm text-muted-foreground">{t('restrict.tooMany', { max: MAX_MANAGED_ENDPOINTS })}</p>}
+          {restrictBlocked && (
+            <p className="text-muted-foreground text-sm">
+              {t('restrict.tooMany', { max: MAX_MANAGED_ENDPOINTS })}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -442,8 +529,10 @@ function EndpointsView({
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 space-y-0.5">
-                <h3 className="text-sm font-medium">{t('orphans.title', { count: list.orphans.length })}</h3>
-                <p className="text-sm text-muted-foreground">{t('orphans.help')}</p>
+                <h3 className="text-sm font-medium">
+                  {t('orphans.title', { count: list.orphans.length })}
+                </h3>
+                <p className="text-muted-foreground text-sm">{t('orphans.help')}</p>
               </div>
               {canUpdate && (
                 <Button
@@ -464,7 +553,10 @@ function EndpointsView({
             </div>
             <ul className="space-y-2">
               {list.orphans.map((o) => (
-                <li key={o.key} className="flex flex-col gap-1 rounded-md border p-2 sm:flex-row sm:items-center sm:gap-3">
+                <li
+                  key={o.key}
+                  className="flex flex-col gap-1 rounded-md border p-2 sm:flex-row sm:items-center sm:gap-3"
+                >
                   <span dir="ltr" className="break-all font-mono text-xs">
                     {o.key}
                   </span>
@@ -478,44 +570,54 @@ function EndpointsView({
 
       {/* Filters */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Input
-          type="search"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+        {/* Client-side filtering, so the search fires per keystroke (debounceMs 0); the clear action lives in the empty state. */}
+        <PageFilter
+          layout="inline"
+          showReset={false}
+          fields={[
+            {
+              type: 'search',
+              key: 'q',
+              label: t('filters.search'),
+              placeholder: t('filters.search'),
+              debounceMs: 0,
+              className: 'w-full sm:w-64',
+            },
+            {
+              type: 'select',
+              key: 'tag',
+              label: t('filters.tag'),
+              allLabel: t('filters.allTags'),
+              options: tags.map((tg) => ({ value: tg, label: tg })),
+            },
+          ]}
+          values={{ q: search || undefined, tag: tag === 'ALL' ? undefined : tag }}
+          onChange={(patch) => {
+            if ('q' in patch) setSearch(typeof patch.q === 'string' ? patch.q : '');
+            if ('tag' in patch) {
+              setTag(typeof patch.tag === 'string' ? patch.tag : 'ALL');
+              // A different tag is a different bulk target: the "whole tag" scope does not carry over.
+              setTagScope(false);
+            }
             resetView();
           }}
-          placeholder={t('filters.search')}
-          aria-label={t('filters.search')}
-          className="sm:max-w-xs"
-        />
-        <Select
-          value={tag}
-          onValueChange={(v) => {
-            setTag(v);
+          onReset={() => {
+            setSearch('');
+            setTag('ALL');
             setTagScope(false);
             resetView();
           }}
-        >
-          <SelectTrigger className="w-full sm:w-[200px]" aria-label={t('filters.tag')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t('filters.allTags')}</SelectItem>
-            {tags.map((tg) => (
-              <SelectItem key={tg} value={tg}>
-                {tg}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          labels={filterLabels}
+        />
         {canUpdate && cardsShown && pageRows.length > 0 && (
           <div className="flex min-h-11 items-center gap-2">
             <Checkbox
               id="select-page"
               checked={allPageSelected}
               onCheckedChange={(v) => {
-                setRowSelection(v === true ? Object.fromEntries(pageRows.map((r) => [r.key, true])) : {});
+                setRowSelection(
+                  v === true ? Object.fromEntries(pageRows.map((r) => [r.key, true])) : {},
+                );
               }}
             />
             <Label htmlFor="select-page">{t('table.selectPage')}</Label>
@@ -531,7 +633,7 @@ function EndpointsView({
         <div
           role="region"
           aria-label={t('bulk.region')}
-          className="flex flex-col gap-2 rounded-md border bg-muted/50 p-3 sm:flex-row sm:items-center sm:justify-between"
+          className="bg-muted/50 flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="space-y-2">
             {tag !== 'ALL' && (
@@ -543,7 +645,9 @@ function EndpointsView({
                     setTagScope(v === true);
                   }}
                 />
-                <Label htmlFor="bulk-tag-scope">{t('bulk.tagScope', { count: taggedRows.length, tag })}</Label>
+                <Label htmlFor="bulk-tag-scope">
+                  {t('bulk.tagScope', { count: taggedRows.length, tag })}
+                </Label>
               </div>
             )}
             <p className="text-sm" aria-live="polite">
@@ -552,13 +656,23 @@ function EndpointsView({
           </div>
           <div className="flex flex-wrap gap-2">
             {selectedRows.length > 0 && !useTag && (
-              <Button type="button" variant="ghost" onClick={() => { setRowSelection({}); }}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setRowSelection({});
+                }}
+              >
                 {t('bulk.clearSelection')}
               </Button>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" disabled={targetRows.length === 0 || mutation.isPending} loading={mutation.isPending}>
+                <Button
+                  type="button"
+                  disabled={targetRows.length === 0 || mutation.isPending}
+                  loading={mutation.isPending}
+                >
                   {t('bulk.actions')}
                   <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 </Button>
@@ -579,7 +693,9 @@ function EndpointsView({
                     >
                       {t('bulk.block')}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => void bulk({ clear: ['enabled'] })}>{t('bulk.unblock')}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void bulk({ clear: ['enabled'] })}>
+                      {t('bulk.unblock')}
+                    </DropdownMenuItem>
                   </>
                 )}
                 {offered('auth') && (
@@ -597,7 +713,9 @@ function EndpointsView({
                     >
                       {t('bulk.makePublic')}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => void bulk({ clear: ['auth'] })}>{t('bulk.inheritAuth')}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void bulk({ clear: ['auth'] })}>
+                      {t('bulk.inheritAuth')}
+                    </DropdownMenuItem>
                   </>
                 )}
                 <DropdownMenuSeparator />
@@ -610,11 +728,20 @@ function EndpointsView({
                         key={`set-${c}`}
                         disabled={blocked}
                         onClick={() => {
-                          setBulkValue({ control: c, revision: list.revision, target, count: targetRows.length });
+                          setBulkValue({
+                            control: c,
+                            revision: list.revision,
+                            target,
+                            count: targetRows.length,
+                          });
                         }}
                       >
                         {t(`bulk.set.${c}`)}
-                        {blocked && <span className="ms-1 text-xs text-muted-foreground">{t(`bulk.notFor.${c}`)}</span>}
+                        {blocked && (
+                          <span className="text-muted-foreground ms-1 text-xs">
+                            {t(`bulk.notFor.${c}`)}
+                          </span>
+                        )}
                       </DropdownMenuItem>
                     );
                   })}
@@ -675,12 +802,18 @@ function EndpointsView({
                   variant="ghost"
                   size="icon"
                   className="-me-2 -mt-2"
-                  aria-label={t(canUpdate ? 'table.editEndpoint' : 'table.viewEndpoint', { endpoint: `${row.method} ${row.path}` })}
+                  aria-label={t(canUpdate ? 'table.editEndpoint' : 'table.viewEndpoint', {
+                    endpoint: `${row.method} ${row.path}`,
+                  })}
                   onClick={() => {
                     setEditing(row);
                   }}
                 >
-                  {canUpdate ? <Pencil className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                  {canUpdate ? (
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  )}
                 </Button>
               </div>
               <EndpointPath row={row} />
@@ -722,7 +855,9 @@ function EndpointsView({
         onOpenChange={(open) => {
           if (!open) setBulkValue(null);
         }}
-        onApply={(set) => (bulkValue ? bulk({ set }, bulkValue.revision, bulkValue.target) : Promise.resolve(false))}
+        onApply={(set) =>
+          bulkValue ? bulk({ set }, bulkValue.revision, bulkValue.target) : Promise.resolve(false)
+        }
       />
 
       <AlertDialog
@@ -738,7 +873,9 @@ function EndpointsView({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tCommon('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirm?.run(confirm.revision)}>{confirm?.confirmLabel}</AlertDialogAction>
+            <AlertDialogAction onClick={() => void confirm?.run(confirm.revision)}>
+              {confirm?.confirmLabel}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

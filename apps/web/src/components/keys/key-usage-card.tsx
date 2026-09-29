@@ -4,20 +4,12 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { RangeControl } from '@/components/dashboard/range-control';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useKeyUsage } from '@/hooks/use-keys';
 import type { AnalyticsRange } from '@/types';
 import { quotaUsedPercent, toDate } from './key-utils';
 import { useFormat } from '@/hooks/use-format';
-
-const RANGES: AnalyticsRange[] = ['1h', '24h', '7d', '30d'];
 
 interface KeyUsageCardProps {
   keyId: string;
@@ -28,7 +20,7 @@ interface KeyUsageCardProps {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-muted-foreground text-xs">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
     </div>
   );
@@ -52,20 +44,7 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
           <CardTitle>{t('usage.title')}</CardTitle>
           <CardDescription>{t('usage.description')}</CardDescription>
         </div>
-        <Select value={range} onValueChange={(v) => {
-            setRange(v as AnalyticsRange);
-          }}>
-          <SelectTrigger className="w-full sm:w-[180px]" aria-label={t('usage.rangeLabel')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {RANGES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {t(`usage.ranges.${r}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <RangeControl value={range} onChange={setRange} />
       </CardHeader>
       <CardContent className="space-y-6">
         {isLoading ? (
@@ -78,11 +57,16 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
             </div>
           </div>
         ) : isError || !usage ? (
-          <div className="flex flex-col items-start gap-3 rounded-md border border-destructive/50 p-4">
-            <p className="text-sm text-destructive">
+          <div className="border-destructive/50 flex flex-col items-start gap-3 rounded-md border p-4">
+            <p className="text-destructive text-sm">
               {error instanceof Error ? error.message : t('usage.loadFailed')}
             </p>
-            <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
               {tCommon('retry')}
             </Button>
           </div>
@@ -92,7 +76,7 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="font-medium">{t('usage.quota')}</span>
                 {percent !== null && usage.quotaMax !== null && usage.quotaRemaining !== null && (
-                  <span className="tabular-nums text-muted-foreground">
+                  <span className="text-muted-foreground tabular-nums">
                     {t('usage.quotaUsed', {
                       used: fmt.number(usage.quotaMax - usage.quotaRemaining),
                       max: fmt.number(usage.quotaMax),
@@ -108,7 +92,7 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={Math.round(percent)}
-                    className="h-2 w-full overflow-hidden rounded-full bg-secondary"
+                    className="bg-secondary h-2 w-full overflow-hidden rounded-full"
                   >
                     <div
                       className={`h-full rounded-full transition-all ${
@@ -117,13 +101,16 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
                       style={{ width: `${String(percent)}%` }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('usage.quotaRemaining', { remaining: usage.quotaRemaining === null ? '' : fmt.number(usage.quotaRemaining) })}
+                  <p className="text-muted-foreground text-xs">
+                    {t('usage.quotaRemaining', {
+                      remaining:
+                        usage.quotaRemaining === null ? '' : fmt.number(usage.quotaRemaining),
+                    })}
                     {resetAt ? t('usage.quotaResets', { date: fmt.dateTime(resetAt) }) : ''}
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {gatewayReachable ? t('usage.noQuota') : t('detail.gatewayUnreachable')}
                 </p>
               )}
@@ -135,10 +122,14 @@ export function KeyUsageCard({ keyId, gatewayReachable }: KeyUsageCardProps) {
               <Stat label={t('usage.stats.errorRate')} value={`${usage.errorRate.toFixed(1)}%`} />
               <Stat
                 label={t('usage.stats.avgLatencyLabel')}
-                value={t('usage.stats.avgLatency', { value: String(Math.round(usage.avgLatencyMs)) })}
+                value={t('usage.stats.avgLatency', {
+                  value: String(Math.round(usage.avgLatencyMs)),
+                })}
               />
             </div>
-            {usage.requests === 0 && <p className="text-sm text-muted-foreground">{t('usage.noTraffic')}</p>}
+            {usage.requests === 0 && (
+              <p className="text-muted-foreground text-sm">{t('usage.noTraffic')}</p>
+            )}
           </>
         )}
       </CardContent>
