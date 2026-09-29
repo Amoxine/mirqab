@@ -17,7 +17,7 @@ import { RequestsChart } from '@/components/analytics/requests-chart';
 import { StatusCodeChart } from '@/components/analytics/status-code-chart';
 import { Badge } from '@/components/ui/badge';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
-import { StatCard, StatCardSkeleton } from '@/components/dashboard/stat-card';
+import { KpiTile, KpiTileSkeleton } from '@/components/dashboard/kpi-tile';
 import { keyStatusVariant } from '@/components/keys/key-utils';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,7 +49,7 @@ function OverviewTiles({ range }: { range: AnalyticsRange }) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <StatCardSkeleton key={i} />
+          <KpiTileSkeleton key={i} />
         ))}
       </div>
     );
@@ -69,39 +69,39 @@ function OverviewTiles({ range }: { range: AnalyticsRange }) {
   const hasTraffic = data.totalRequests > 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <StatCard
-        title={t('overview.totalRequests')}
+      <KpiTile
+        label={t('overview.totalRequests')}
         value={fmt.number(data.totalRequests)}
         icon={Activity}
       />
-      <StatCard
-        title={t('table.columns.errorRate')}
+      <KpiTile
+        label={t('table.columns.errorRate')}
         value={hasTraffic ? fmt.percent(data.errorRate) : '—'}
         icon={CheckCircle}
-        description={t('overview.successCount', { count: fmt.number(data.successCount) })}
+        hint={t('overview.successCount', { count: fmt.number(data.successCount) })}
       />
-      <StatCard
-        title={t('table.columns.avgLatency')}
+      <KpiTile
+        label={t('table.columns.avgLatency')}
         value={hasTraffic ? fmt.ms(data.avgLatencyMs) : '—'}
         icon={Clock}
-        description={
+        hint={
           hasTraffic
             ? t('overview.upstreamLatency', { value: fmt.ms(data.avgUpstreamLatencyMs) })
             : undefined
         }
       />
-      <StatCard
-        title={t('table.columns.errors')}
+      <KpiTile
+        label={t('table.columns.errors')}
         value={fmt.number(data.errorCount)}
         icon={AlertTriangle}
       />
-      <StatCard
-        title={t('overview.activeApis')}
+      <KpiTile
+        label={t('overview.activeApis')}
         value={fmt.number(data.activeApis)}
         icon={ShieldCheck}
       />
-      <StatCard
-        title={t('overview.activeKeys')}
+      <KpiTile
+        label={t('overview.activeKeys')}
         value={fmt.number(data.activeKeys)}
         icon={KeyRound}
       />

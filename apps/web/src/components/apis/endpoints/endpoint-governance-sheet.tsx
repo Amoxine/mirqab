@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
@@ -21,7 +22,7 @@ import {
   type GovernedEndpoint,
 } from '@/lib/api/openapi';
 import { toastApiError } from './api-error';
-import { MethodBadge, WarningNotice } from './method-badge';
+import { MethodBadge } from './method-badge';
 import { UnavailableControls } from './unavailable-controls';
 import { makeGovernanceSchema, toFormValues, toPatch, type GovernanceFormValues } from './governance-form';
 
@@ -254,7 +255,7 @@ function GovernanceBody({
             unavailableReason={reason('rateLimit')}
             on={values.rateLimitOn}
           >
-            <WarningNotice>{t('governance.rateLimitShared')}</WarningNotice>
+            <Notice>{t('governance.rateLimitShared')}</Notice>
             <div className="grid gap-3 sm:grid-cols-2">
               <TextField control={control} name="rate" label={t('governance.rate')} numeric disabled={disabled} />
               <TextField control={control} name="per" label={t('governance.perSeconds')} numeric disabled={disabled} />

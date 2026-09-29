@@ -1,11 +1,11 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useEffect, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
-import { AlertTriangle } from 'lucide-react';
 import { toastSyncOutcome } from '@/components/apis/sync-outcome-toast';
 import { SpecDiffView } from '@/components/apis/spec-update/spec-diff-view';
 import { Button } from '@/components/ui/button';
@@ -133,10 +133,9 @@ function ReviewBody({ apiId, candidateId, canUpdate, onOpenChange }: SpecReviewS
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
           {staleReason && (
-            <div role="alert" className="flex gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-              <p className="min-w-0 break-words">{staleReason}</p>
-            </div>
+            <Notice role="alert">
+              <span className="break-words">{staleReason}</span>
+            </Notice>
           )}
 
           {diff.isPending ? (

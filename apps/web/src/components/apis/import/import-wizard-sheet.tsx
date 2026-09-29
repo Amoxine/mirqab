@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,7 +29,6 @@ import {
   type SpecInterval,
 } from '@/lib/api/spec-source';
 import { ApiErrorText, describeApiError, toastApiError } from '@/components/apis/endpoints/api-error';
-import { WarningNotice } from '@/components/apis/endpoints/method-badge';
 import { FindingsList } from './findings-list';
 import { SpecSourceField, specSourceSchema } from './spec-source-field';
 
@@ -340,9 +340,9 @@ function WizardBody({ onOpenChange }: { onOpenChange: (open: boolean) => void })
               </dl>
 
               {(preview.conflicts.slug || preview.conflicts.listenPath) && (
-                <WarningNotice>
+                <Notice>
                   <p>{t('import.conflict')}</p>
-                </WarningNotice>
+                </Notice>
               )}
 
               <FormField

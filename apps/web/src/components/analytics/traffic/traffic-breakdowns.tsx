@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { Card } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
+import { Eyebrow, ShareList } from '@open-gateway/ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -24,34 +24,6 @@ const CLASS_TONE = {
   '4xx': 'bg-warning',
   '5xx': 'bg-destructive',
 } as const;
-
-function ShareRow({
-  label,
-  count,
-  total,
-  indicatorClassName,
-}: {
-  label: string;
-  count: number;
-  total: number;
-  indicatorClassName?: string;
-}) {
-  const fmt = useFormat();
-  const share = total > 0 ? (count / total) * 100 : 0;
-  return (
-    <li className="space-y-1">
-      <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span dir="auto" className="truncate">
-          {label}
-        </span>
-        <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
-          {`${fmt.number(count)} · ${fmt.percent(share)}`}
-        </span>
-      </div>
-      <Progress value={share} aria-hidden="true" indicatorClassName={indicatorClassName} />
-    </li>
-  );
-}
 
 /** How the filtered requests split by status class, method and the most frequent exact codes. */
 export function TrafficMix({ data }: { data: AnalyticsTraffic | undefined }) {
@@ -74,34 +46,33 @@ export function TrafficMix({ data }: { data: AnalyticsTraffic | undefined }) {
       ) : (
         <div className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-1">
           <section aria-label={t('byClass')}>
-            <h3 className="text-muted-foreground mb-2 font-mono text-[0.66rem] uppercase tracking-[0.08em]">
-              {t('byClass')}
+            <h3 className="mb-2">
+              <Eyebrow>{t('byClass')}</Eyebrow>
             </h3>
-            <ul className="space-y-2.5">
-              {data.statusClasses.map((c) => (
-                <ShareRow
-                  key={c.class}
-                  label={tClasses(c.class)}
-                  count={c.count}
-                  total={total}
-                  indicatorClassName={CLASS_TONE[c.class]}
-                />
-              ))}
-            </ul>
+            <ShareList
+              total={total}
+              format={(value, share) => `${fmt.number(value)} · ${fmt.percent(share)}`}
+              items={data.statusClasses.map((c) => ({
+                key: c.class,
+                label: tClasses(c.class),
+                value: c.count,
+                indicatorClassName: CLASS_TONE[c.class],
+              }))}
+            />
           </section>
           <section aria-label={t('byMethod')}>
-            <h3 className="text-muted-foreground mb-2 font-mono text-[0.66rem] uppercase tracking-[0.08em]">
-              {t('byMethod')}
+            <h3 className="mb-2">
+              <Eyebrow>{t('byMethod')}</Eyebrow>
             </h3>
-            <ul className="space-y-2.5">
-              {data.methods.map((m) => (
-                <ShareRow key={m.method} label={m.method} count={m.count} total={total} />
-              ))}
-            </ul>
+            <ShareList
+              total={total}
+              format={(value, share) => `${fmt.number(value)} · ${fmt.percent(share)}`}
+              items={data.methods.map((m) => ({ key: m.method, label: m.method, value: m.count }))}
+            />
           </section>
           <section aria-label={t('byCode')} className="sm:col-span-2 xl:col-span-1">
-            <h3 className="text-muted-foreground mb-2 font-mono text-[0.66rem] uppercase tracking-[0.08em]">
-              {t('byCode')}
+            <h3 className="mb-2">
+              <Eyebrow>{t('byCode')}</Eyebrow>
             </h3>
             <ul className="flex flex-wrap gap-1.5">
               {data.statusCodes.map((c) => (

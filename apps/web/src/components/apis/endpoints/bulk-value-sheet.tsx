@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
@@ -9,7 +10,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { EndpointGovernanceInput } from '@/lib/api/openapi';
-import { WarningNotice } from './method-badge';
 import { makeGovernanceSchema, toFormValues, toPatch, type GovernanceFormValues } from './governance-form';
 
 export type BulkValueControl = 'rateLimit' | 'timeoutSeconds' | 'requestSizeLimitBytes' | 'cache';
@@ -79,7 +79,7 @@ function BulkBody({ control, count, onOpenChange, onApply }: BulkValueSheetProps
       </SheetHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {control === 'rateLimit' && <WarningNotice>{t('governance.rateLimitShared')}</WarningNotice>}
+          {control === 'rateLimit' && <Notice>{t('governance.rateLimitShared')}</Notice>}
           {spec.fields.map((name) => (
             <FormField
               key={name}

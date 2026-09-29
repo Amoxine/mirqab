@@ -8,7 +8,14 @@ import { StateMessage } from '@/components/shared/state-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useMediaQuery } from '@/hooks/use-media-query';
 
 /**
@@ -70,18 +77,30 @@ export function useViewMode(storageKey: string): [ViewMode, (mode: ViewMode) => 
 }
 
 /** Table/card switch. Pure presentation — the caller owns the state, via `useViewMode` or its own. */
-export function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
+export function ViewModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ViewMode;
+  onChange: (mode: ViewMode) => void;
+}) {
   const t = useTranslations('dashboard.dataTable');
   return (
     // Hidden on phones: every table already renders as cards there, so the switch would do nothing.
-    <div className="hidden rounded-md border sm:inline-flex" role="group" aria-label={t('viewMode')}>
+    <div
+      className="hidden rounded-md border sm:inline-flex"
+      role="group"
+      aria-label={t('viewMode')}
+    >
       <Button
         type="button"
         variant={mode === 'table' ? 'secondary' : 'ghost'}
         size="sm"
         aria-pressed={mode === 'table'}
         title={t('tableView')}
-        onClick={() => { onChange('table'); }}
+        onClick={() => {
+          onChange('table');
+        }}
       >
         <Table2 className="h-4 w-4" />
         <span className="sr-only">{t('tableView')}</span>
@@ -92,7 +111,9 @@ export function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (
         size="sm"
         aria-pressed={mode === 'card'}
         title={t('cardView')}
-        onClick={() => { onChange('card'); }}
+        onClick={() => {
+          onChange('card');
+        }}
       >
         <LayoutGrid className="h-4 w-4" />
         <span className="sr-only">{t('cardView')}</span>
@@ -151,7 +172,9 @@ function AutoCard<TData>({ table, row }: { table: ReactTable<TData>; row: Row<TD
                   <dt className="text-muted-foreground">
                     {header ? flexRender(cell.column.columnDef.header, header.getContext()) : null}
                   </dt>
-                  <dd className="min-w-0 break-words text-end">{flexRender(cell.column.columnDef.cell, cell.getContext())}</dd>
+                  <dd className="min-w-0 break-words text-end">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </dd>
                 </div>
               );
             })}
@@ -222,7 +245,9 @@ export function DataTable<TData>({
     body = rows.map((row) => (
       <TableRow key={row.id}>
         {row.getVisibleCells().map((cell) => (
-          <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+          <TableCell key={cell.id}>
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </TableCell>
         ))}
       </TableRow>
     ));
@@ -255,21 +280,25 @@ export function DataTable<TData>({
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((row) => (
-          <div key={row.id}>{renderCard ? renderCard(row.original) : <AutoCard table={table} row={row} />}</div>
+          <div key={row.id}>
+            {renderCard ? renderCard(row.original) : <AutoCard table={table} row={row} />}
+          </div>
         ))}
       </div>
     );
   }
 
   return (
-    <div className="w-0 min-w-full rounded-md border bg-card" aria-busy={isLoading || undefined}>
+    <div className="bg-card w-0 min-w-full rounded-md border" aria-busy={isLoading || undefined}>
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
                 </TableHead>
               ))}
             </TableRow>
@@ -301,7 +330,7 @@ export function DataTablePagination({
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-muted-foreground" aria-live="polite">
+      <p className="text-muted-foreground text-sm" aria-live="polite">
         {t('pageOf', { page, totalPages })}
         {totalCount !== undefined && <> {t('totalCount', { count: totalCount })}</>}
       </p>

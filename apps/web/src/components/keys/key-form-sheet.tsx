@@ -1,8 +1,8 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
@@ -112,7 +112,9 @@ function KeyForm({
     } catch (error) {
       // Surfaces the API's message, e.g. the 400 for an API that is not synced to the gateway yet.
       toast.error(
-        error instanceof Error ? error.message : t(mode === 'create' ? 'form.createFailed' : 'form.updateFailed'),
+        error instanceof Error
+          ? error.message
+          : t(mode === 'create' ? 'form.createFailed' : 'form.updateFailed'),
       );
     }
   };
@@ -149,7 +151,9 @@ function KeyForm({
                 <Select onValueChange={field.onChange} value={field.value} disabled={apisLoading}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder={apisLoading ? t('form.apiLoading') : t('form.apiPlaceholder')} />
+                      <SelectValue
+                        placeholder={apisLoading ? t('form.apiLoading') : t('form.apiPlaceholder')}
+                      />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -161,7 +165,9 @@ function KeyForm({
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  {!apisLoading && apis.length === 0 ? t('form.noActiveApis') : t('form.apiSyncHint')}
+                  {!apisLoading && apis.length === 0
+                    ? t('form.noActiveApis')
+                    : t('form.apiSyncHint')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -171,7 +177,7 @@ function KeyForm({
           <div className="space-y-1 text-sm">
             <p className="font-medium">{t('form.apiLabel')}</p>
             <p className="text-muted-foreground">{keyData?.apiDefName ?? '—'}</p>
-            <p className="text-xs text-muted-foreground">{t('form.apiNotEditable')}</p>
+            <p className="text-muted-foreground text-xs">{t('form.apiNotEditable')}</p>
           </div>
         )}
 
@@ -197,7 +203,11 @@ function KeyForm({
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder={plansLoading ? t('form.planLoading') : t('form.planPlaceholder')} />
+                      <SelectValue
+                        placeholder={
+                          plansLoading ? t('form.planLoading') : t('form.planPlaceholder')
+                        }
+                      />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -218,7 +228,7 @@ function KeyForm({
           <div className="space-y-1 text-sm">
             <p className="font-medium">{t('form.planLabel')}</p>
             <p className="text-muted-foreground">{keyData?.planName ?? t('form.noPlan')}</p>
-            <p className="text-xs text-muted-foreground">{t('form.planNotEditable')}</p>
+            <p className="text-muted-foreground text-xs">{t('form.planNotEditable')}</p>
           </div>
         )}
 
@@ -254,7 +264,9 @@ function KeyForm({
                   placeholder={t('form.rateLimitPlaceholder')}
                 />
               </FormControl>
-              <FormDescription>{hasPlan ? t('form.limitsFromPlan') : t('form.rateLimitHint')}</FormDescription>
+              <FormDescription>
+                {hasPlan ? t('form.limitsFromPlan') : t('form.rateLimitHint')}
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -277,7 +289,9 @@ function KeyForm({
                   placeholder={t('form.quotaPlaceholder')}
                 />
               </FormControl>
-              <FormDescription>{hasPlan ? t('form.limitsFromPlan') : t('form.quotaHint')}</FormDescription>
+              <FormDescription>
+                {hasPlan ? t('form.limitsFromPlan') : t('form.quotaHint')}
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -289,7 +303,11 @@ function KeyForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>{t('form.quotaPeriodLabel')}</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} disabled={hasPlan || quotaLimit === ''}>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={hasPlan || quotaLimit === ''}
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue />
@@ -308,15 +326,7 @@ function KeyForm({
           )}
         />
 
-        {mode === 'edit' && (
-          <div
-            role="note"
-            className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"
-          >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-            <p>{t('form.editQuotaWarning')}</p>
-          </div>
-        )}
+        {mode === 'edit' && <Notice role="note">{t('form.editQuotaWarning')}</Notice>}
 
         <SheetFooter className="mt-auto gap-2 pt-2">
           <Button type="button" variant="outline" onClick={handleCancel}>

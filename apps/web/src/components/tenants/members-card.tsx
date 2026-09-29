@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
-import { Check, Copy, Trash2, UserPlus } from 'lucide-react';
+import { Trash2, UserPlus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PermissionGate } from '@/components/auth/permission-gate';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,7 @@ import { FormattedDate } from '@/components/shared/formatted';
 import { InviteMemberSheet } from '@/components/tenants/invite-member-sheet';
 import { RemoveMemberDialog } from '@/components/tenants/remove-member-dialog';
 import { useTenantMembers, useUpdateMemberRole, type TenantMember } from '@/hooks/use-tenants';
-import { PageFilter } from '@open-gateway/ui';
+import { CopyButton, PageFilter } from '@open-gateway/ui';
 import { usePageFilterLabels } from '@/hooks/use-page-filter-labels';
 import { usePermissions } from '@/hooks/use-permissions';
 
@@ -93,37 +93,21 @@ function MemberRoleCell({ tenantId, member }: { tenantId: string; member: Tenant
  * it, and the exact wording matters (never implies an email went out). */
 function PendingInstructions({ email }: { email: string }) {
   const t = useTranslations('tenants');
-  const [copied, setCopied] = useState(false);
   const text = t('members.pendingInstructionsText', { email });
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      toast.error(t('members.pendingCopyFailed'));
-    }
-  };
 
   return (
     <div className="mt-1 flex items-start gap-1.5">
       <p className="text-muted-foreground text-xs">{text}</p>
-      <Button
-        type="button"
+      <CopyButton
+        value={text}
+        label={t('members.pendingCopyAriaLabel')}
+        iconOnly
         variant="ghost"
-        size="icon"
-        className="h-5 w-5 shrink-0"
-        aria-label={t('members.pendingCopyAriaLabel')}
-        onClick={() => {
-          void handleCopy();
+        className="h-5 w-5 shrink-0 [&_svg]:size-3.5"
+        onCopyError={() => {
+          toast.error(t('members.pendingCopyFailed'));
         }}
-      >
-        {copied ? (
-          <Check className="h-3.5 w-3.5" aria-hidden="true" />
-        ) : (
-          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-        )}
-      </Button>
+      />
     </div>
   );
 }

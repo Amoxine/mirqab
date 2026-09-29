@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { FileDiff } from 'lucide-react';
@@ -30,27 +31,24 @@ export function SpecUpdateBanner({ apiId }: { apiId: string }) {
   return (
     <>
       {pending && (
-        <div
+        <Notice
           role="status"
-          className="flex flex-col gap-3 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          icon={FileDiff}
+          title={t('banner.title')}
+          action={
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setReviewing(pending.id); }}>
+              {canUpdate ? t('banner.review') : t('banner.view')}
+            </Button>
+          }
         >
-          <div className="flex min-w-0 items-start gap-2">
-            <FileDiff className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-            <div className="min-w-0 space-y-1">
-              <p className="font-medium">{t('banner.title')}</p>
-              <p>
-                {t('banner.counts', { added: pending.diff.added, removed: pending.diff.removed, changed: pending.diff.changed })}
-              </p>
-              {(pending.diff.governedRemoved > 0 || pending.diff.governedChanged > 0) && (
-                <p>{t('banner.governed', { removed: pending.diff.governedRemoved, changed: pending.diff.governedChanged })}</p>
-              )}
-              <p className="text-xs text-muted-foreground">{t('banner.detected', { date: fmt.dateTime(pending.detectedAt) })}</p>
-            </div>
-          </div>
-          <Button type="button" variant="outline" className="min-h-11 shrink-0" onClick={() => { setReviewing(pending.id); }}>
-            {canUpdate ? t('banner.review') : t('banner.view')}
-          </Button>
-        </div>
+          <p className="text-foreground">
+            {t('banner.counts', { added: pending.diff.added, removed: pending.diff.removed, changed: pending.diff.changed })}
+          </p>
+          {(pending.diff.governedRemoved > 0 || pending.diff.governedChanged > 0) && (
+            <p className="text-foreground">{t('banner.governed', { removed: pending.diff.governedRemoved, changed: pending.diff.governedChanged })}</p>
+          )}
+          <p className="text-xs">{t('banner.detected', { date: fmt.dateTime(pending.detectedAt) })}</p>
+        </Notice>
       )}
       <SpecReviewSheet
         apiId={apiId}

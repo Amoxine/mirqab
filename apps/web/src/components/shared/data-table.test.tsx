@@ -16,12 +16,18 @@ import { DataTable, ViewModeToggle, useViewMode, type ViewMode } from './data-ta
 afterEach(cleanup);
 
 const wrap = (ui: React.ReactNode) => (
-  <NextIntlClientProvider locale="en" messages={{ dashboard: dashboardMessages, common: commonMessages }}>
+  <NextIntlClientProvider
+    locale="en"
+    messages={{ dashboard: dashboardMessages, common: commonMessages }}
+  >
     {ui}
   </NextIntlClientProvider>
 );
 
-interface Row { name: string; status: string }
+interface Row {
+  name: string;
+  status: string;
+}
 const COLUMNS: ColumnDef<Row>[] = [
   { accessorKey: 'name', header: 'Name' },
   { accessorKey: 'status', header: 'Status' },
@@ -31,7 +37,13 @@ const COLUMNS: ColumnDef<Row>[] = [
 function Harness({ rows, emptyAction }: { rows: Row[]; emptyAction?: React.ReactNode }) {
   const table = useReactTable({ data: rows, columns: COLUMNS, getCoreRowModel: getCoreRowModel() });
   return (
-    <DataTable table={table} isLoading={false} isError={false} emptyMessage="Nothing here" emptyAction={emptyAction} />
+    <DataTable
+      table={table}
+      isLoading={false}
+      isError={false}
+      emptyMessage="Nothing here"
+      emptyAction={emptyAction}
+    />
   );
 }
 
@@ -46,7 +58,9 @@ function stubViewport(narrow: boolean) {
 }
 
 describe('DataTable responsive layout', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('renders a real table on wide screens', () => {
     stubViewport(false);
@@ -71,8 +85,12 @@ describe('DataTable responsive layout', () => {
     expect(screen.queryByRole('table')).not.toBeNull();
   });
 
-  it('offers the caller\'s next action in the empty state', () => {
-    render(wrap(<Harness rows={[]} emptyAction={<button type="button">{'Create the first one'}</button>} />));
+  it("offers the caller's next action in the empty state", () => {
+    render(
+      wrap(
+        <Harness rows={[]} emptyAction={<button type="button">{'Create the first one'}</button>} />,
+      ),
+    );
     expect(screen.getByText('Nothing here')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Create the first one' })).toBeDefined();
   });
@@ -83,8 +101,12 @@ describe('ViewModeToggle (frozen at WP17)', () => {
     render(wrap(<ViewModeToggle mode="table" onChange={() => undefined} />));
     // Query by accessible name, not index: the name is what a screen-reader user actually gets,
     // and an index silently follows any markup change.
-    expect(screen.getByRole('button', { name: M.tableView }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: M.cardView }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: M.tableView }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('button', { name: M.cardView }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
   });
 
   it('reports the mode the user picked', () => {
@@ -101,7 +123,9 @@ describe('ViewModeToggle (frozen at WP17)', () => {
 });
 
 describe('useViewMode persistence', () => {
-  beforeEach(() => { window.localStorage.clear(); });
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
 
   it('defaults to table when nothing is stored', () => {
     const { result } = renderHook(() => useViewMode('k1'));
@@ -110,7 +134,9 @@ describe('useViewMode persistence', () => {
 
   it('persists a choice and reads it back under the same key', () => {
     const { result } = renderHook(() => useViewMode('k2'));
-    act(() => { result.current[1]('card'); });
+    act(() => {
+      result.current[1]('card');
+    });
     expect(result.current[0]).toBe('card');
     expect(window.localStorage.getItem('k2')).toBe('card');
     expect(renderHook(() => useViewMode('k2')).result.current[0]).toBe('card');
@@ -118,7 +144,9 @@ describe('useViewMode persistence', () => {
 
   it('keeps preferences separate per key, so two pages never share one', () => {
     const a = renderHook(() => useViewMode('page-a'));
-    act(() => { a.result.current[1]('card'); });
+    act(() => {
+      a.result.current[1]('card');
+    });
     expect(renderHook(() => useViewMode('page-b')).result.current[0]).toBe('table');
   });
 
@@ -128,15 +156,21 @@ describe('useViewMode persistence', () => {
   });
 
   it('survives localStorage throwing — Safari private mode throws rather than returning null', () => {
-    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
     expect(() => renderHook(() => useViewMode('k4'))).not.toThrow();
     spy.mockRestore();
   });
 
   it('still switches view when persistence fails', () => {
-    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
     const { result } = renderHook(() => useViewMode('k5'));
-    act(() => { result.current[1]('card'); });
+    act(() => {
+      result.current[1]('card');
+    });
     expect(result.current[0]).toBe('card');
     spy.mockRestore();
   });

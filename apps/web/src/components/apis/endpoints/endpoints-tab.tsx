@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
@@ -66,7 +67,7 @@ import {
 import { toastApiError } from './api-error';
 import { BulkValueSheet, type BulkValueControl } from './bulk-value-sheet';
 import { EndpointGovernanceSheet } from './endpoint-governance-sheet';
-import { MethodBadge, WarningNotice } from './method-badge';
+import { MethodBadge } from './method-badge';
 
 const PAGE_SIZE = 50;
 /** The API refuses allow-list mode past this many indexed endpoints (contract §2 rule 8). */
@@ -511,10 +512,10 @@ function EndpointsView({
               }}
             />
           </div>
-          <WarningNotice>
+          <Notice>
             <p>{t('restrict.boundary')}</p>
             <p>{t('restrict.methods')}</p>
-          </WarningNotice>
+          </Notice>
           {restrictBlocked && (
             <p className="text-muted-foreground text-sm">
               {t('restrict.tooMany', { max: MAX_MANAGED_ENDPOINTS })}

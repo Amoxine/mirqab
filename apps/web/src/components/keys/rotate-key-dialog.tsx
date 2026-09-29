@@ -1,18 +1,9 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { toast } from '@/components/ui/sonner';
+import { ConfirmDialog } from '@open-gateway/ui';
 import { useRotateKey } from '@/hooks/use-keys';
+import { confirmAction } from '@/lib/confirm-action';
 
 interface RotateKeyDialogProps {
   /** The key to rotate; `null` keeps the dialog closed. */
@@ -27,45 +18,33 @@ export function RotateKeyDialog({ target, onOpenChange, onRotated }: RotateKeyDi
   const t = useTranslations('keys');
   const tCommon = useTranslations('common');
   const rotateMutation = useRotateKey();
-
-  const handleRotate = async () => {
-    if (!target) return;
-    try {
-      const result = await rotateMutation.mutateAsync(target.id);
-      onOpenChange(false);
-      onRotated(result.keyValue);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('rotateDialog.failed'));
-    }
-  };
-
   const keyName = target ? `"${target.name}"` : t('revokeDialog.thisKey');
 
   return (
-    <AlertDialog
+    <ConfirmDialog
+      // Rotating is not a delete: the key lives on, so the confirm button is not red.
+      tone="default"
       open={target !== null}
-      onOpenChange={(open) => {
-        if (!rotateMutation.isPending) onOpenChange(open);
+      onOpenChange={onOpenChange}
+      title={t('rotateDialog.title')}
+      description={t('rotateDialog.description', { keyName })}
+      confirmLabel={t('rotateDialog.confirm')}
+      pendingLabel={t('actions.rotating')}
+      cancelLabel={tCommon('cancel')}
+      isPending={rotateMutation.isPending}
+      onConfirm={() => {
+        if (!target) return;
+        return confirmAction({
+          run: () => rotateMutation.mutateAsync(target.id),
+          failed: t('rotateDialog.failed'),
+          close: () => {
+            onOpenChange(false);
+          },
+          onDone: (result) => {
+            onRotated(result.keyValue);
+          },
+        });
       }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t('rotateDialog.title')}</AlertDialogTitle>
-          <AlertDialogDescription>{t('rotateDialog.description', { keyName })}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={rotateMutation.isPending}>{tCommon('cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={rotateMutation.isPending}
-            onClick={(event) => {
-              event.preventDefault();
-              void handleRotate();
-            }}
-          >
-            {rotateMutation.isPending ? t('actions.rotating') : t('rotateDialog.confirm')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    />
   );
 }

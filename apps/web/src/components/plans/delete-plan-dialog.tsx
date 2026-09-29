@@ -1,18 +1,9 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { toast } from '@/components/ui/sonner';
+import { ConfirmDialog } from '@open-gateway/ui';
 import { useDeletePlan } from '@/hooks/use-plans';
+import { confirmAction } from '@/lib/confirm-action';
 
 interface DeletePlanDialogProps {
   target: { id: string; name: string } | null;
@@ -25,49 +16,33 @@ export function DeletePlanDialog({ target, onOpenChange }: DeletePlanDialogProps
   const tCommon = useTranslations('common');
   const deleteMutation = useDeletePlan();
 
-  const handleDelete = async () => {
-    if (!target) return;
-    try {
-      const result = await deleteMutation.mutateAsync(target.id);
-      toast.success(
-        result.unassignedKeys > 0
-          ? t('deleteDialog.successWithKeys', { name: target.name, count: result.unassignedKeys })
-          : t('deleteDialog.success', { name: target.name }),
-      );
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('deleteDialog.failed'));
-    }
-  };
-
   return (
-    <AlertDialog
+    <ConfirmDialog
       open={target !== null}
-      onOpenChange={(open) => {
-        if (!deleteMutation.isPending) onOpenChange(open);
+      onOpenChange={onOpenChange}
+      title={t('deleteDialog.title')}
+      description={t('deleteDialog.description', { name: target ? `"${target.name}"` : '' })}
+      confirmLabel={t('deleteDialog.confirm')}
+      pendingLabel={t('deleteDialog.pending')}
+      cancelLabel={tCommon('cancel')}
+      isPending={deleteMutation.isPending}
+      onConfirm={() => {
+        if (!target) return;
+        return confirmAction({
+          run: () => deleteMutation.mutateAsync(target.id),
+          success: (result) =>
+            result.unassignedKeys > 0
+              ? t('deleteDialog.successWithKeys', {
+                  name: target.name,
+                  count: result.unassignedKeys,
+                })
+              : t('deleteDialog.success', { name: target.name }),
+          failed: t('deleteDialog.failed'),
+          close: () => {
+            onOpenChange(false);
+          },
+        });
       }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t('deleteDialog.title')}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('deleteDialog.description', { name: target ? `"${target.name}"` : '' })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleteMutation.isPending}>{tCommon('cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={deleteMutation.isPending}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={(event) => {
-              event.preventDefault();
-              void handleDelete();
-            }}
-          >
-            {deleteMutation.isPending ? t('deleteDialog.pending') : t('deleteDialog.confirm')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    />
   );
 }

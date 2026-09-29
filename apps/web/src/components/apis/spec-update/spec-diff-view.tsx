@@ -1,8 +1,9 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { MethodBadge, WarningNotice } from '@/components/apis/endpoints/method-badge';
+import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { FindingsList } from '@/components/apis/import/findings-list';
 import { Badge } from '@/components/ui/badge';
 import type { EndpointRow, SpecUpdateResult } from '@/lib/api/openapi';
@@ -68,7 +69,7 @@ export function SpecDiffView({ result: r, acknowledge }: { result: SpecUpdateRes
         </div>
       )}
       {removedGoverned.length > 0 && (
-        <WarningNotice>
+        <Notice>
           <p>{t('specUpdate.removedGoverned', { count: removedGoverned.length })}</p>
           <ul className="space-y-0.5">
             {removedGoverned.map((g) => (
@@ -78,7 +79,7 @@ export function SpecDiffView({ result: r, acknowledge }: { result: SpecUpdateRes
             ))}
           </ul>
           {acknowledge}
-        </WarningNotice>
+        </Notice>
       )}
     </section>
   );

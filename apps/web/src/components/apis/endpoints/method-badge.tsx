@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 /** Verb → chip colour. GET green, POST blue, PUT orange, PATCH gold, DELETE red, HEAD teal,
@@ -28,15 +26,5 @@ export function MethodBadge({ method }: { method: string }) {
     >
       {m}
     </Badge>
-  );
-}
-
-/** The same warning box `key-form-sheet.tsx` and the analytics empty state use. */
-export function WarningNotice({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-      <div className="min-w-0 space-y-1">{children}</div>
-    </div>
   );
 }

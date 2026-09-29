@@ -1,5 +1,6 @@
 'use client';
 
+import { Notice } from '@open-gateway/ui';
 import type { ReactNode } from 'react';
 import { AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -142,18 +143,9 @@ export function AnalyticsStaleNotice({ health }: { health: AnalyticsHealth }) {
   const t = useTranslations('analytics');
   const locale = dateFnsLocale(useLocale() as Locale);
   return (
-    <div
-      role="status"
-      className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm"
-    >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-      <div>
-        <p className="font-medium">{t('staleNotice.title')}</p>
-        <p className="text-muted-foreground">
-          {t('staleNotice.description', { lastRecord: lastRecordLabel(t, health, locale) })}
-        </p>
-      </div>
-    </div>
+    <Notice role="status" title={t('staleNotice.title')}>
+      {t('staleNotice.description', { lastRecord: lastRecordLabel(t, health, locale) })}
+    </Notice>
   );
 }
 

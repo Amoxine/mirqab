@@ -5,7 +5,8 @@ import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
-import { Check, Copy, KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { CopyButton, SecretField } from '@open-gateway/ui';
 import { z } from 'zod';
 import { PermissionGate } from '@/components/auth/permission-gate';
 import { DataTable } from '@/components/shared/data-table';
@@ -38,7 +39,13 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Sheet,
   SheetContent,
@@ -98,46 +105,17 @@ function curlSnippet(secret: OAuthClientSecret): string {
   ].join('\n');
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const t = useTranslations('apis');
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        navigator.clipboard.writeText(value).then(
-          () => {
-            setCopied(true);
-          },
-          () => {
-            toast.error(t('clients.copyError'));
-          },
-        );
-      }}
-    >
-      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      {copied ? t('clients.copied') : label}
-    </Button>
-  );
-}
-
-function Secret({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1">
-      <p className="text-sm font-medium">{label}</p>
-      <code className="block select-all break-all rounded-md bg-muted p-3 text-sm">{value}</code>
-    </div>
-  );
-}
-
 /**
  * Shows the credentials exactly once, right after they are minted. The secret only ever exists in
  * this response — Hydra does not return it again, and nothing stores it.
  */
-function ClientSecretDialog({ secret, onClose }: { secret: OAuthClientSecret | null; onClose: () => void }) {
+function ClientSecretDialog({
+  secret,
+  onClose,
+}: {
+  secret: OAuthClientSecret | null;
+  onClose: () => void;
+}) {
   const t = useTranslations('apis');
   const tCommon = useTranslations('common');
   return (
@@ -154,18 +132,18 @@ function ClientSecretDialog({ secret, onClose }: { secret: OAuthClientSecret | n
         </DialogHeader>
         {secret && (
           <div className="space-y-4">
-            <Secret label={t('clients.clientId')} value={secret.clientId} />
-            <Secret label={t('clients.clientSecret')} value={secret.clientSecret} />
-            <Secret label={t('clients.tokenUrl')} value={secret.tokenUrl} />
+            <SecretField label={t('clients.clientId')} value={secret.clientId} />
+            <SecretField label={t('clients.clientSecret')} value={secret.clientSecret} />
+            <SecretField label={t('clients.tokenUrl')} value={secret.tokenUrl} />
             <div className="space-y-1">
               <p className="text-sm font-medium">{t('clients.getToken')}</p>
               <pre
                 data-testid="client-curl-snippet"
-                className="overflow-x-auto rounded-md bg-muted p-3 text-xs"
+                className="bg-muted overflow-x-auto rounded-md p-3 text-xs"
               >
                 {curlSnippet(secret)}
               </pre>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {t.rich('clients.getTokenHint', {
                   code1: (chunks) => <code>{chunks}</code>,
                   code2: (chunks) => <code>{chunks}</code>,
@@ -175,7 +153,16 @@ function ClientSecretDialog({ secret, onClose }: { secret: OAuthClientSecret | n
           </div>
         )}
         <DialogFooter className="gap-2">
-          {secret && <CopyButton value={secret.clientSecret} label={t('clients.copySecret')} />}
+          {secret && (
+            <CopyButton
+              value={secret.clientSecret}
+              label={t('clients.copySecret')}
+              copiedLabel={t('clients.copied')}
+              onCopyError={() => {
+                toast.error(t('clients.copyError'));
+              }}
+            />
+          )}
           <Button type="button" onClick={onClose}>
             {tCommon('done')}
           </Button>
@@ -252,7 +239,14 @@ function ClientForm({
             <FormItem>
               <FormLabel>{t('clients.rateLimitLabel')}</FormLabel>
               <FormControl>
-                <Input {...field} type="number" inputMode="numeric" min={0} step={1} placeholder={t('config.unlimited')} />
+                <Input
+                  {...field}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  placeholder={t('config.unlimited')}
+                />
               </FormControl>
               <FormDescription>{t('clients.rateLimitDescription')}</FormDescription>
               <FormMessage />
@@ -267,7 +261,14 @@ function ClientForm({
             <FormItem>
               <FormLabel>{t('clients.quotaLabel')}</FormLabel>
               <FormControl>
-                <Input {...field} type="number" inputMode="numeric" min={1} step={1} placeholder={t('clients.noQuotaPlaceholder')} />
+                <Input
+                  {...field}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  placeholder={t('clients.noQuotaPlaceholder')}
+                />
               </FormControl>
               <FormDescription>{t('clients.quotaDescription')}</FormDescription>
               <FormMessage />
@@ -281,7 +282,11 @@ function ClientForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>{t('clients.quotaPeriodLabel')}</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} disabled={quotaLimit === ''}>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={quotaLimit === ''}
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue />
@@ -356,10 +361,14 @@ function RevokeClientDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('clients.revokeTitle')}</AlertDialogTitle>
-          <AlertDialogDescription>{t('clients.revokeDescription', { clientLabel })}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {t('clients.revokeDescription', { clientLabel })}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={revokeMutation.isPending}>{tCommon('cancel')}</AlertDialogCancel>
+          <AlertDialogCancel disabled={revokeMutation.isPending}>
+            {tCommon('cancel')}
+          </AlertDialogCancel>
           <AlertDialogAction
             disabled={revokeMutation.isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -401,16 +410,23 @@ export function ClientsTab({ apiId }: { apiId: string }) {
 
   // Rebuilt per render: the rotate button reads `rotateMutation.isPending`.
   const columns: ColumnDef<OAuthClient>[] = [
-    { accessorKey: 'name', header: tCommon('name'), cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
+    {
+      accessorKey: 'name',
+      header: tCommon('name'),
+      cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+    },
     {
       accessorKey: 'clientId',
       header: t('clients.clientId'),
-      cell: ({ row }) => <span className="break-all font-mono text-xs">{row.original.clientId}</span>,
+      cell: ({ row }) => (
+        <span className="break-all font-mono text-xs">{row.original.clientId}</span>
+      ),
     },
     {
       accessorKey: 'createdAt',
       header: tCommon('createdAt'),
-      cell: ({ row }) => (row.original.createdAt ? <FormattedDate value={row.original.createdAt} /> : '—'),
+      cell: ({ row }) =>
+        row.original.createdAt ? <FormattedDate value={row.original.createdAt} /> : '—',
     },
     {
       id: 'actions',
@@ -448,12 +464,16 @@ export function ClientsTab({ apiId }: { apiId: string }) {
       ),
     },
   ];
-  const table = useReactTable({ data: data ?? NO_CLIENTS, columns, getCoreRowModel: getCoreRowModel() });
+  const table = useReactTable({
+    data: data ?? NO_CLIENTS,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <p className="text-muted-foreground flex items-center gap-2 text-sm">
           <KeyRound className="h-4 w-4 shrink-0" aria-hidden="true" />
           {t('clients.description')}
         </p>
