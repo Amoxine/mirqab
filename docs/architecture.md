@@ -211,10 +211,12 @@ for why role/tenant data is resolved per-request instead of being embedded here.
 
 ### Cookie Configuration
 
+The names are `mq_`-prefixed because browsers share cookies across ports: an unprefixed `access_token` on `localhost` collides with any other local app using the same name (each login would overwrite the other's session).
+
 | Cookie | httpOnly | secure | SameSite | TTL |
 |--------|----------|--------|----------|-----|
-| `access_token` | true | true in prod (`COOKIE_SECURE`) | Lax | 1 hour (Hydra access token TTL) |
-| `refresh_token` | true | true in prod (`COOKIE_SECURE`) | Lax | 720 hours / 30 days |
+| `mq_access_token` | true | true in prod (`COOKIE_SECURE`) | Lax | 1 hour (Hydra access token TTL) |
+| `mq_refresh_token` | true | true in prod (`COOKIE_SECURE`) | Lax | 720 hours / 30 days |
 | `oauth2_flow` | true | true in prod (`COOKIE_SECURE`) | Lax | 10 minutes, scoped to `/oauth2` |
 
 ---

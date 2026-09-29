@@ -234,7 +234,7 @@ JWKS — there is no `JWT_SECRET` anywhere in this path (the env var by that nam
 
 ### Token Verification
 
-`apps/api/src/modules/auth/strategies/jwt.strategy.ts` accepts the token from the `access_token`
+`apps/api/src/modules/auth/strategies/jwt.strategy.ts` accepts the token from the `mq_access_token`
 httpOnly cookie or, for machine callers, an `Authorization: Bearer` header, then checks:
 
 | Check | Value | Note |

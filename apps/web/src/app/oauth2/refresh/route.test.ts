@@ -8,7 +8,7 @@ import { POST } from './route';
  * five-second Hydra restart signed out every active user and threw away refresh tokens that were
  * still perfectly good.
  */
-function request(cookie = 'refresh_token=ory_rt_still_good'): NextRequest {
+function request(cookie = 'mq_refresh_token=ory_rt_still_good'): NextRequest {
   return new NextRequest('http://localhost:33000/oauth2/refresh', { method: 'POST', headers: { cookie } });
 }
 
@@ -35,8 +35,8 @@ describe('POST /oauth2/refresh', () => {
     const res = await POST(request());
 
     expect(res.status).toBe(200);
-    expect(res.headers.getSetCookie().some((c) => c.startsWith('access_token=new-at'))).toBe(true);
-    expect(res.headers.getSetCookie().some((c) => c.startsWith('refresh_token=new-rt'))).toBe(true);
+    expect(res.headers.getSetCookie().some((c) => c.startsWith('mq_access_token=new-at'))).toBe(true);
+    expect(res.headers.getSetCookie().some((c) => c.startsWith('mq_refresh_token=new-rt'))).toBe(true);
   });
 
   // Hydra answers a spent, rotated or revoked refresh token with 400 `invalid_grant`.
@@ -46,8 +46,8 @@ describe('POST /oauth2/refresh', () => {
     const res = await POST(request());
 
     expect(res.status).toBe(401);
-    expect(cleared(res, 'access_token')).toBe(true);
-    expect(cleared(res, 'refresh_token')).toBe(true);
+    expect(cleared(res, 'mq_access_token')).toBe(true);
+    expect(cleared(res, 'mq_refresh_token')).toBe(true);
   });
 
   it.each([429, 500, 502, 503])('keeps the session when Hydra itself is failing (%i)', async (status) => {
@@ -56,8 +56,8 @@ describe('POST /oauth2/refresh', () => {
     const res = await POST(request());
 
     expect(res.status).toBe(503);
-    expect(cleared(res, 'access_token')).toBe(false);
-    expect(cleared(res, 'refresh_token')).toBe(false);
+    expect(cleared(res, 'mq_access_token')).toBe(false);
+    expect(cleared(res, 'mq_refresh_token')).toBe(false);
   });
 
   it('keeps the session when the token endpoint is unreachable', async () => {
@@ -66,7 +66,7 @@ describe('POST /oauth2/refresh', () => {
     const res = await POST(request());
 
     expect(res.status).toBe(503);
-    expect(cleared(res, 'refresh_token')).toBe(false);
+    expect(cleared(res, 'mq_refresh_token')).toBe(false);
   });
 
   it('401s without calling Hydra when there is no refresh token', async () => {

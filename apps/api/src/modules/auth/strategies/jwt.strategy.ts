@@ -7,9 +7,13 @@ import { kidOf, resolveSigningKey } from '../../../common/ory/jwks';
 import { AuthService } from '../services/auth.service';
 import type { UserPayload } from '../../../common/types';
 
-/** The dashboard's access token travels in an httpOnly cookie; machine callers use a bearer header. */
+/**
+ * The dashboard's access token travels in an httpOnly cookie; machine callers use a bearer header.
+ * The name is `mq_`-prefixed (matches apps/web `cookie-names.ts`) so it cannot collide with another
+ * app's `access_token` cookie on the same host.
+ */
 const fromAccessTokenCookie = (request: Request): string | null =>
-  (request.cookies as Record<string, string | undefined> | undefined)?.access_token ?? null;
+  (request.cookies as Record<string, string | undefined> | undefined)?.mq_access_token ?? null;
 
 /** A header can arrive repeated, in which case express hands back an array. */
 const firstHeader = (value: string | string[] | undefined): string | undefined =>

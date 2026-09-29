@@ -1,4 +1,5 @@
 import type { NextResponse } from 'next/server';
+import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './cookie-names';
 import { sanitizeReturnTo } from './hydra-admin';
 import type { HydraTokens } from './hydra-admin';
 
@@ -10,9 +11,7 @@ function secureCookie(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-/** Same names apps/api's JwtStrategy already reads (`fromAccessTokenCookie`) — do not rename. */
-export const ACCESS_TOKEN_COOKIE = 'access_token';
-export const REFRESH_TOKEN_COOKIE = 'refresh_token';
+export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE };
 /** Short-lived: carries the PKCE verifier + CSRF state + post-login destination across the Hydra redirect chain. */
 export const OAUTH_FLOW_COOKIE = 'oauth2_flow';
 

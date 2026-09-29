@@ -154,12 +154,12 @@ try {
   // chain with no further input, exactly like a returning browser would.
   const final = await followRedirects(`${WEB_URL}/oauth2/authorize`);
   check('lands back on the dashboard after the full OAuth2 dance', final.status, 200);
-  check('an access_token cookie was set', Boolean(jar.get('access_token')), true);
-  check('a refresh_token cookie was set', Boolean(jar.get('refresh_token')), true);
+  check('an mq_access_token cookie was set', Boolean(jar.get('mq_access_token')), true);
+  check('an mq_refresh_token cookie was set', Boolean(jar.get('mq_refresh_token')), true);
 
-  const accessToken = jar.get('access_token');
+  const accessToken = jar.get('mq_access_token');
   // Nothing below can say anything useful without a token; stop here and let `catch` report it.
-  if (!accessToken) throw new Error('no access_token cookie: the login did not complete');
+  if (!accessToken) throw new Error('no mq_access_token cookie: the login did not complete');
   const claims = decodeJwtPayload(accessToken);
   // Compared with what Hydra itself advertises, not a literal: the issuer is configuration
   // (infra/ory/hydra/hydra.yml urls.self.issuer) and moved from http to https with the edge.

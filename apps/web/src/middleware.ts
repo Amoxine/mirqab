@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { ACCESS_TOKEN_COOKIE } from '@/lib/cookie-names';
 
 /**
  * Reachable with no dashboard session by design — Kratos/Hydra's own self-service and OAuth2 flows,
@@ -7,7 +8,7 @@ import type { NextRequest } from 'next/server';
  * able to switch language too, and the cookie it sets carries no auth/tenant meaning either way.
  *
  * `/portal` (WP23) is a SEPARATE auth domain end to end, not merely a page this middleware happens
- * to allow through: it has no `access_token` cookie to ever carry (a Kratos session, read via
+ * to allow through: it has no `mq_access_token` cookie to ever carry (a Kratos session, read via
  * `DeveloperAuthGuard` on the api, not a Hydra JWT) — gating it here would 307 every portal visitor,
  * including a pre-login one hitting `/portal/auth/login` itself, into the DASHBOARD's OAuth2 flow.
  * The portal's own unauthenticated-visitor redirect happens client-side instead
@@ -22,7 +23,7 @@ const PUBLIC_PREFIXES = ['/auth', '/oauth2', '/locale', '/portal'];
  * allow-list the public prefixes, since dashboard routes include `/` itself (route groups don't
  * appear in the URL) and can't be matched by a single path prefix.
  *
- * ponytail: this only checks that `access_token` is PRESENT, not that it's valid/unexpired — full
+ * ponytail: this only checks that `mq_access_token` is PRESENT, not that it's valid/unexpired — full
  * verification (signature, issuer, expiry against Hydra's JWKS) happens on the actual API call and
  * 401s there if the cookie is stale; middleware's job is just to stop rendering a protected page for
  * a visitor who is obviously signed out, not to duplicate the API's authorization guard.
@@ -35,7 +36,7 @@ export function middleware(request: NextRequest): NextResponse {
     return NextResponse.next();
   }
 
-  if (request.cookies.get('access_token')) {
+  if (request.cookies.get(ACCESS_TOKEN_COOKIE)) {
     return NextResponse.next();
   }
 

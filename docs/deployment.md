@@ -837,7 +837,7 @@ Before deploying to production, verify ALL items:
 - [ ] `internal: true` on the Docker network(s) that should not reach the host or the internet
 - [ ] Rate limiting: there is no per-endpoint override any more — `POST /auth/login`, `/auth/register` and `/auth/refresh` don't exist in this API (Kratos and Hydra own those flows outside it); every endpoint, including the surviving `GET /auth/me`, gets the single global bucket of 100 requests/min per IP (`NODE_ENV=production`; any other value raises it to 1000/min)
 - [ ] `TRUST_PROXY_HOPS` set to the exact number of proxies in front of the API (`1` for the NGINX example above). Left at `0` behind a proxy, every client shares one rate-limit bucket; set too high, clients can spoof `X-Forwarded-For` to dodge the limits
-- [ ] Session cookies carry `Secure`: set by `apps/web` (not this API) via `NODE_ENV=production` or `COOKIE_SECURE=true`; verify by completing a login through the dashboard and checking DevTools → Application → Cookies for `Secure` on both `access_token` and `refresh_token`
+- [ ] Session cookies carry `Secure`: set by `apps/web` (not this API) via `NODE_ENV=production` or `COOKIE_SECURE=true`; verify by completing a login through the dashboard and checking DevTools → Application → Cookies for `Secure` on both `mq_access_token` and `mq_refresh_token`
 - [ ] Secret values encrypted at rest (Vault, `.env` on an encrypted volume, or your platform's secret store)
 
 ### Application
