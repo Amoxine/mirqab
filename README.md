@@ -703,6 +703,7 @@ See [Security Documentation](docs/security.md) for details.
 
 | Document | Description |
 |----------|-------------|
+| [**Reference index**](docs/reference/README.md) | Per-component reference (API modules, web app, packages, infrastructure, configuration) written from the code; start here |
 | [Architecture](docs/architecture.md) | System design, module dependencies, ADRs |
 | [Development Guide](docs/development.md) | Local setup, adding modules, workflows |
 | [Deployment Guide](docs/deployment.md) | Docker Compose, CI/CD, backups |

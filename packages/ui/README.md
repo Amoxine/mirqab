@@ -1,39 +1,59 @@
 # @open-gateway/ui
 
-Shared UI component library built with [shadcn/ui](https://ui.shadcn.com/), Radix UI primitives, and Tailwind CSS.
+Shared React components for the MIRQAB dashboard, built on Radix UI primitives, class-variance-authority and Tailwind CSS v4. Consumed as **source** by `apps/web`: there is no build step, and `main`, `types` and `exports` point at `src/`.
+
+Full reference (props, variants, rules): `docs/reference/packages.md`.
+
+## Contents
+
+Exported from `src/index.ts` (the only public entry):
+
+- `cn`
+- `Button`, `buttonVariants`
+- `Card` (+ `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`, `cardVariants`), with variant `default` or `ink`
+- `Table` (+ `TableHeader`, `TableBody`, `TableFooter`, `TableHead`, `TableRow`, `TableCell`, `TableCaption`)
+- `Progress`
+- `ToggleGroup`, `ToggleGroupItem`
+- `WorldMap`, `WorldMapNode`, `projectToMap`, `isOnMap` (land mask in `src/components/world-map-data.ts`)
 
 ## Usage
 
-Components from this package can be imported directly in apps:
-
 ```tsx
-import { Button } from '@open-gateway/ui/components/ui/button';
+import { Button, Card, CardContent } from '@open-gateway/ui';
+
+<Card variant="ink">
+  <CardContent>
+    <Button variant="outline" loading={pending}>Save</Button>
+  </CardContent>
+</Card>;
 ```
 
-## Adding New Components
+Inside `apps/web`, `src/components/ui/{button,card,table,progress,toggle-group}.tsx` re-export these, so `@/components/ui/button` also works.
 
-Use the shadcn CLI to add new components:
+## How `apps/web` wires it
 
-```bash
-cd packages/ui
-pnpm dlx shadcn@latest add button
-```
+- `apps/web/next.config.ts`: `transpilePackages: ['@open-gateway/ui', '@open-gateway/types']`.
+- `apps/web/src/styles/globals.css` imports `packages/ui/src/styles.css` (`.surface-ink`, `.ui-pulse-ring`) and adds `@source '../../../../packages/ui/src'` so Tailwind scans this package for utility classes.
 
-Components will be added to `src/components/ui/` and automatically available for use across all apps.
+## Design tokens
 
-## Design Tokens
+The package defines no token values. Colours (`--color-primary`, `--color-card`, `--color-ink`, `--color-grid-dot` and so on) come from the `@theme` block in `apps/web/src/styles/globals.css`. Components use them through Tailwind utilities or `var(--color-*)`. `.surface-ink` in `src/styles.css` re-points the tokens inside dark "ink" cards.
 
-Design tokens (colors, spacing, typography) are defined in the app's global CSS and Tailwind config. This package imports styles from `apps/web/src/styles/globals.css`.
+## Adding a component
 
-## Architecture
+1. Start from the shadcn/ui component (new-york style); do not reinvent one that exists.
+2. Create `src/components/<name>.tsx`. Import only relative paths (`../lib/utils`) and npm packages, never anything from `apps/web` or `@/`.
+3. Use theme tokens, not hex values. Take text as props (no hardcoded strings).
+4. Export it from `src/index.ts` and add new dependencies to this `package.json`.
+5. Optionally add a re-export shim in `apps/web/src/components/ui/`.
+6. Run `pnpm --filter @open-gateway/ui typecheck` and `lint`.
 
-- **Components**: Atomic UI primitives and composite components
-- **Hooks**: Shared React hooks for UI logic
-- **Lib**: Utility functions (cn, formatters, etc.)
+Note: `components.json` still points shadcn at `@ui/components/ui` and `apps/web/src/styles/globals.css`, but components here live flat in `src/components/`. If you use `shadcn add`, move the output and fix its imports.
+
+## Scripts
+
+`lint` (`eslint src/`), `typecheck` (`tsc --noEmit`), `clean`. There is no `build`; a `dist/` folder may exist locally but it is gitignored, stale and unused.
 
 ## Dependencies
 
-- Radix UI for accessible primitives
-- class-variance-authority for component variants
-- lucide-react for icons
-- tailwind-merge + clsx for className composition
+Radix UI (`react-slot`, `react-progress`, `react-toggle-group` are the ones the sources import), `class-variance-authority`, `lucide-react`, `tailwind-merge` and `clsx`. Peers: `react` and `react-dom` 19.
