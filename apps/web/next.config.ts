@@ -1,7 +1,10 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
+import { createMDX } from 'fumadocs-mdx/next';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+// Pinned to fumadocs-core/ui 15.8 and fumadocs-mdx 13 on purpose: 16.x needs Next 16. Move to 16.x with the Next upgrade.
+const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -37,4 +40,4 @@ const nextConfig: NextConfig = {
   // dashboard talks to the NestJS API from the client.
 };
 
-export default withNextIntl(nextConfig);
+export default withMDX(withNextIntl(nextConfig));

@@ -22,6 +22,7 @@ import enRoles from '@/messages/en/roles.json';
 import enCertificates from '@/messages/en/certificates.json';
 import enOpenapi from '@/messages/en/openapi.json';
 import enSpecSource from '@/messages/en/specSource.json';
+import enDocs from '@/messages/en/docs.json';
 
 import frCommon from '@/messages/fr/common.json';
 import frNav from '@/messages/fr/nav.json';
@@ -40,6 +41,7 @@ import frRoles from '@/messages/fr/roles.json';
 import frCertificates from '@/messages/fr/certificates.json';
 import frOpenapi from '@/messages/fr/openapi.json';
 import frSpecSource from '@/messages/fr/specSource.json';
+import frDocs from '@/messages/fr/docs.json';
 
 import arCommon from '@/messages/ar/common.json';
 import arNav from '@/messages/ar/nav.json';
@@ -58,6 +60,7 @@ import arRoles from '@/messages/ar/roles.json';
 import arCertificates from '@/messages/ar/certificates.json';
 import arOpenapi from '@/messages/ar/openapi.json';
 import arSpecSource from '@/messages/ar/specSource.json';
+import arDocs from '@/messages/ar/docs.json';
 
 const MESSAGES = {
   en: {
@@ -78,6 +81,7 @@ const MESSAGES = {
     certificates: enCertificates,
     openapi: enOpenapi,
     specSource: enSpecSource,
+    docs: enDocs,
   },
   fr: {
     common: frCommon,
@@ -97,6 +101,7 @@ const MESSAGES = {
     certificates: frCertificates,
     openapi: frOpenapi,
     specSource: frSpecSource,
+    docs: frDocs,
   },
   ar: {
     common: arCommon,
@@ -116,6 +121,7 @@ const MESSAGES = {
     certificates: arCertificates,
     openapi: arOpenapi,
     specSource: arSpecSource,
+    docs: arDocs,
   },
 };
 

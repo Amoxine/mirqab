@@ -4,6 +4,7 @@ node_modules/
 
 # Build outputs
 apps/web/.next/
+apps/web/.source/
 apps/web/out/
 apps/api/dist/
 packages/*/dist/
