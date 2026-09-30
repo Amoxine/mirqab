@@ -116,6 +116,37 @@ describe('AuditService.findAll pagination', () => {
     expect(findMany.mock.calls[0][0].where.action).toBeUndefined();
   });
 
+  describe('apiId', () => {
+    const API = '6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f';
+
+    it('scopes to the `apis` rows that carry that id, inside the tenant', async () => {
+      const { service, findMany } = makeService();
+      await service.findAll('t1', { apiId: API });
+      expect(findMany.mock.calls[0][0].where).toMatchObject({
+        tenantId: 't1',
+        resource: 'apis',
+        details: { path: ['resourceId'], equals: API },
+      });
+    });
+
+    it('wins over a substring resource filter, which it would otherwise contradict', async () => {
+      const { service, findMany } = makeService();
+      await service.findAll('t1', { apiId: API, resource: 'keys' });
+      expect(findMany.mock.calls[0][0].where.resource).toBe('apis');
+    });
+
+    it('adds nothing when absent', async () => {
+      const { service, findMany } = makeService();
+      await service.findAll('t1', {});
+      expect(findMany.mock.calls[0][0].where.details).toBeUndefined();
+    });
+
+    it('still refuses a call with no tenant', async () => {
+      const { service } = makeService();
+      await expect(service.findAll(undefined, { apiId: API })).rejects.toThrow('no tenant context');
+    });
+  });
+
   it('keeps a valid action', async () => {
     const { service, findMany } = makeService();
 

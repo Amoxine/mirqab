@@ -32,6 +32,7 @@ export class AuditController {
       userId: query.userId,
       action: query.action,
       resource: query.resource,
+      apiId: query.apiId,
       page: query.page,
       pageSize: query.pageSize,
     });

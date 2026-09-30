@@ -44,6 +44,16 @@ export class AuditQueryDto extends PaginationDto {
   @BlankToUndefined()
   @IsString()
   resource?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only entries about this API definition: resource `apis` with `details.resourceId` equal to it. Wins over `resource`. ' +
+      'Older entries written before the id was recorded are not matched.',
+  })
+  @IsOptional()
+  @BlankToUndefined()
+  @IsUUID()
+  apiId?: string;
 }
 
 /** `GET /api/audit-logs/export/csv?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD` — both optional. */

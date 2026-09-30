@@ -23,6 +23,8 @@ export interface AuditFilters {
   userId?: string;
   action?: string;
   resource?: string;
+  /** Only entries about this `ApiDefinition`: resource `apis` and `details.resourceId` equal to it. */
+  apiId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -145,7 +147,7 @@ export class AuditService {
   }
 
   async findAll(tenantId: string | undefined, filters: AuditFilters = {}) {
-    const { userId, action, resource } = filters;
+    const { userId, action, resource, apiId } = filters;
 
     // Clamped here as well as in AuditQueryDto: page 0 produced a negative skip (Prisma 500) and
     // pageSize was unbounded, so one request could pull an entire tenant's history.
@@ -161,6 +163,8 @@ export class AuditService {
       ...(userId ? { userId } : {}),
       ...(isAuditAction(action) ? { action } : {}),
       ...(resource ? { resource: { contains: resource } } : {}),
+      // After `resource`, so it wins: an API's entries are exactly the `apis` rows that carry its id.
+      ...(apiId ? { resource: 'apis', details: { path: ['resourceId'], equals: apiId } } : {}),
     };
 
     const [data, totalCount] = await Promise.all([
