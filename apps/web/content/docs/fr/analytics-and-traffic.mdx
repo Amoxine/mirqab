@@ -1,0 +1,99 @@
+---
+title: Analyses et trafic
+description: Comment lire l’accueil du tableau de bord, la page Analytique et la page Trafic.
+---
+
+Trois pages montrent ce que font vos API : le **Tableau de bord** (accueil), **Analytique** et **Trafic**.
+**Analytique** et **Trafic** se trouvent dans le groupe **Espace de travail** de la barre latérale. Les trois exigent la permission de lire l’analytique
+(`analytics:read`). Sans elle, **Analytique** et **Trafic** affichent un message « Accès refusé », et le Tableau de bord
+masque ses chiffres, son sélecteur de période et son bouton **Actualiser**. Voir [Rôles, audit et organisations](/docs/roles-audit-tenants).
+
+## La période
+
+Chaque chiffre analytique couvre une période : **Dernière heure**, **Dernières 24 heures**, **7 derniers jours** ou
+**30 derniers jours**. Le sélecteur les affiche sous la forme 1h, 24h, 7d et 30d, avec les noms complets en info-bulles. Le Tableau de bord et **Analytique** démarrent sur Dernières 24 heures. Les tranches de temps des graphiques sont en UTC.
+Changer la période recharge les cartes analytiques de la page. Sur le Tableau de bord, **Actualiser** les recharge de nouveau. Les cartes qui ne dépendent pas de l’analytique ne sont pas rechargées.
+
+## Le Tableau de bord
+
+Le Tableau de bord s’ouvre sur ces cartes, de haut en bas :
+
+| Carte | Ce qu’elle affiche |
+|---|---|
+| Vue d’ensemble | Requêtes totales, Taux de succès et Latence moy. sur la période, et une barre des réponses par classe de statut. |
+| Latence | Latence moyenne, répartie entre le temps passé en amont (dans votre API) et le temps ajouté par la passerelle. |
+| Taux d’erreur | La part des requêtes qui se sont terminées en erreur, avec sa tendance et son pic. |
+| API principales | Les API qui portent le plus de requêtes. |
+| Chiffres clés | Débit, latence P95, latence P99 et API actives. |
+| Trafic par API | Volume, taux d’erreur, latence moyenne et statut des API les plus sollicitées. |
+| Volume de requêtes | Requêtes et taux d’erreur dans le temps, sous forme de graphique ou de tableau. |
+
+Un tiret à la place d’un nombre signifie que rien n’a été enregistré sur la période. Le Tableau de bord n’affiche jamais de zéro inventé.
+P95 et P99 sont la latence sous laquelle sont restées 95 % et 99 % des requêtes. Une ligne de **Trafic par API** reçoit un
+triangle d’alerte à partir d’un taux d’erreur de 5 %.
+
+Le Tableau de bord affiche aussi des cartes qui ne dépendent pas de l’analytique, chacune seulement si vous détenez la permission :
+
+- **Nœuds de passerelle**, une carte des nœuds de la passerelle, et un chiffre **Nœuds de la passerelle** dans **Chiffres clés** : permission de lire les paramètres.
+- **État de synchronisation des API** : permission de lire les paramètres. Elle compte les API Synchronisées, En attente ou Échouées.
+  Voir [Dépannage](/docs/troubleshooting).
+- **Spécifications à mettre à jour** : liste les API dont la spécification surveillée a une nouvelle version. Elle exige `api:read`.
+- **Activité récente** : permission de lire le journal d’audit. **Tout voir** ouvre les [Journaux d'audit](/docs/roles-audit-tenants).
+- **Actions rapides** : un lien vers **Gérer les API**, **Gérer les clés** ou **Gérer les locataires** pour chaque élément que vous pouvez consulter.
+
+## Une API ou plusieurs
+
+Quand votre organisation gère exactement une API, les cartes d’API décrivent cette API. **API principales** devient
+**Endpoints principaux**, et **Trafic par API** devient **Trafic par endpoint**. Les cartes Vue d’ensemble, Latence, Taux d’erreur, Chiffres clés,
+Volume de requêtes et Activité récente se limitent aussi à cette API. Vous ne pouvez pas lever cette restriction.
+
+Quand vous gérez plusieurs API, les cartes les couvrent toutes. Pour restreindre le Tableau de bord, utilisez le
+bouton en forme de viseur sur une ligne de **Trafic par API**. Son info-bulle indique **Afficher uniquement** suivi du nom de l’API. Une pastille **Affichage de** avec le nom de l’API
+apparaît en haut, et `?api=` est ajouté à l’adresse de la page : vous pouvez ainsi partager la vue restreinte.
+La pastille a un bouton de fermeture nommé **Afficher toutes les API**. Utilisez-le pour revenir en arrière.
+
+## La page Analytique
+
+**Analytique** affiche des tuiles (Requêtes totales, Taux d’erreur, Latence moyenne, Erreurs, API actives, Clés actives), puis les
+graphiques **Requêtes**, **Latence** et **Codes de statut**, et deux tableaux : **Trafic par API** et **Trafic par clé**.
+Chaque tableau liste les requêtes, les erreurs, le taux d’erreur et la latence moyenne.
+
+## La page Trafic
+
+**Trafic** affiche le trafic en direct de la passerelle, restreint par ces filtres :
+
+| Filtre | Choix |
+|---|---|
+| Période | Les quatre périodes ci-dessus. |
+| API | **Toutes les API** ou une API. |
+| Clé API | **Toutes les clés** ou une clé. La liste affiche les clés de l’API choisie. |
+| Méthode | **Toutes les méthodes** ou l’une de GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. |
+| Classe de statut | Succès (2xx), Redirection (3xx), Erreur client (4xx), Erreur serveur (5xx). |
+| Authentification | **Tout le trafic**, **Avec une clé API** ou **Sans clé**. |
+| Latence | **Toute latence** ou **Plus lent que** 100, 250, 500, 1000 ou 2000 ms. |
+| Statut exact | Un code de 100 à 599. |
+| Le chemin contient | Du texte présent n’importe où dans le chemin de la requête, 200 caractères au maximum. |
+
+Choisir une API efface le filtre de clé. Les filtres se trouvent dans l’adresse de la page : vous pouvez donc partager une vue filtrée.
+Quand certains sont définis, la carte de filtres affiche le texte « N filtres actifs » à côté de **Réinitialiser les filtres**, qui les efface. **Réinitialiser les filtres** conserve la période.
+
+Sous les filtres, la page affiche des chiffres clés (Requêtes, Débit, Taux d’erreur, Latence moy., Latence P95,
+Latence P99, Clients, Données reçues), les graphiques **Requêtes dans le temps** et **Latence dans le temps**, **Répartition du trafic**,
+et deux tableaux de points de terminaison : **Points de terminaison les plus sollicités** et **Points de terminaison les plus lents**. Le tableau des plus lents classe par P95 parmi les
+points de terminaison les plus sollicités et exige au moins 5 requêtes par point de terminaison.
+
+Pour retrouver des requêtes individuelles par leurs en-têtes ou leurs corps, utilisez la [Recherche de requêtes](/docs/searching-traffic).
+
+## Quand l’analytique ne reçoit pas de données
+
+Analytique, Trafic et le Tableau de bord vérifient que les requêtes sont bien enregistrées avant de tracer des chiffres.
+
+- **Le pipeline analytique ne reçoit pas de données** remplace les chiffres. La carte indique si l’enregistreur est
+  En cours d'exécution ou Arrêté, si ses tables sont Présentes ou Manquantes, les Lignes enregistrées et le Dernier enregistrement.
+  L’indice précise le cas : l’enregistreur est arrêté, ses tables n’existent pas encore, ou aucune requête
+  n’est encore arrivée. Dans ce dernier cas, envoyez du trafic via la passerelle.
+- **Tyk Pump est arrêté** apparaît au-dessus des chiffres lorsque des enregistrements antérieurs existent. Les chiffres sont obsolètes.
+  L’avis donne l’heure du Dernier enregistrement.
+- **Échec du chargement des données** signifie que la requête des chiffres a échoué. Utilisez le bouton de nouvelle tentative.
+
+Redémarrer l’enregistreur revient à la personne qui exploite la plateforme. Indiquez-lui le message que vous voyez.

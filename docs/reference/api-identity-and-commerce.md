@@ -509,7 +509,7 @@ sequenceDiagram
 
 | Method | Path | Permission | Behaviour |
 |---|---|---|---|
-| GET | `/audit-logs` | `audit:read` | Filter by date range (inclusive days), `userId`, `action` (must be a real enum value, else ignored), `resource` (contains); page size max 100. |
+| GET | `/audit-logs` | `audit:read` | Filter by date range (inclusive days), `userId`, `action` (must be a real enum value, else ignored), `resource` (contains), `apiId` (a UUID: only the `apis` rows whose `details.resourceId` is that API, tenant-scoped; wins over `resource`; rows written before the id was recorded are not matched); page size max 100. |
 | GET | `/audit-logs/stats` | `audit:read` | Totals, counts by action, top 10 users and resources over `range` (default `30d`). |
 | GET | `/audit-logs/export/csv` | `audit:export` | CSV attachment, newest first, capped at `CSV_MAX_ROWS = 10_000`. |
 | GET | `/audit-logs/traffic/:apiDefId` | `analytics:read` | Traffic rollup for an audit row's API (`findRelatedTraffic`, reuses `AnalyticsService`). |

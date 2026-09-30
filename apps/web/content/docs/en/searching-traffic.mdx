@@ -1,0 +1,111 @@
+---
+title: Searching traffic
+description: Find individual requests and responses by status, latency, headers or the words in their bodies.
+---
+
+**Request search** finds single requests, with their headers and bodies, where **Traffic** only shows totals.
+
+## Where it is and who can use it
+
+In the **Workspace** group of the sidebar, choose **Request search**. It sits below **Analytics** and **Traffic**.
+
+You need two permissions: permission to read analytics (`analytics:read`) and permission to edit APIs
+(`api:update`). Captured bodies can hold customer data, so reading analytics alone is not enough. Without both,
+the sidebar hides the entry. If you open the page anyway, it shows "No access" and names the missing permission.
+See [Roles, audit and tenants](/docs/roles-audit-tenants).
+
+## What it searches
+
+Request search finds only requests that were **captured**, which means the API had **Detailed recording**
+switched on. The switch is **Record full detail**, in the Designer of the API, and it is off by default.
+Requests made while it was off cannot be found. With no filters set and no captured requests in the window, the page says
+"No captured requests in this window. Turn on detailed recording for an API to capture them."
+
+A search covers your tenant's APIs only.
+
+## Writing a search
+
+Type a filter in the box and press **Enter**. Each filter becomes a chip. All filters must match, so every chip
+narrows the result. With no chips, the page lists the newest captured requests. Results are newest first, 50 at
+a time, and **Load more** fetches the next 50.
+
+| Filter | Example | Finds |
+|---|---|---|
+| `status:` | `status:>=500` | Responses with status 500 or higher. Also `status:404`, `status:5xx`, `status:200-299` and `status:404,429`. |
+| `method:` | `method:POST` | Requests with that method. Give several with commas, as in `method:PUT,PATCH`. |
+| `latency:` | `latency:>800` | Requests slower than 800 milliseconds. You can use `>`, `>=`, `<` and `<=`. A bare number such as `latency:800` means 800 or more. |
+| `path:` | `path:/orders` | Requests whose path **starts with** the text. It needs at least 3 letters or digits. |
+| `api:` | `api:payments` | Requests to one API, given by its name, slug or id. |
+| `key:` | `key:mobile-app` | Requests made with the key whose alias you give, as shown in the **Key** column of the results. |
+| `reqh:` | `reqh:content-type=application/json` | Requests with that header and exactly that value. Without `=` and a value, as in `reqh:x-tenant`, any request that has the header. |
+| `resh:` | `resh:x-request-id` | The same for response headers. |
+| `body:` | `body:"insufficient funds"` | Requests or responses whose body contains those words, in that order and next to each other. |
+| `req:` | `req:refund` | Words in the request body only. |
+| `res:` | `res:timeout` | Words in the response body only. |
+
+A word with no filter name, such as `timeout`, is a `body:` search. Put several words in double quotes to keep
+them together.
+
+Start a filter with `-` to exclude matches. `-status:404` hides every 404, and `-res:timeout` hides responses
+whose body contains "timeout".
+
+Combined example, all on one line:
+
+```text
+api:payments status:>=500 method:POST body:"insufficient funds"
+```
+
+Four buttons under the box fill the bar with an example search: `status:>=500`, `status:4xx`,
+`latency:>800 method:POST` and `body:"insufficient funds"`. A button replaces whatever is in the bar.
+
+## How chips behave
+
+- A chip with a filter the page understands is plain. An excluding chip is shown in a warning colour.
+- A chip it cannot understand is red, and the reason appears under the box. For example:
+  "Status looks like >=500, 404, 5xx, 200-299 or 404,429." Results stay hidden until you fix or remove it.
+- Click a chip to move its text back into the box and edit it. Click the **x** on a chip to remove it.
+  **Backspace** in an empty box removes the last chip.
+
+## The URL and the time range
+
+The search is kept in the page address, as `?q=` followed by your filters. Copy the address to share a search,
+or reload the page without losing it. The time range control offers 1h, 24h, 7d and 30d (**Last hour**, **Last 24 hours**,
+**Last 7 days** and **Last 30 days** as tooltips). The default is Last 24 hours, and it adds `range=` to the address when you
+choose another.
+
+## Limits
+
+- At most 8 filters per search.
+- At most 3 of them can be body-word filters (`body:`, `req:` or `res:`).
+- A word filter needs at least 3 letters or digits.
+- A filter value can be at most 200 characters.
+- A search that is only common words is refused: `id`, `data`, `name`, `value`, `true`, `false`, `null`,
+  `type`, `status` and `message`. They appear in almost every request. A phrase with at least one other word
+  is accepted.
+- Only the first 16 KiB of each capture is kept and searched, and the headers count toward it. A result marked **cut at 16 KiB** was longer, so a
+  word that sits later cannot be found.
+- Multipart bodies are not indexed, and a capture that is not valid UTF-8 is replaced as a whole.
+- Word search does not stem. `fund` does not find `funds`; search for the exact word.
+- A search that takes too long stops with "That search is too broad to finish in time." Add a status, an API,
+  a shorter range or a more specific word.
+
+## What you cannot see or search
+
+Secrets are replaced with `[REDACTED]`, by name (and JWTs by their shape), before anything is stored or searched. That covers values of
+headers, query and form parameters, and JSON fields whose names look like credentials. A hidden value cannot be
+searched. A redacted header keeps its name, so `reqh:authorization` finds requests that sent it, but no value
+matches. Some harmless fields with similar names are hidden too.
+
+## How fresh the results are
+
+Below the box the page shows "Indexed up to" and a time. Requests newer than that time are not searchable yet,
+so an empty result before it is real. Before the first indexing, the page says the search index has not started.
+Captured requests appear shortly after they are recorded.
+
+## What it cannot do
+
+- Find part of a word (substring search). The `~` operator is refused; only `:` works.
+- Match a regular expression.
+- Search inside one JSON field.
+
+Click the time of a result to open the request and the response, with their headers and bodies. A body cut at 16 KiB carries a **Body truncated** marker.

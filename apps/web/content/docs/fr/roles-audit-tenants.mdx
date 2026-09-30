@@ -1,0 +1,111 @@
+---
+title: Rôles, audit et organisations
+description: Ce que votre rôle vous permet de voir et de faire, comment lire le journal d’audit, et comment fonctionnent les organisations et les membres.
+---
+
+## Rôles et permissions
+
+Ce que vous voyez dans MIRQAB dépend des permissions que votre rôle accorde dans l’organisation courante. Une permission s’écrit
+sous la forme d’une ressource et d’une action, comme `api:update`. Le serveur applique les mêmes permissions : masquer un bouton est donc
+un confort et jamais le seul contrôle. Un utilisateur au rôle **Super administrateur** passe tous les contrôles.
+
+Sans une permission, le tableau de bord change de trois façons :
+
+- **L’entrée de la barre latérale disparaît.** Une section de la barre latérale sans plus aucune entrée disparaît.
+- **La page affiche « Accès refusé ».** Elle indique que vous n’avez pas la permission d’afficher cette page et demande de contacter un administrateur pour qu’il vous
+  l’accorde, suivi de la permission manquante. Envoyez ce nom de permission à votre administrateur.
+- **L’action est masquée.** Le bouton ou l’élément de menu n’est pas affiché du tout. Quelques contrôles passent en lecture seule.
+
+| Pour voir ou faire | Il vous faut |
+|---|---|
+| Analytique, Trafic, les chiffres du Tableau de bord | `analytics:read` |
+| Recherche de requêtes | `analytics:read` et `api:update` (voir [Rechercher dans le trafic](/docs/searching-traffic)) |
+| Les entrées de barre latérale API, Clés, Forfaits et Produits | `api:read`, `key:read`, `plan:read`, `product:read` |
+| Bouton **Créer une API** | `api:create` |
+| **Réessayer** sur une synchronisation d’API en échec | `api:sync` |
+| La page Organisations | `tenant:read` |
+| Créer une organisation | `tenant:create` |
+| Modifier, suspendre ou réactiver une organisation ; **Modifier le quota** ; **Réinitialiser l'utilisation** | `tenant:update` |
+| Archiver une organisation | `tenant:delete` |
+| Voir la carte Membres d’une organisation | `user:read` |
+| **Inviter** un membre (exige aussi `user:read`) ; changer le rôle d’un membre ; retirer un membre | `user:create`, `user:update`, `user:delete` |
+| La page Journaux d'audit | `audit:read` |
+| **Exporter en CSV** sur Journaux d'audit | `audit:export` |
+| La page Paramètres | `settings:read` |
+| La carte et la page **Rôles et permissions** | `role:read`, et `settings:read` pour la carte dans Paramètres |
+| Créer, modifier ou supprimer un rôle | `role:create`, `role:update`, `role:delete` |
+
+Sur le Tableau de bord, la carte **Activité récente** exige `audit:read`, et la carte des nœuds de la passerelle ainsi que la carte **État de synchronisation des API**
+exigent `settings:read`.
+
+### Gérer les rôles
+
+Sous **Paramètres**, **Rôles et permissions** liste les rôles de l’organisation courante, y compris les rôles intégrés, avec le nombre de permissions
+que chacun accorde et le nombre de membres qui le détiennent. **Créer un rôle** demande un nom, une description et un ensemble de permissions, choisies dans une
+matrice avec les actions Lecture, Création, Modification, Suppression, Révocation, Synchronisation et Export. Une modification d’un rôle s’applique à ses
+membres dès leur prochaine requête, sans nouvelle connexion.
+
+Un rôle que vous créez ici ne peut pas encore être attribué à un membre : **Inviter** et le menu de rôle des membres ne proposent que Administrateur,
+Opérateur et Lecteur.
+
+- **Super administrateur** est un rôle global au système. Il ne peut pas être créé, modifié ni supprimé ici, et sa ligne n’a pas de menu.
+- Un rôle ne peut pas être supprimé tant qu’un membre le détient. Son élément **Supprimer** est désactivé.
+
+## Journaux d'audit
+
+**Journaux d'audit** (sous **Confiance et opérations**) enregistre qui a changé quoi dans votre organisation. Il exige `audit:read`.
+Le tableau a les colonnes Horodatage, Utilisateur, Action, Ressource et Adresse IP, 20 lignes par page. Une entrée sans utilisateur affiche
+**Système**. Un tableau vide indique « Aucun journal d'audit trouvé. »
+
+Ouvrez **Filtres** pour restreindre la liste :
+
+| Filtre | Effet |
+|---|---|
+| **Ressource** | Texte à rechercher dans la ressource, par exemple `apis`. |
+| **Action** | **Toutes les actions**, ou l’une de Créé, Modifié, Supprimé, Révoqué, Attribué, Retiré, Connexion, Déconnexion, Rôle modifié, Permission accordée, Permission révoquée, Quota dépassé, Synchronisation réussie, Synchronisation échouée, Mise à jour de spécification détectée. |
+| **Du** et **Au** | Une plage de dates. |
+
+**Tout effacer** supprime les filtres.
+
+**Exporter en CSV** télécharge le journal dans un fichier nommé `audit-logs-` suivi de la date. Il exporte jusqu’à 10 000 entrées pour la
+plage de dates sélectionnée. Les filtres de ressource et d’action ne sont pas appliqués à l’export. Il faut `audit:export`.
+
+Sur une ligne relative à une API, une icône de trafic avec l’info-bulle **Voir le trafic sur cette période** ouvre **Trafic de cette API** :
+requêtes, erreurs, taux d’erreur et latence moyenne pour la plus petite période qui contient encore la ligne. Il exige
+`analytics:read` et n’apparaît que pour les lignes de 30 jours au plus.
+
+## Organisations
+
+Une organisation est une entité avec ses propres API, clés, membres et sa propre utilisation. **Organisations** (sous **Gestion**) liste les
+organisations dont vous êtes membre. Un **Super administrateur** les voit toutes. Chaque ligne affiche le nom et le slug, un statut (Active, Suspendue ou Archivée), le forfait
+(Gratuit, Starter, Pro ou Enterprise) et le **Quota d'organisation**.
+
+- **Créer une organisation** demande un nom, un slug et un forfait. Le slug ne peut pas être modifié ensuite.
+- Dans le menu de la ligne, **Modifier** change les détails, **Modifier le quota** fixe le plafond du quota et la période de renouvellement, et
+  **Suspendre** ou **Réactiver** change l’étiquette de statut. **Suspendre** et **Archiver** ne changent que le statut affiché :
+  ils ne coupent ni les membres ni le trafic. **Archiver** ne peut pas être annulé depuis cette page.
+  Pour arrêter le trafic d’une organisation, utilisez l’option **Couper entièrement cette organisation**, qui refuse toutes les requêtes de
+  l’organisation, quel que soit son quota. Pour arrêter l’accès d’une personne, retirez-la de **Membres**.
+- Un quota de -1 est illimité.
+- Ouvrez une organisation pour voir son Aperçu, ses Membres et son Utilisation, avec un bouton **Réinitialiser l'utilisation** pour le compteur de quota.
+  **Modifier le quota** et **Réinitialiser l'utilisation** exigent `tenant:update`, et la carte Membres exige `user:read`.
+
+### Membres et invitations
+
+La carte **Membres** liste l’utilisateur, le rôle et la date d’arrivée de chaque membre, et a une zone de recherche par nom ou e-mail.
+**Inviter** ouvre **Inviter un membre**, qui demande un e-mail et un rôle : Administrateur, Opérateur ou Lecteur. La valeur par défaut est
+Lecteur. **Super administrateur** n’est pas proposé.
+
+1. Saisissez l’e-mail d’une personne qui s’est déjà connectée une fois à MIRQAB.
+2. Choisissez un rôle et sélectionnez **Inviter**.
+
+Si aucun utilisateur n’a cet e-mail, le formulaire indique « Aucun utilisateur ne s’est encore connecté avec cette adresse e-mail. Il doit d’abord s’inscrire et se connecter une fois avant de pouvoir être invité. » Si la personne est déjà membre, il le signale. La colonne de rôle est un menu pour les membres
+Administrateur, Opérateur et Lecteur quand vous détenez `user:update`. Sinon, c’est une étiquette. Le rôle du membre Super administrateur
+est toujours une étiquette. L’icône de corbeille retire un membre, qui « perdra immédiatement l’accès à cette organisation ».
+
+## Changer d’organisation
+
+Si vous appartenez à plus d’une organisation, le nom de l’organisation en haut de la barre latérale est un menu intitulé **Changer de locataire**.
+Il liste chaque organisation avec votre rôle dedans, et une coche indique l’organisation courante. En choisir une autre recharge la
+page dans cette organisation. Vos permissions, votre barre latérale et vos données proviennent alors de cette organisation. Avec une seule organisation, le nom est
+affiché sans menu.

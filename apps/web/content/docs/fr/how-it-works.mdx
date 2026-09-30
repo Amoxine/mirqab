@@ -1,0 +1,32 @@
+---
+title: Le trajet d’une requête
+description: Le chemin d’un appel, du client jusqu’à votre API, et l’endroit où MIRQAB le voit.
+---
+
+Chaque appel vers une API gérée dans MIRQAB traverse les mêmes étapes.
+
+```mermaid
+flowchart LR
+  C[Client] --> E[Edge : TLS et pare-feu]
+  E --> G[Passerelle : clé, forfait, quota]
+  G --> U[Votre API]
+  G -. enregistrements de requêtes .-> A[Analytique]
+  A --> D[Tableau de bord : trafic et erreurs]
+```
+
+## Ce que fait chaque étape
+
+1. **Edge.** Termine le TLS et exécute le pare-feu applicatif web. Tel que livré, le pare-feu se contente de détecter et de
+   journaliser, sans rien bloquer. S’il est réglé sur le blocage, une requête bloquée n’atteint jamais la passerelle : elle
+   ne consomme aucun quota et ne laisse aucun enregistrement de trafic.
+2. **Passerelle.** Vérifie la clé, le forfait et le quota, puis transmet l’appel à votre API.
+3. **Votre API.** Répond à l’appel. Son code de statut et sa latence sont ce que le tableau de bord rapporte.
+4. **Analytique.** La passerelle enregistre chaque requête ; le tableau de bord et la page de trafic lisent ces
+   enregistrements.
+
+## Où regarder en cas de problème
+
+- Un appel refusé à cause de sa clé ou de son quota apparaît dans **Trafic** avec un statut 4xx.
+- Un appel bloqué par le pare-feu, s’il est réglé sur le blocage, n’y apparaît pas du tout.
+- Si le tableau de bord indique que l’analytique ne reçoit pas de données, c’est le pipeline d’enregistrement qui est
+  arrêté, pas votre API.

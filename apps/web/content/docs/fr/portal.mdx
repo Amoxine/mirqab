@@ -1,0 +1,81 @@
+---
+title: Portail développeur
+description: Comment les développeurs trouvent des produits, s’abonnent, reçoivent une clé, essaient l’API et révoquent l’accès.
+---
+
+Le portail développeur est un espace distinct pour les développeurs qui appellent vos API. Ils l’utilisent pour
+parcourir ce que vous proposez, obtenir une clé sans vous solliciter, et essayer l’API dans le navigateur. Il est servi
+sous `/portal`, à la même adresse que le tableau de bord.
+
+## Qui l’utilise
+
+La connexion au portail est distincte de celle du tableau de bord : le portail a ses propres pages et sa propre
+session développeur, et une session de portail n’est pas acceptée par l’API du tableau de bord.
+
+Chaque développeur s’inscrit dans une seule organisation. Sur **Créez votre compte développeur**, il saisit :
+
+- **Identifiant de l'organisation** : le slug de votre organisation, affiché sur la page **Organisations**.
+- **Nom complet**, **E-mail**, **Mot de passe** et **Confirmer le mot de passe**.
+
+Après **Créer le compte**, la page demande de consulter sa messagerie pour vérifier le compte, puis de se connecter. La page
+**Connexion** propose aussi **Mot de passe oublié ?**. L’en-tête contient **Catalogue**, **Mes applications**
+et **Se déconnecter**.
+
+## Ce que vous préparez dans le tableau de bord
+
+Le portail affiche ce que l’organisation a configuré :
+
+1. Passez chaque API en **Active**. Le portail ne sert la documentation que des API actives. Pour une API en brouillon ou
+   désactivée, sa section affiche une erreur au lieu de la documentation.
+2. Créez un **Produit** qui regroupe les API. Le catalogue liste tous les produits de l’organisation ; il n’y a pas
+   d’interrupteur de publication distinct. Un produit sans API affiche **Ce produit ne contient encore aucune API.**
+3. Créez au moins un **Forfait** et laissez **Actif** activé. Les forfaits inactifs sont masqués du portail.
+
+Voir [Clés et forfaits](/docs/keys-and-plans) pour les forfaits et les produits.
+
+## Trouver un produit
+
+**Catalogue** (intitulé **Catalogue d'API**) affiche une carte par produit avec son nom, sa description et son nombre
+d’API. S’il n’y en a aucun, il indique **Aucun produit n'est disponible pour le moment.** Un clic sur une carte ouvre la
+page du produit. Elle liste les points de terminaison de chaque API avec leurs méthodes et chemins, et une console
+**Requête de test** sous chaque API.
+
+## S’abonner et obtenir une clé
+
+Une application regroupe les abonnements et les clés d’un développeur.
+
+1. Ouvrez **Mes applications** et cliquez sur **Nouvelle application**. Saisissez un **Nom** et une
+   **Description** facultative, puis cliquez sur **Créer**.
+2. Ouvrez l’application et cliquez sur **S'abonner**.
+3. Choisissez un **Produit** et un **Forfait**, puis cliquez sur **S'abonner**.
+4. Si le forfait émet les clés immédiatement, une boîte de dialogue intitulée **Copiez votre clé** apparaît, avec un bouton
+   **Copier la clé**. La clé n’est affichée qu’une seule fois et ne peut pas être récupérée ensuite.
+5. L’approbation n’est pas encore configurable : le tableau de bord n’a aucun réglage pour l’exiger, donc un abonnement émet
+   normalement sa clé immédiatement. Si l’un d’eux est un jour retenu, il affiche **En attente** et
+   « En attente d'approbation — aucune clé n'a encore été émise. »
+
+Une application peut s’abonner une fois à un produit. Les abonnements affichent **En attente**, **Actif** ou
+**Révoqué**. Un abonnement **Actif** affiche son utilisation : **Requêtes (24h)**, **Taux d'erreur**, **Latence
+moyenne** et **Quota**.
+
+## Essayer l’API
+
+Sur la page d’un produit, chaque API a un formulaire **Requête de test** :
+
+- **Méthode** : GET, POST, PUT, PATCH ou DELETE.
+- **Chemin** : doit commencer par `/`.
+- **Votre clé (Authorization)** : collez la clé. Le libellé nomme l’en-tête attendu par l’API.
+- **Corps** : affiché pour toutes les méthodes sauf GET.
+
+Cliquez sur **Envoyer**. La page affiche le **Statut de la réponse** et le corps de la réponse. La requête part du
+navigateur du développeur directement vers la passerelle avec sa propre clé ; la clé n’est donc jamais stockée par le
+portail et doit être collée à chaque fois. Si le navigateur ne peut pas joindre la passerelle, le formulaire l’indique.
+
+Le statut renvoyé par la passerelle a la même signification que pour n’importe quel appelant. Voir
+[Clés et forfaits](/docs/keys-and-plans#what-callers-see).
+
+## Révoquer l’accès
+
+Sur la page de l’application, cliquez sur **Révoquer** pour un abonnement. La boîte de dialogue **Révoquer cet abonnement ?**
+indique que la clé de ce produit cesse de fonctionner immédiatement et que l’action est irréversible. Un abonnement
+révoqué affiche **Révoqué** et ne propose plus **Révoquer**.

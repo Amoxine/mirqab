@@ -22,6 +22,8 @@ Permission gates: dashboard pages wrap their content in `PagePermissionGate` (CI
 | `/` | `(dashboard)/page.tsx` | none at page level; sections gated: `analytics:read` (figures, range, refresh), `settings:read` (gateway map, sync card, nodes KPI), `api:read` (spec updates, quick link), `audit:read` (recent activity), `api:create` (create button/sheet), `key:read`, `tenant:read` (quick links) | Home: overview, KPI strip, gateway map, traffic chart, activity |
 | `/analytics` | `(dashboard)/analytics/page.tsx` | `analytics:read` | Overview stat cards, requests/latency/status-code charts, per-API and per-key tables, range select |
 | `/analytics/traffic` | `(dashboard)/analytics/traffic/page.tsx` | `analytics:read` | Filterable traffic analytics (filters live in the URL query string) |
+| `/analytics/search` | `(dashboard)/analytics/search/page.tsx` | `analytics:read` **and** `api:update` (`PagePermissionGate` takes a list; the sidebar entry uses the same list) | Request search: a chip bar over captured requests and responses; the search text and range live in `?q=` and `?range=`; a result opens in a sheet |
+| `/docs`, `/docs/[[...slug]]`, `/docs/search-index` | `docs/layout.tsx`, `docs/[[...slug]]/page.tsx`, `docs/search-index/route.ts` (outside `(dashboard)`: Fumadocs brings its own shell) | any signed-in user (middleware; `/docs` is not in `PUBLIC_PREFIXES`) | In-platform documentation, see [Documentation](#documentation-docs) |
 | `/apis` | `(dashboard)/apis/page.tsx` | `api:read`; create `api:create`; row edit `api:update`, delete `api:delete` | API list, create sheet, import wizard |
 | `/apis/[id]` | `(dashboard)/apis/[id]/page.tsx` | `api:read`; edit/delete buttons `api:update`/`api:delete`; Keys/Clients tab `key:read`; Traffic tab `api:update` | API detail with tabs overview / configuration / designer / endpoints / keys or clients / traffic; `?tab=` deep-links some tabs |
 | `/keys` | `(dashboard)/keys/page.tsx` | `key:read`; create `key:create`; edit `key:update`; revoke/delete `key:revoke` | API key list |
@@ -96,6 +98,9 @@ Only the API paths a component reaches through its hooks are listed. "Hook" mean
 | `traffic/traffic-kpis.tsx` `TrafficKpis` | KPI row for the traffic page | `data: AnalyticsTraffic \| undefined` | none (data from page) |
 | `traffic/traffic-charts.tsx` `TrafficVolumeChart`, `TrafficLatencyChart` | Volume and latency charts | `data` | none |
 | `traffic/traffic-breakdowns.tsx` `TrafficMix`, `EndpointTable` | Status mix and per-endpoint table | `data` | none |
+| `search/search-bar.tsx` `SearchBar` | The search box: `ChipInput` plus the parser's errors (translated from `analytics.search.errors.<code>`), the cap messages and four example presets | `tokens`, `tooMany`, `onAdd`, `onRemove`, `onPreset` | none |
+| `search/search-results.tsx` `SearchResults` | Matches newest first with "Load more"; separate states for loading, error (`SEARCH_TOO_BROAD` / `SEARCH_INVALID` / 403 mapped to advice), nothing captured, nothing matching and "index not started"; the freshness line and the 16 KiB badge | `items`, `isLoading`, `error`, `hasMore`, `indexedUntil`, `onOpen` | none (data from page) |
+| `search/search-detail-sheet.tsx` `SearchDetailSheet` | One result's headers and bodies in a `Sheet`, rendered by `shared/http-dump-section.tsx` like the per-API inspector | `item`, `onClose`; `useTrafficSearchDetail` | `GET /analytics/traffic/search/:id?ts=` |
 
 The traffic page itself calls `useAnalyticsTraffic(filters)` (`GET /analytics/traffic?...`) and `useAnalyticsHealth` (`GET /analytics/health`).
 
@@ -165,7 +170,9 @@ Other keys hooks not tied to a component listed here: `useResetKeyUsage` (`POST 
 
 | Component | Purpose | Key props / hooks | API |
 |---|---|---|---|
-| `overview-panel.tsx` `OverviewPanel` | Dark "ink" card: headline figures + HTTP status mix | `range`; `useAnalyticsOverview`, `useAnalyticsStatusCodes` | `GET /analytics/overview`, `GET /analytics/status-codes` |
+| `overview-panel.tsx` `OverviewPanel` | Dark "ink" card: headline figures + HTTP status mix | `range`, optional `scope` (the API it is narrowed to); `useAnalyticsOverview`, `useAnalyticsStatusCodes` | `GET /analytics/overview`, `GET /analytics/status-codes`; scoped: `GET /analytics/traffic?apiId=` |
+| `scope-tag.tsx` `ScopeTag`, `scope-chip.tsx` `ScopeChip` | The API's name in a scoped card's header; the "Showing <api> x" chip in the page header, shown only when the scope was picked (not automatic), clears `?api=` | `name`, `onClear` | none |
+| `endpoint-traffic-table.tsx` `EndpointTrafficTable` | "Traffic by endpoint": the per-API table's counterpart once the dashboard is scoped (method, path, requests, error rate, average and P95 latency) | `range`, `scope`; `useAnalyticsTraffic` | `GET /analytics/traffic?apiId=` |
 | `kpi-strip.tsx` `KpiStrip` | Throughput, P95, P99, active APIs/keys, node health | `range`, `showNodes`; `useAnalyticsOverview`, `useNodeHealth` | `GET /analytics/overview`, `GET /gateway/nodes/health` |
 | `kpi-tile.tsx` `KpiTile`, `KpiTileSkeleton` | Re-export of the package tiles, shared by home and traffic pages | `icon`, `label`, `value`, `hint`, `tone` (props in `KpiTileProps`) | none |
 | `figure.tsx` `Figure` | Adapter: package `Figure` with `locale` from `useLocale()` | `value`, `kind` (`compact`, `percent`, `ms`) | none |
@@ -176,7 +183,7 @@ Other keys hooks not tied to a component listed here: `useResetKeyUsage` (`POST 
 | `traffic-chart.tsx` `TrafficChart` | Request columns + error-rate strip, chart/table view, error budget; keyboard stepping (section 9) | `range`; `useAnalyticsTimeSeries('requests')`, `useAnalyticsOverview`, `usePrefersReducedMotion` | `GET /analytics/timeseries`, `/analytics/overview` |
 | `gateway-map.tsx` `GatewayMap` | World map of nodes plus text list; link to `/settings` | none; `useNodeHealth`, `locationOf` | `GET /gateway/nodes/health` |
 | `range-control.tsx` `RangeControl` | The single analytics time-range picker (package `SegmentedControl` fed by `ANALYTICS_RANGES`); see [RangeControl](#rangecontrol) | `value`, `onChange` | none |
-| `recent-activity-card.tsx` `RecentActivityCard` | Last 10 audit entries | `useRecentAudit` | `GET /audit-logs?page=1&pageSize=10` |
+| `recent-activity-card.tsx` `RecentActivityCard` | Last 10 audit entries; with `scope` (the dashboard is scoped to one API) only that API's entries, its name in the header, and its own empty text | optional `scope`; `useRecentAudit(apiId?)` | `GET /audit-logs?page=1&pageSize=10[&apiId=]` |
 | `sync-summary-card.tsx` `SyncSummaryCard` | Gateway reachability and API sync counts, retry failed syncs (polls 30 s) | `useGatewayStatus`, `useRetrySync` | `GET /gateway/status`, `POST /apis/:id/sync` |
 | `spec-updates-card.tsx` `SpecUpdatesCard` | APIs whose watched URL has an unreviewed version | `useSpecUpdates` | `GET /spec-updates` |
 | `viz-utils.ts` | Re-exports `useElementWidth`, `usePrefersReducedMotion`, `fx`, `columnPath`, `niceTicks` from the package and adds the app-only `bucketErrorRate`. `src/hooks/use-media-query.ts` also exports a `usePrefersReducedMotion` (built on `useMediaQuery`) | pure / hooks | none |
@@ -270,6 +277,9 @@ Generic UI lives in `packages/ui` as a prop-driven component; the app keeps only
 | File | Exports |
 |---|---|
 | `use-me.ts` | `useMe` (`GET /auth/me`, `retry: false`); shared source for the next two |
+| `use-search-query.ts` | `useSearchQuery` -> the request search's state kept in the URL (`?q=`, `?range=`): `tokens` (each with its parse result), `clauses`, `ready` (every chip understood and the 8 / 3 caps hold), `add`, `remove`, `setRange`, `replaceAll` |
+| `use-traffic-search.ts` | `useTrafficSearch(range, clauses, enabled)` (infinite query over `POST /analytics/traffic/search`, keyset cursor, `retry: false`, keeps the previous rows while a changed search loads), `useTrafficSearchDetail(item)`; the `TrafficSearchItem` / `Page` / `Detail` types mirror the API |
+| `use-dashboard-scope.ts` | `useDashboardScope` -> `{ api, auto, select(id), clear() }`: which API the home dashboard's API cards describe, the only managed API automatically or the one in `?api=<id>` |
 | `use-auth.ts` | `useAuth` -> `{ user, isLoading, isAuthenticated }` |
 | `use-permissions.ts` | `usePermissions` -> `{ can(permission), isLoading }` |
 | `use-apis.ts` | `useApis`, `useApiDetail`, `useApiKeys`, `useCreateApi`, `useUpdateApi`, `useSetApiStatus`, `useDeleteApi`, `useSyncApi`, `useDebugApi`, `useInvalidateCache`, `useApiTraffic` |
@@ -277,7 +287,7 @@ Generic UI lives in `packages/ui` as a prop-driven component; the app keeps only
 | `use-oauth-clients.ts` | `useOAuthClients`, `useCreateOAuthClient`, `useRotateOAuthClient`, `useRevokeOAuthClient` |
 | `use-tenants.ts` | `useTenants`, `useTenant`, `useTenantMembers`, `useCreateTenant`, `useUpdateTenant`, `useArchiveTenant`, `useLookupUser`, `useInviteMember`, `useInviteByEmail`, `useUpdateMemberRole`, `useRemoveMember`, `useTenantQuota`, `useSetTenantQuota`, `useResetTenantQuota`, `useTenantUsage` |
 | `use-plans.ts`, `use-products.ts`, `use-roles.ts`, `use-certificates.ts` | list + create/update/delete hooks; roles also `usePermissionCatalog` |
-| `use-analytics.ts` | `ANALYTICS_RANGES` (`1h`, `24h`, `7d`, `30d`), `useAnalyticsOverview`, `useAnalyticsTimeSeries`, `useAnalyticsApis`, `useAnalyticsKeys`, `useAnalyticsStatusCodes`, `useAnalyticsTraffic` (keeps previous data while filters change), `useAnalyticsHealth` |
+| `use-analytics.ts` | `ANALYTICS_RANGES` (`1h`, `24h`, `7d`, `30d`), `useAnalyticsOverview`, `useAnalyticsTimeSeries`, `useAnalyticsApis`, `useAnalyticsKeys`, `useAnalyticsStatusCodes`, `useAnalyticsTraffic` (keeps previous data while filters change), `useAnalyticsHealth`. `useAnalyticsOverview`, `useAnalyticsTimeSeries` and `useAnalyticsStatusCodes` take an optional `apiId`: with it they read the same figures for that one API from `/analytics/traffic` (mapped to the same shapes, `select` over the shared query, so every scoped card on the page costs one request), without it the gateway-wide endpoints. `useAnalyticsApis(range, enabled)` can be switched off when the dashboard is scoped |
 | `use-traffic-filters.ts` | `parseTrafficFilters`, `activeFilterCount`, `useTrafficFilters` (filters <-> URL search params via `router.replace`) |
 | `use-audit.ts` | `useRecentAudit` |
 | `use-gateway-status.ts` | `useGatewayStatus` (30 s polling), `useRetrySync` |
@@ -292,6 +302,9 @@ Generic UI lives in `packages/ui` as a prop-driven component; the app keeps only
 | File | Purpose |
 |---|---|
 | `api-client.ts` | `api.{get,post,put,patch,delete,postRaw,getBlob}`, `ApiRequestError`, `canAttemptReauth` |
+| `traffic-search.ts` | The search grammar: `tokenize`, `parseToken` (a token to a typed clause, or an error code with parameters), `SEARCH_LIMITS`, the clause types. It mirrors `apps/api/src/modules/analytics/search/traffic-search.types.ts`; a shared table of example clauses is asserted on both sides (`traffic-search.test.ts` here, `traffic-search.validate.spec.ts` there). The API validates again, so this is a convenience, not a boundary |
+| `http-status.ts` | `statusVariant(code)`: badge variant for an HTTP status |
+| `docs/` | Documentation plumbing: `i18n.ts` (`defineI18n` over the app's locales, `hideLocale: 'always'`, fallback to English), `source.ts` (the Fumadocs loader over the generated `.source/`), `ui-translations.ts` (Fumadocs' own strings in fr/ar), `remark-mermaid.ts` |
 | `portal-api-client.ts` | `portalApi.{get,post}` for the portal; returns unwrapped `data`; no refresh, no `X-Tenant-ID` |
 | `refresh-retry.ts` | `fetchWithRefresh`: on 401, one shared `POST /oauth2/refresh`, then one replay |
 | `cookie-names.ts` / `oauth-cookies.ts` | Cookie names; set/clear helpers (`httpOnly`, `sameSite: lax`, `secure` from `COOKIE_SECURE` else `NODE_ENV === 'production'`) |
@@ -506,3 +519,28 @@ Example: `NEXT_PUBLIC_GATEWAY_NODE_LOCATIONS={"gw-ma-01:8080":"MA-CASABLANCA","g
 - `src/lib/api-client.ts` deliberately has no `@/` runtime imports (`import type` only, relative import for `toast`) so it and `refresh-retry.ts` run under vitest with mocked `fetch`.
 - No Playwright/E2E directory exists under `apps/web` (there is no `e2e/` folder).
 - Other checks: `pnpm typecheck` (`tsc --noEmit`), `pnpm lint` (`next lint --max-warnings 0`; the root `eslint.config.js` also applies), `pnpm check:contrast`, and the CI guards `check-locale-keys.mjs` and `check-page-gates.sh`.
+
+## Documentation (`/docs`)
+
+In-platform documentation, rendered from MDX by Fumadocs inside the web app. Signed-in users only: the existing
+middleware redirects anyone without the session cookie to sign-in, the same as `/keys`; the search route is behind
+the same gate.
+
+- **Versions.** `fumadocs-core` and `fumadocs-ui` are pinned to 15.8.5 and `fumadocs-mdx` to 13.0.8 because 16.x
+  needs Next 16 (this app is on Next 15.5). Move to 16.x with the Next upgrade; that also unlocks
+  `fumadocs-openapi` (a generated API reference from the Nest Swagger spec).
+- **Language.** The app's `locale` cookie (next-intl) picks the language; there is no URL prefix. The layout and
+  page call `getLocale()` and ask the loader for that language (`source.getPage(slug, locale)`); Fumadocs' own
+  locale middleware is not used. A page missing in French or Arabic is served in English under a translated banner
+  (`docs.notTranslated`, in `messages/<locale>/docs.json`).
+- **Content.** `apps/web/content/docs/<locale>/*.mdx` and `meta.json`. English is the complete set; a test
+  (`src/lib/docs/docs.test.ts`) requires every language to list the same pages in its sidebar, every page to have a
+  title and description, and the `docs` messages to have the same keys in all three locales.
+- **Search.** Local (Orama) over the loader, at `/docs/search-index?locale=&query=`; no external service. Arabic
+  search finds words as written and some stems; `الوثائق` (with the article) does not find `وثائق`, which is a known gap.
+- **Diagrams.** A ```` ```mermaid ```` fence becomes a client `Mermaid` component (`components/docs/mermaid.tsx`),
+  loaded lazily so the cost (about 2.3 MB of JavaScript) is paid only by pages with a diagram.
+- **Build.** `.source/` is generated by `fumadocs-mdx` (`postinstall`, `next dev` and `next build`) and is
+  gitignored. `tsconfig.json` has `declaration` off: the generated source cannot be given an explicit type.
+- **Styles.** `src/styles/docs.css`, imported only by the docs layout, maps Fumadocs' `--color-fd-*` tokens onto the
+  app's own, so the docs follow the dashboard's light and dark theme.

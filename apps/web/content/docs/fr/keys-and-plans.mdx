@@ -1,0 +1,111 @@
+---
+title: Clés et forfaits
+description: Émettre et gérer des clés API et des clients OAuth, et fixer des limites avec des forfaits, des produits et des quotas.
+---
+
+Une clé identifie un appelant auprès de la passerelle. Un forfait fixe les limites sous lesquelles une clé fonctionne. Un produit regroupe
+des API pour que les développeurs les trouvent dans le [portail](/docs/portal).
+
+## Clés API
+
+Ouvrez **Clés**. La page exige la permission `key:read` ; sans elle, la page affiche **Accès refusé**.
+
+| Action | Permission | Sans elle |
+|---|---|---|
+| Créer une clé | `key:create` | **Créer une clé** est masqué |
+| Modifier, renouveler | `key:update` | Boutons masqués |
+| Révoquer, supprimer | `key:revoke` | Boutons masqués |
+
+La liste affiche le nom de chaque clé, son statut (**Active**, **Révoquée** ou **Expirée**), l’API, le forfait et
+l’expiration. Vous pouvez filtrer par statut et par API.
+
+### Créer une clé
+
+L’API doit être **Active** et **Synchronisée**. Cliquez sur **Créer une clé** et renseignez :
+
+- **Nom de la clé** et **API**. Seules les API actives sont listées. Une clé appartient à une seule API et ne peut pas être déplacée.
+- **Forfait**, facultatif. **Aucun forfait** est autorisé : la clé utilise alors les limites ci-dessous.
+- **Date d'expiration (facultatif)**. La clé est valide jusqu’à la fin de ce jour en UTC.
+- **Limite de débit (requêtes / seconde)**, **Quota (requêtes par période)** et **Période du quota** (**Horaire**,
+  **Journalier**, **Hebdomadaire** ou **Mensuel**). Laissez le débit vide ou à 0 pour illimité, et le quota vide
+  pour aucun. Quand vous choisissez un forfait, ces champs sont désactivés et indiquent **Défini par le forfait à la place**. Le
+  forfait d’une clé ne peut pas être changé après la création.
+
+Cliquez sur **Créer la clé**. Si l’API n’est pas encore synchronisée, un message d’erreur apparaît ; attendez **Synchronisée** et
+réessayez.
+
+### Ce qui n’est affiché qu’une fois
+
+Après la création, une boîte de dialogue intitulée **Copiez votre clé API** affiche la valeur de la clé avec un bouton **Copier**. Elle n’est
+affichée qu’une seule fois et ne peut pas être récupérée ensuite. Il en va de même après un renouvellement. Conservez-la dans un endroit
+sûr avant de fermer la boîte de dialogue.
+
+### Renouveler, révoquer, supprimer
+
+- **Renouveler** (`key:update`, clés actives uniquement) : l’identifiant actuel cesse de fonctionner immédiatement et un
+  nouveau le remplace. La nouvelle valeur n’est affichée qu’une fois.
+- **Révoquer** (`key:revoke`, clés actives uniquement) : la clé cesse de fonctionner immédiatement et est retirée de
+  la passerelle. Cette action est irréversible.
+- **Supprimer** (`key:revoke`) : une clé active doit être révoquée avant de pouvoir être supprimée. La suppression est
+  définitive.
+
+Ouvrez une clé pour voir ses **Détails**, ses **Limites** (lues en direct depuis la passerelle) et son **Utilisation**. **Modifier**
+change le nom, l’expiration et les limites. Changer le quota réinitialise le quota utilisé sur la période en cours.
+
+## Clients OAuth
+
+Une API dont le **Type d'authentification** est **OAuth2 (identifiants client)** a un onglet **Clients** à la place de l’onglet
+**Clés**. L’onglet exige `key:read`.
+
+1. Cliquez sur **Créer un client** (`key:create`) et saisissez un **Nom du client**. La limite de débit et le quota sont
+   facultatifs.
+2. Une boîte de dialogue intitulée **Copiez ces identifiants** affiche l’**ID client**, le **Secret client** et le
+   **Point de terminaison du jeton**. Le secret n’est affiché qu’une seule fois.
+3. Le client obtient un jeton avec le flux client_credentials, puis l’envoie sous la forme
+   `Authorization: Bearer <token>`.
+4. **Renouveler** (`key:update`) émet un nouveau secret, affiché une fois. **Révoquer** (`key:revoke`) arrête le
+   client immédiatement, y compris les jetons qu’il détient déjà. Cette action est irréversible.
+
+## Forfaits
+
+Ouvrez **Forfaits** (`plan:read`). Un forfait est un niveau de débit et de quota que des clés partagent. **Créer un forfait** exige
+`plan:create` ; la modification exige `plan:update` et la suppression `plan:delete`. Des boutons masqués signifient que vous
+n’avez pas la permission.
+
+| Champ | Signification |
+|---|---|
+| **Nom**, **Description** | Libellés du niveau. |
+| **Limite de débit**, **Par (secondes)** | Requêtes autorisées par fenêtre. Vide signifie illimité. |
+| **Plafond du quota** | `-1` signifie illimité. |
+| **Période du quota** | **Horaire**, **Journalier**, **Hebdomadaire** ou **Mensuel**. |
+| **Actif** | Les forfaits inactifs sont masqués du [portail](/docs/portal) : les développeurs ne peuvent donc pas les choisir. |
+
+Modifier un forfait change la limite des clés qui lui sont assignées, sauf si une clé a ensuite été modifiée individuellement.
+Supprimer un forfait le retire ; ses clés sont conservées et se retrouvent sans forfait, et le message de réussite en indique le nombre.
+Un forfait qui a des abonnements au portail ne peut pas être supprimé.
+
+## Produits
+
+Ouvrez **Produits** (`product:read`). Un produit est un regroupement nommé d’API avec un **Nom**, un **Slug**, une
+**Description** et des **API regroupées**. Les développeurs parcourent les produits dans le portail. Un produit n’accorde pas
+d’accès à lui seul. La création exige `product:create`, la modification `product:update`, la suppression `product:delete`.
+Supprimer un produit laisse ses API intactes. Un produit qui a un abonnement, quel qu’il soit, ne peut pas être supprimé.
+
+## Quota de l’organisation
+
+Une organisation peut aussi avoir un quota d’organisation, un plafond au-dessus de toutes les clés qu’elle émet. Avec `tenant:update`, ouvrez
+la page de l’organisation et utilisez **Modifier le quota** dans la carte **Utilisation**. **Réinitialiser l'utilisation** remet le compteur à zéro.
+Voir [Rôles, audit et organisations](/docs/roles-audit-tenants).
+
+## Ce que voient les appelants
+
+Voici les codes qu’un appelant reçoit de la passerelle.
+
+| Code | Cause |
+|---|---|
+| 401 | Aucune clé ni aucun jeton n’a été envoyé à un point de terminaison qui en exige un. Également une clé expirée, jusqu’à ce que la vérification nocturne (à minuit) la retire de la passerelle. |
+| 403 | La clé a été révoquée, ou une clé expirée a déjà été retirée, ou la clé est inconnue de la passerelle. Également un quota épuisé (**Quota exceeded**) sur la clé, son forfait ou l’organisation, un point de terminaison bloqué, ou **N'autoriser que les points de terminaison déclarés** est activé et le chemin ou la méthode n’est pas déclaré. |
+| 429 | Une limite de débit a été atteinte : celle de la clé, du forfait, de l’API ou d’un point de terminaison. |
+
+Le pare-feu edge, s’il est réglé sur le blocage, arrête un appel avant la passerelle et ne laisse aucun enregistrement. Voir
+[Le trajet d’une requête](/docs/how-it-works) et [Dépannage](/docs/troubleshooting).

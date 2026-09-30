@@ -1,0 +1,133 @@
+---
+title: APIs and OpenAPI import
+description: Create, import, edit and govern an API, and keep it in step with its OpenAPI document.
+---
+
+An API in MIRQAB is a route on the gateway: a listen path that forwards to your upstream server. You
+manage APIs under **APIs**. Viewing needs the `api:read` permission; without it the page shows
+**No access**.
+
+## Create, edit and delete
+
+| Action | Where | Permission | Without it |
+|---|---|---|---|
+| Create | **Create API** on the APIs page or the dashboard home | `api:create` | Button hidden |
+| Import | **Import OpenAPI** on the APIs page | `api:create` | Button hidden |
+| Edit, Activate, Disable | Open the API, then **Edit**, **Activate** or **Disable** | `api:update` | Buttons hidden |
+| Delete | Open the API, then **Delete** | `api:delete` | Button hidden |
+
+The **Edit API** sheet holds name, auth type, upstream URL, listen path, a rate limit (0 means
+unlimited), CORS settings and **Do not track**. The slug cannot change after creation. Saving pushes
+the change to the gateway.
+
+**Delete** asks you to confirm in the **Delete API?** dialog. An API with active keys cannot be deleted:
+revoke those keys first. It is also refused while OAuth2 clients use the API, or while a default version still has versions. The dialog also says the API is removed from the gateway.
+
+## Status and sync
+
+Each API has two states, shown as badges.
+
+| Status | Meaning |
+|---|---|
+| **Draft** | Every new or imported API starts here. It is not live on the gateway. |
+| **Active** | Live on the gateway. |
+| **Disabled** | Switched off with **Disable**. It is not live. |
+
+| Sync | Meaning |
+|---|---|
+| **Pending** | The gateway has not confirmed the latest change yet. |
+| **Synced** | The gateway has the latest change. |
+| **Failed** | The push failed. Hover over the badge to read the error, then click **Retry**. **Retry** needs the `api:sync` permission. |
+
+After a save, a message says whether the sync succeeded, failed or is still pending. You can filter
+the APIs list by status and by sync state.
+
+## Import an OpenAPI document
+
+Click **Import OpenAPI**. The wizard has three steps: document, check, import. Nothing is created
+until you click **Import**.
+
+1. Choose the source: **File or text** (upload a file or paste it) or **From URL**. The document must
+   be OpenAPI 3.x, JSON or YAML, UTF-8 text, up to 5 MB.
+2. Click **Check document**. Errors block the import; warnings do not. The check shows the name,
+   slug, listen path, upstream URL, endpoint count and a count per tag.
+3. If an API with the same slug or listen path exists, the wizard says so: enter a different **Slug
+   (optional)** and check again. If the document lists several servers, pick the **Upstream server**.
+   Click **Import**.
+
+The API name comes from the document title, and the slug and listen path come from the slug. MIRQAB
+then opens the API on its **Endpoints** tab. An imported API is **Draft** with **Auth type** **None**.
+Activate it, and change **Auth type** with **Edit** if callers need a key.
+
+## Keep an API in step with its spec source
+
+An API can watch a URL that serves its OpenAPI document. MIRQAB never changes the gateway by itself:
+a newly detected version waits for a person to review it.
+
+1. Open the API's **Endpoints** tab. The **Specification source URL** card sits at the top.
+2. Click **Watch a URL**, enter the **Document URL** and choose how often to check: every 15 minutes,
+   every hour, every 6 hours or every 24 hours. The wizard offers the same choice through **Keep
+   checking this URL**.
+3. The card shows **State** (**Watching** or **Paused**), **Last checked**, **Next check** and
+   **Last result**. **Check now** runs a check at once; a second check within 30 seconds is refused.
+   **Edit source** and **Remove** change or stop the watch.
+4. When the document changes, a banner reads **A new version of the specification is available** with
+   the counts added, removed and changed. The APIs list shows **Update available**, and the dashboard
+   home lists the API under **Specs with updates**.
+5. Click **Review** in the banner. The **Review the new version** sheet compares it with the current
+   version. **Use this version** creates the next version and resyncs the API. **Dismiss** hides
+   that content; a different change is proposed again.
+
+Limits shown in the messages: http or https only, no user name or password in the URL (put a token in
+the query string), at most 5 MB, at most 3 redirects, and at most 50 watched URLs per workspace.
+
+Watching later needs `api:update`, but importing from a URL starts watching by default with only `api:create`. With only `api:read` you see the card and the banner reads **View
+changes**, but **Use this version** and **Dismiss** are hidden.
+
+To replace the document yourself, click **Update specification** on the Endpoints tab, upload the new
+document, click **Compare**, then **Apply new version**. Settings of endpoints that stay are kept.
+
+## The Endpoints tab and endpoint controls
+
+The tab lists the endpoints of the stored document with **Method**, **Path**, **Tags** and **Governed**
+columns, plus **Search endpoints** and a tag filter. An API with no stored document shows **No OpenAPI
+document**; with `api:update` you can click **Upload specification**.
+
+Two levels of control exist:
+
+- **Only allow declared endpoints.** Off, every path under the listen path reaches the upstream. On,
+  only the endpoints in the document answer and everything else gets 403. A dialog asks you to
+  confirm. This is the only setting that works as a hard boundary.
+- **Per endpoint.** Use the edit control on an endpoint's row to open **Endpoint settings**.
+
+| Section | Control | What it does |
+|---|---|---|
+| Access | **Endpoint enabled** | Off: the gateway answers 403 and never calls the upstream. |
+| Access | **Allow without a key** | Callers need no key for this endpoint. |
+| Traffic | **Rate limit** | Answers 429 past the limit. It is one counter shared by all callers. |
+| Traffic | **Timeout** | Answers 504 when the upstream is slower. |
+| Traffic | **Request size limit** | Answers 400 for a larger body. |
+| Responses | **Cache responses** | Serves repeat GET requests from the cache. Offered for GET endpoints only, and not while an API-wide cache is on. |
+| Responses | **Mock response** | Answers with a fixed response; the upstream is not called. |
+| Responses | **Validate request body** | Answers 422 for JSON that breaks the schema. Offered for POST, PUT and PATCH endpoints only. |
+
+Select several rows to open the bulk bar. Its **Actions** menu offers **Block**, **Unblock**, **Allow
+without a key**, **Use the API's authentication** and the rate limit, timeout, size limit and cache
+settings. When a new version of the document drops an endpoint that had settings, a notice lists them as
+settings for endpoints no longer in the specification, and **Remove stale settings** deletes them.
+
+Changing these needs `api:update`. Without it, the rows open **Endpoint settings (read only)**.
+
+## Detailed recording and request search
+
+By default MIRQAB records the figures of each request, not its headers and bodies. To capture them for
+one API, open its **Designer** tab, open the **Detailed recording** card and turn on **Record full
+detail**. It is off by default because detailed records carry headers and bodies.
+
+- The API's **Traffic** tab then lists the captured requests and responses. It needs `api:update`.
+  Values of fields whose names look like credentials are shown as `[REDACTED]`.
+- **Request search** under Analytics searches only captured requests. When nothing was
+  captured in the chosen window, it says so and tells you to turn on detailed recording for an API. It needs both `analytics:read`
+  and `api:update`. See [Searching traffic](/docs/searching-traffic).
+
+Next: [Keys and plans](/docs/keys-and-plans) and [Getting started](/docs/getting-started).

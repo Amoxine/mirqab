@@ -106,6 +106,7 @@ Runtime dependencies (`package.json`): fourteen `@radix-ui/react-*` packages, `c
 | `Popover`, `PopoverTrigger`, `PopoverContent` | `components/popover.tsx` | Popover |
 | `PageFilter`, `countActiveFilters`, field/value/label types | `components/page-filter.tsx` | Config-driven filter bar |
 | `SegmentedControl`, `SegmentedOption`, `SegmentedControlProps` | `components/segmented-control.tsx` | Single-select chip row |
+| `ChipInput`, `ChipInputChip`, `ChipInputLabels`, `ChipInputProps` | `components/chip-input.tsx` | Text field that turns typed text into removable chips |
 | `StateMessage`, `StateCard`, `StateMessageProps` | `components/state-card.tsx` | Empty / error / not-found body |
 | `PageHeader`, `PageHeaderProps` | `components/page-header.tsx` | Title row, badges, actions, back link |
 | `Eyebrow` | `components/eyebrow.tsx` | Mono uppercase caption |
@@ -408,6 +409,21 @@ Generic over `T extends string`; built on `ToggleGroup`. The active chip cannot 
 | `options` | `{ value: T; label: ReactNode; title?: string }[]` | `title` is the hover text. |
 | `ariaLabel` | `string` | Accessible name of the group. |
 | `className` | `string?` | |
+
+#### `ChipInput` (`components/chip-input.tsx`)
+
+A text field whose committed entries are shown as chips. It does not know what the text means: the parent parses it and reports the result through `chips`. Enter commits (and is ignored while an IME composition is being confirmed, and on blank text); Backspace in an empty field removes the last chip; activating a chip moves its text back into the field and removes the chip, so editing is remove-then-retype.
+
+| Prop | Type | Notes |
+|---|---|---|
+| `chips` | `{ id: string; text: string; tone?: 'default' \| 'negated' \| 'error' }[]` | `text` is what is shown and what editing restores; `tone` picks the `Badge` variant (`outline`, `warning`, `destructive`). |
+| `onSubmit` | `(text: string) => void` | The draft on Enter; never called for blank text. |
+| `onRemove` | `(id: string) => void` | From the chip's button, from editing it, and from Backspace on an empty field. |
+| `labels` | `ChipInputLabels` | `input` (field name), `placeholder` (shown only while there are no chips), `remove(text)`, `edit(text)` (accessible names). |
+| `describedBy` | `string?` | Id of the element that explains the chips (error messages), wired to `aria-describedby`. |
+| `className` | `string?` | |
+
+Used by the request search (`apps/web/src/components/analytics/search/search-bar.tsx`), which supplies the parser.
 
 #### `ChartCard` (`components/chart-card.tsx`)
 

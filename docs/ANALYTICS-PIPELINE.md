@@ -240,6 +240,12 @@ the old single-pattern pass let a body of `"cvv":1,` repeated hold a single-row 
 200 KB (and stall the pump for every tenant); measured on Postgres 16 after the change, any such row
 takes 40-80 ms, and a 500-row batch of ordinary 1 KB requests got faster (~0.9 ms/row, was ~1.4).
 
+The bracket passes for a configured field that holds an object or array (`"cookies":{...}`) are **guarded**: they
+run only when a listed field is actually followed by `{` or `[`. Unguarded they tripled the regex count per dump and
+measured 0.25 ms -> 10.7 ms per dump (about 20 ms per row with both columns, so a 1000-row pump batch would stall
+~20 s); guarded it is 0.30 ms. A database spec (`pump-redaction.db-spec.ts`, the last case) inserts 1200 ordinary
+rows and fails if that batch takes more than 8 s (about 1 s measured; about 24 s without the guard).
+
 A dump that cannot be decoded (a gzip/binary body is not UTF-8) is stored as the base64
 of `[UNREDACTABLE: non-UTF8 body]` in that column only: never the unredacted original, and never an
 error that would abort the pump's whole batch.
@@ -293,6 +299,131 @@ recording left off for that API costs ~0, its `rawrequest`/`rawresponse` stay em
 detailed recording off per-API (WP15b's `enable_detailed_recording` toggle) for APIs that don't need
 request/response bodies in analytics — the scalar columns alone (no detailed recording) cost a few
 hundred bytes/row, not ~2.8 KB.
+
+## Traffic search projection
+
+`POST /analytics/traffic/search` does not read `tyk_analytics`. It reads `og_traffic_search`, a separate table
+the API fills from the captured rows, so searching can have its own indexes without slowing the pump's inserts.
+The search table is created and maintained by the API; the pump never sees it.
+
+```
+tyk_analytics (pump, trigger-redacted)
+      │  every 10 s (+ hourly over 6 h): re-read a lookback window
+      ▼
+TrafficSearchIndexerService ── parseHttpDump(dump, apiAuthHeader) ──► og_traffic_search (daily partitions)
+                                                                              ▲
+POST /analytics/traffic/search ── typed clauses, tenant's Tyk API ids, window ┘
+```
+
+**Why a copy and not indexes on `tyk_analytics`.** The dumps there are base64 text, so they cannot be searched
+without decoding every row, and a full-text index on a table the pump writes would put its cost on the pump's
+insert path (measured below: the full-text index cuts inserts from thousands of rows per second to hundreds).
+The projection holds decoded, redacted text in its own table, written by one indexer in batches of 500.
+
+**Table** (`search/traffic-search.ddl.ts`, created at API boot and every 6 hours, idempotent, not a Prisma
+migration because a table absent from `schema.prisma` is proposed for DROP): `og_traffic_search`, range-partitioned
+by UTC day on `ts`, columns `id` (from a sequence: a partitioned table cannot have an identity column on PG 16),
+`ts`, `apiid`, `method`, `path`, `status`, `latency_ms`, `key_alias`, `ip`, `req_headers` / `res_headers` (`jsonb`,
+lower-case names), `req_body` / `res_body` (text, at most 16 KiB each), `req_truncated` / `res_truncated`,
+`dedupe_key`. `og_traffic_search_state` holds one row, `scanned_until`.
+
+| Index | Serves |
+|---|---|
+| unique `(ts, dedupe_key)` | `ON CONFLICT DO NOTHING`: a repeated scan inserts nothing |
+| `(apiid, ts DESC)`, `(apiid, method, ts DESC)` | tenant + window, newest first; method filter |
+| GIN `jsonb_path_ops` on each header column | `header:` clauses (`@>` for a value, `@?` for "exists") |
+| GIN on `to_tsvector('simple', coalesce(req_body,'') \|\| ' ' \|\| coalesce(res_body,''))` | word/phrase search on either body; a `req:`/`res:` search adds an exact recheck on that side |
+
+Left out on purpose (measured expensive or unused, see below): trigram indexes on bodies and path, a JSON-body
+index, a partial `status >= 500` index, a path index. The full-text index is on an **expression**, not a stored
+`tsvector` column (a stored column adds about 3 KB per row of TOAST); `search/traffic-search.sql.ts` holds the
+expression once and both the DDL and the query builder import it, because Postgres uses an expression index only
+when the query repeats the exact expression (a test asserts the compiled query contains it).
+
+**Retention.** One partition per day; the store keeps today and the next two days ready and drops a partition
+when its whole day is older than `ANALYTICS_RETENTION_DAYS` (default 30, the same knob as the raw table). Dropping
+a partition is a metadata operation: no row deletes, no bloat.
+
+**Indexer.** `TrafficSearchIndexerService`:
+- `tyk_analytics` has no id column, and the pump writes batches that can arrive out of order, so there is no cursor
+  to resume from. Each tick re-reads from `scanned_until` minus 15 minutes; an hourly pass reaches back 6 hours.
+  Inserting `ON CONFLICT (ts, dedupe_key) DO NOTHING` makes re-reading free and a late row still lands.
+  `dedupe_key = sha256(apiid | timestamp (µs) | apikey | method | path | responsecode | latency_total | requesttime)`.
+  **Ceiling:** a record the pump delivers later than 6 hours is never indexed; two requests identical in all of
+  those columns and in the microsecond collapse into one row.
+- Reads are a keyset over `(timestamp, dedupe_key)` in pages of 500, so a thousand rows with the same timestamp are
+  neither skipped nor repeated. Timestamps travel as text with microseconds (a JS `Date` would round them).
+- The first scan reaches back `TRAFFIC_SEARCH_BACKFILL_DAYS` (default 7, never more than retention). Rows older than
+  the retention window are not indexed.
+- It **refuses to index while the redaction trigger is missing or disabled** (the same check the inspector makes).
+- One scan at a time; a failed tick is logged and retried from the same point. It never throws into the scheduler.
+
+**Redaction at index time.** Every dump goes through `parseHttpDump`, the pass the traffic inspector displays with,
+with each API's own `authHeaderName`, so what is searchable is exactly what a person could already see: a value
+shown as `[REDACTED]` cannot be found by searching for it (a search would otherwise be an oracle for secrets). A
+multipart body is stored as a fixed placeholder, because the parser does not understand boundaries. A header that
+matches no secret pattern and is not the API's configured auth header is **not** redacted (a test shows the
+difference). A spec plants eight secrets (bearer token, cookie, password, a nested `cookies` object, a custom auth
+header, query-string and response tokens, a multipart secret) and asserts none is in any column and none is found
+by any body or header clause. Known gaps, inherited from the inspector: a stray `"` in a non-JSON body, a token in a
+URL path segment, a JWT in a field whose name is not secret-looking.
+
+**Freshness.** `indexedUntil` in every response is `scanned_until`; the UI shows it. An empty result before that
+instant is real; after it, the row may not be indexed yet. A request is searchable about 10 seconds after the pump
+has written it, plus the pump's own purge delay (`purge_delay: 10`).
+
+**Limits the API enforces** (`SEARCH_LIMITS`): at most 8 clauses and 3 body clauses; body and path terms of at least
+3 letters or digits; the words `id, data, name, value, true, false, null, type, status, message` are refused as body
+terms (measured: `id` alone ran to the 3 s timeout over 30 days); values up to 200 characters; pages of up to 100
+with a keyset cursor and no total (`count(*)` over 30 days measured 192 ms); a window is always applied; a 3 s
+statement budget per request (`TRAFFIC_SEARCH_TIMEOUT_MS`).
+
+**What search cannot do.** Substring, regular-expression, JSON-field and path-glob search were measured and left
+out. Word search does not stem (`fund` does not find `funds`). It covers only the first 16 KiB of each body (the
+trigger cuts a dump at 16,384 characters before anything else); about 15% of responses in the test data hit the
+cap. A common word over a long window is refused or times out rather than answered slowly.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ANALYTICS_RETENTION_DAYS` | 30 | Also the partition retention of the search table |
+| `TRAFFIC_SEARCH_BACKFILL_DAYS` | 7 | How far the first indexer scan reaches back (capped at retention) |
+| `TRAFFIC_SEARCH_TIMEOUT_MS` | 3000 | Per-search statement budget, clamped to 100-10000 |
+
+**Measured cost (PostgreSQL 16.13, one 500,000-row load of realistic captured dumps, in batches of 500, with every
+index in place).** Figures come from a throwaway container on a developer laptop, not from production; treat them
+as orders of magnitude.
+
+| | 102,000 rows | 500,000 rows |
+|---|---|---|
+| Total size | 586 MB (6.0 KB/row) | 2,815 MB (5.9 KB/row) |
+| Table (heap + TOAST) | 235 MB | 1,157 MB (2.4 KB/row) |
+| All indexes | 350 MB | 1,658 MB (3.5 KB/row) |
+| Full-text index alone | 304 MB | 1,453 MB (3.0 KB/row), about 88% of index size |
+| Both header indexes | 28 MB | 114 MB |
+
+- **Write rate.** Between 234 rows/s (first 25,000) and about 180-195 rows/s (last 25,000), sustained over the
+  whole load. Compare this with your own traffic: the indexer must sustain your peak captured-request rate.
+- **Query time, median over repeated runs** (500,000 rows; "24h" is about 71,000 rows, "7d" covers all of them):
+
+| Filter | 24h | 7d |
+|---|---|---|
+| status >= 500 | 11 ms | 10 ms |
+| header equals / exists | 3.4 / 1.8 ms | 9.8 / 2.1 ms |
+| latency > 800 and POST | 15 ms | 17 ms |
+| path prefix | 3.3 ms | 3.2 ms |
+| unfiltered newest page | 1.3 ms | 1.6 ms |
+| word in either body | 35 ms | 136 ms |
+| status + method + word + header | 23 ms | 117 ms |
+| `COUNT(*)` of a filter (not used by search) | 81 ms | 364 ms |
+
+  The full-text index is what grows with the window: a word search over a week is about four times slower than
+  over a day. That is why the endpoint has a statement budget and answers `SEARCH_TOO_BROAD` instead of running
+  long.
+- **Retention.** Dropping one day partition (71,428 rows, all indexes) took 23 ms to detach and 476 ms to drop,
+  so expiry never blocks the table.
+- **Caveat.** The 500,000 rows were staged in time order, so this run says nothing about concurrent writes
+  during a query.
+
 
 ## Debugging an empty pipeline
 

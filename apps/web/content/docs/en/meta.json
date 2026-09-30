@@ -1,1 +1,15 @@
-{ "title": "Documentation", "pages": ["index", "how-it-works"] }
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "how-it-works",
+    "getting-started",
+    "apis-and-openapi-import",
+    "keys-and-plans",
+    "portal",
+    "analytics-and-traffic",
+    "searching-traffic",
+    "roles-audit-tenants",
+    "troubleshooting"
+  ]
+}

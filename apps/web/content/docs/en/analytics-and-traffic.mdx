@@ -1,0 +1,99 @@
+---
+title: Analytics and traffic
+description: How to read the dashboard home, the Analytics page and the Traffic page.
+---
+
+Three pages show what your APIs are doing: the **Dashboard** (home), **Analytics** and **Traffic**.
+**Analytics** and **Traffic** sit in the **Workspace** group of the sidebar. All three need permission to read analytics
+(`analytics:read`). Without it, **Analytics** and **Traffic** show a "No access" message, and the Dashboard
+hides its figures, range control and **Refresh** button. See [Roles, audit and tenants](/docs/roles-audit-tenants).
+
+## The time range
+
+Every analytics figure covers one range: **Last hour**, **Last 24 hours**, **Last 7 days** or
+**Last 30 days**. The control shows them as 1h, 24h, 7d and 30d, with the long names as tooltips. The Dashboard and **Analytics** start on Last 24 hours. Chart time buckets are in UTC.
+Changing the range reloads the analytics cards on the page. On the Dashboard, **Refresh** reloads them again. Cards that do not depend on analytics are not reloaded.
+
+## The Dashboard
+
+The Dashboard opens with these cards, top to bottom:
+
+| Card | What it shows |
+|---|---|
+| Overview | Total requests, Success rate and Avg latency for the range, and a bar of responses by status class. |
+| Latency | Average latency, split into time spent upstream (in your API) and time added by the gateway. |
+| Error rate | The share of requests that ended in an error, with its trend and the peak. |
+| Top APIs | Which APIs carry the most requests. |
+| Key figures | Throughput, P95 latency, P99 latency and Active APIs. |
+| Traffic by API | Volume, error rate, average latency and status for the busiest APIs. |
+| Request volume | Requests and error rate over time, as a chart or a table. |
+
+A dash instead of a number means nothing was recorded in the range. The Dashboard never shows a made-up zero.
+P95 and P99 are the latency that 95% and 99% of requests stayed under. A row in **Traffic by API** gets a
+triangle mark at an error rate of 5% or more.
+
+The Dashboard also shows cards that do not depend on analytics, each only if you hold the permission:
+
+- **Gateway nodes**, a map of the gateway nodes, and a **Gateway nodes** figure in **Key figures**: permission to read settings.
+- **API sync status**: permission to read settings. It counts APIs as Synced, Pending or Failed.
+  See [Troubleshooting](/docs/troubleshooting).
+- **Specs with updates**: lists APIs whose watched specification has a new version. It needs `api:read`.
+- **Recent activity**: permission to read the audit log. **View all** opens [Audit Logs](/docs/roles-audit-tenants).
+- **Quick actions**: a link to **Manage APIs**, **Manage Keys** or **Manage Tenants** for each one you may read.
+
+## One API or several
+
+When your tenant manages exactly one API, the API cards describe that API. **Top APIs** becomes
+**Top endpoints**, and **Traffic by API** becomes **Traffic by endpoint**. The Overview, Latency, Error rate, Key figures,
+Request volume and Recent activity cards narrow to that API too. You cannot clear this scope.
+
+When you manage several APIs, the cards cover all of them. To narrow the Dashboard, use the
+crosshair button on a row of **Traffic by API**. Its tooltip reads **Show only** followed by the API name. A **Showing** chip with the API name
+appears at the top, and `?api=` is added to the page address, so you can share the narrowed view.
+The chip has a close button named **Show all APIs**. Use it to go back.
+
+## The Analytics page
+
+**Analytics** shows tiles (Total requests, Error rate, Avg latency, Errors, Active APIs, Active keys), then the
+charts **Requests**, **Latency** and **Status codes**, and two tables: **Traffic by API** and **Traffic by key**.
+Each table lists requests, errors, error rate and average latency.
+
+## The Traffic page
+
+**Traffic** shows live gateway traffic, narrowed by these filters:
+
+| Filter | Choices |
+|---|---|
+| Time range | The four ranges above. |
+| API | **All APIs** or one API. |
+| API key | **All keys** or one key. The list shows the keys of the API you chose. |
+| Method | **All methods** or one of GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. |
+| Status class | Success (2xx), Redirect (3xx), Client error (4xx), Server error (5xx). |
+| Authentication | **All traffic**, **With an API key** or **Without a key**. |
+| Latency | **Any latency** or **Slower than** 100, 250, 500, 1000 or 2000 ms. |
+| Exact status | One code from 100 to 599. |
+| Path contains | Text that appears anywhere in the request path, up to 200 characters. |
+
+Choosing an API clears the key filter. The filters live in the page address, so you can share a filtered view.
+When any are set, the filter card shows the text "N filters active" next to **Reset filters**, which clears them. **Reset filters** keeps the time range.
+
+Below the filters, the page shows key figures (Requests, Throughput, Error rate, Avg latency, P95 latency,
+P99 latency, Clients, Data received), the charts **Requests over time** and **Latency over time**, **Traffic mix**,
+and two endpoint tables: **Busiest endpoints** and **Slowest endpoints**. The slowest table ranks by P95 among the
+busiest endpoints and needs at least 5 requests per endpoint.
+
+To find individual requests by their headers or bodies, use [Request search](/docs/searching-traffic).
+
+## When analytics is not receiving data
+
+Analytics, Traffic and the Dashboard check that requests are being recorded before they draw figures.
+
+- **Analytics pipeline not receiving data** replaces the figures. The card reports whether the recorder is
+  Running or Not running, whether its tables are Present or Missing, the Rows recorded and the Last record.
+  The hint says which case applies: the recorder is down, its tables do not exist yet, or no requests have
+  arrived yet. In the last case, send traffic through the gateway.
+- **Tyk Pump is not running** appears above the figures when earlier records exist. The figures are stale.
+  The notice gives the time of the Last record.
+- **Failed to load data** means the request for the figures failed. Use the retry button.
+
+Restarting the recorder is work for whoever runs the platform. Tell them which message you see.

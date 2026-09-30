@@ -1,0 +1,111 @@
+---
+title: Keys and plans
+description: Issue and manage API keys and OAuth clients, and set limits with plans, products and quotas.
+---
+
+A key identifies a caller to the gateway. A plan sets the limits a key runs under. A product bundles
+APIs so developers can find them in the [portal](/docs/portal).
+
+## API keys
+
+Open **Keys**. The page needs the `key:read` permission; without it the page shows **No access**.
+
+| Action | Permission | Without it |
+|---|---|---|
+| Create a key | `key:create` | **Create Key** is hidden |
+| Edit, rotate | `key:update` | Buttons hidden |
+| Revoke, delete | `key:revoke` | Buttons hidden |
+
+The list shows each key's name, status (**Active**, **Revoked** or **Expired**), API, plan and
+expiry. You can filter by status and by API.
+
+### Create a key
+
+The API must be **Active** and **Synced**. Click **Create Key** and fill in:
+
+- **Key name** and **API**. Only active APIs are listed. A key belongs to one API and cannot be moved.
+- **Plan**, optional. **No plan** is allowed: the key then uses the limits below.
+- **Expiration date (optional)**. The key is valid through the end of that day in UTC.
+- **Rate limit (requests / second)**, **Quota (requests per period)** and **Quota period** (**Hourly**,
+  **Daily**, **Weekly** or **Monthly**). Leave the rate blank or 0 for unlimited, and the quota blank
+  for none. When you pick a plan these fields are disabled and read **Set by the plan instead**. A
+  key's plan cannot be changed after creation.
+
+Click **Create key**. If the API is not synced yet, an error message appears; wait for **Synced** and
+try again.
+
+### What is shown once
+
+After creation a dialog titled **Copy your API key** shows the key value with a **Copy** button. It is
+shown only once and cannot be retrieved later. The same is true after a rotation. Store it somewhere
+safe before you close the dialog.
+
+### Rotate, revoke, delete
+
+- **Rotate** (`key:update`, active keys only): the current credential stops working immediately and a
+  new one replaces it. The new value is shown once.
+- **Revoke** (`key:revoke`, active keys only): the key stops working immediately and is removed from
+  the gateway. This cannot be undone.
+- **Delete** (`key:revoke`): an active key must be revoked before it can be deleted. Deleting removes it
+  permanently.
+
+Open a key to see its **Details**, **Limits** (read live from the gateway), and **Usage**. **Edit**
+changes the name, expiry and limits. Changing the quota resets the quota used in the current period.
+
+## OAuth clients
+
+An API whose **Auth type** is **OAuth2 (client credentials)** has a **Clients** tab instead of a
+**Keys** tab. The tab needs `key:read`.
+
+1. Click **Create client** (`key:create`) and enter a **Client name**. Rate limit and quota are
+   optional.
+2. A dialog titled **Copy these credentials** shows the **Client ID**, the **Client secret** and the
+   **Token endpoint**. The secret is shown only once.
+3. The client gets a token with the client_credentials grant, then sends it as
+   `Authorization: Bearer <token>`.
+4. **Rotate** (`key:update`) issues a new secret, shown once. **Revoke** (`key:revoke`) stops the
+   client immediately, including tokens it already holds. This cannot be undone.
+
+## Plans
+
+Open **Plans** (`plan:read`). A plan is a rate and quota tier that keys share. **Create Plan** needs
+`plan:create`; editing needs `plan:update` and deleting needs `plan:delete`. Hidden buttons mean you
+lack the permission.
+
+| Field | Meaning |
+|---|---|
+| **Name**, **Description** | Labels for the tier. |
+| **Rate limit**, **Per (seconds)** | Requests allowed per window. Blank means unlimited. |
+| **Quota ceiling** | `-1` is unlimited. |
+| **Quota period** | **Hourly**, **Daily**, **Weekly** or **Monthly**. |
+| **Active** | Inactive plans are hidden from the [portal](/docs/portal), so developers cannot pick them. |
+
+Editing a plan changes the limit for the keys assigned to it, unless a key was edited on its own afterwards.
+Deleting a plan removes it; its keys are kept and become plan-less, and the success message gives their number.
+A plan that has portal subscriptions cannot be deleted.
+
+## Products
+
+Open **Products** (`product:read`). A product is a named bundle of APIs with a **Name**, **Slug**,
+**Description** and **APIs bundled**. Developers browse products in the portal. A product does not grant
+access by itself. Creating needs `product:create`, editing `product:update`, deleting `product:delete`.
+Deleting a product leaves its APIs untouched. A product that has any subscription cannot be deleted.
+
+## Tenant quota
+
+A tenant can also have an org quota, a ceiling above every key it issues. With `tenant:update`, open
+the tenant's page and use **Edit quota** in the **Usage** card. **Reset usage** zeroes the counter.
+See [Roles, audit and tenants](/docs/roles-audit-tenants).
+
+## What callers see
+
+These are the codes a caller gets from the gateway.
+
+| Code | Cause |
+|---|---|
+| 401 | No key or token was sent to an endpoint that requires one. Also an expired key, until the nightly check (at midnight) removes it from the gateway. |
+| 403 | The key was revoked, or an expired key was already removed, or the key is not known to the gateway. Also a used-up quota (**Quota exceeded**) on the key, its plan or the tenant, a blocked endpoint, or **Only allow declared endpoints** is on and the path or method is not declared. |
+| 429 | A rate limit was reached: the key's, the plan's, the API's or an endpoint's. |
+
+The edge firewall, if it is set to block, stops a call before the gateway and leaves no record. See
+[How a request travels](/docs/how-it-works) and [Troubleshooting](/docs/troubleshooting).

@@ -104,8 +104,11 @@ Gaps noticed while documenting the expanded `packages/ui`; none is a bug. Detail
 | Form sheets | Six `*-form-sheet.tsx` (`apis/api-form-sheet.tsx`, `keys/key-form-sheet.tsx`, `plans/plan-form-sheet.tsx`, `products/product-form-sheet.tsx`, `roles/role-form-sheet.tsx`, `tenants/tenant-form-sheet.tsx`) repeat the same header / footer boilerplate; a generic `FormSheet` is not extracted (the duplication is reported by the maintainers; the six files were not diffed here, unverified) |
 | Layout chrome | `components/layout/breadcrumb.tsx`, `theme-switcher.tsx` and `locale-switcher.tsx` are app-only (next-intl / next-themes / route logic inline) and not generic in the package |
 | Default strings | `DialogContent` / `SheetContent` default `closeLabel` to the English `Close`; only the app wrappers and `RevealDialog` callers pass a translated one |
-| Package deps | `@radix-ui/react-separator` is declared in `packages/ui/package.json` and imported nowhere (verified); `@tanstack/react-table` is both a peer and a devDependency (intended) |
+| Package deps | `@tanstack/react-table` is both a peer and a devDependency of `packages/ui` (intended). The unused `@radix-ui/react-separator` and `react-collapsible` were removed in `8d80a36` |
 | Boundary check | The "no `next-intl` / `next/*` / `react-query` / `apps/web`" rule for `packages/ui` is upheld today (grep) but no lint rule enforces it (unverified for root ESLint config) |
+| Search gaps | Request search is the lean core only: no substring, regex, JSON-field or path-glob search (measured too slow or costly, see `ANALYTICS-PIPELINE.md`). Word search does not stem and sees only the first 16 KiB of a body. A record the pump delivers more than 6 hours late is never indexed |
+| Docs gaps | `/docs` is pinned to Fumadocs 15.8.5 (16.x needs Next 16), so the generated API reference (`fumadocs-openapi`) waits for that upgrade. Arabic search misses some word forms (`الوثائق` vs `وثائق`) |
+| Audit | Reading captured bodies through request search writes no audit row (a decision, asserted by a test). Dashboard "Recent activity" is scoped to the selected API through `details.resourceId`; `apis` rows written before that id was recorded (8 of 128 in the dev data) are not matched |
 | Stale doc | `packages/ui/components.json` still points shadcn at `@ui/components/ui` although components sit flat in `src/components/` |
 
 ## Keeping this current

@@ -1,0 +1,111 @@
+---
+title: Rechercher dans le trafic
+description: Retrouvez des requêtes et des réponses individuelles par statut, latence, en-têtes ou mots de leurs corps.
+---
+
+**Recherche de requêtes** retrouve des requêtes isolées, avec leurs en-têtes et leurs corps, là où **Trafic** n’affiche que des totaux.
+
+## Où la trouver et qui peut l’utiliser
+
+Dans le groupe **Espace de travail** de la barre latérale, choisissez **Recherche de requêtes**. Elle se trouve sous **Analytique** et **Trafic**.
+
+Il vous faut deux permissions : celle de lire l’analytique (`analytics:read`) et celle de modifier les API
+(`api:update`). Les corps capturés peuvent contenir des données clients : lire l’analytique seule ne suffit donc pas. Sans les deux,
+la barre latérale masque l’entrée. Si vous ouvrez tout de même la page, elle affiche « Accès refusé » et nomme la permission manquante.
+Voir [Rôles, audit et organisations](/docs/roles-audit-tenants).
+
+## Ce qu’elle recherche
+
+Recherche de requêtes ne retrouve que les requêtes **capturées**, c’est-à-dire celles dont l’API avait l’**Enregistrement détaillé**
+activé. L’interrupteur est **Enregistrer le détail complet**, dans le Concepteur de l’API, et il est désactivé par défaut.
+Les requêtes émises pendant qu’il était désactivé restent introuvables. Sans filtre défini et sans requête capturée sur la période, la page indique
+« Aucune requête capturée sur cette période. Activez l’enregistrement détaillé d’une API pour en capturer. »
+
+Une recherche ne couvre que les API de votre organisation.
+
+## Écrire une recherche
+
+Saisissez un filtre dans la zone et appuyez sur **Entrée**. Chaque filtre devient une pastille. Tous les filtres doivent correspondre : chaque pastille
+restreint donc le résultat. Sans pastille, la page liste les requêtes capturées les plus récentes. Les résultats vont du plus récent au plus ancien, 50 à
+la fois, et **Charger plus** récupère les 50 suivants.
+
+| Filtre | Exemple | Trouve |
+|---|---|---|
+| `status:` | `status:>=500` | Les réponses de statut 500 ou plus. Aussi `status:404`, `status:5xx`, `status:200-299` et `status:404,429`. |
+| `method:` | `method:POST` | Les requêtes de cette méthode. Donnez-en plusieurs avec des virgules, comme `method:PUT,PATCH`. |
+| `latency:` | `latency:>800` | Les requêtes plus lentes que 800 millisecondes. Vous pouvez utiliser `>`, `>=`, `<` et `<=`. Un nombre seul comme `latency:800` signifie 800 ou plus. |
+| `path:` | `path:/orders` | Les requêtes dont le chemin **commence par** le texte. Il faut au moins 3 lettres ou chiffres. |
+| `api:` | `api:payments` | Les requêtes vers une API, donnée par son nom, son slug ou son id. |
+| `key:` | `key:mobile-app` | Les requêtes faites avec la clé dont vous donnez l’alias, tel qu’affiché dans la colonne **Clé** des résultats. |
+| `reqh:` | `reqh:content-type=application/json` | Les requêtes avec cet en-tête et exactement cette valeur. Sans `=` ni valeur, comme dans `reqh:x-tenant`, toute requête qui a l’en-tête. |
+| `resh:` | `resh:x-request-id` | La même chose pour les en-têtes de réponse. |
+| `body:` | `body:"insufficient funds"` | Les requêtes ou réponses dont le corps contient ces mots, dans cet ordre et côte à côte. |
+| `req:` | `req:refund` | Les mots dans le corps de la requête uniquement. |
+| `res:` | `res:timeout` | Les mots dans le corps de la réponse uniquement. |
+
+Un mot sans nom de filtre, comme `timeout`, est une recherche `body:`. Mettez plusieurs mots entre guillemets doubles pour les garder
+ensemble.
+
+Commencez un filtre par `-` pour exclure des résultats. `-status:404` masque tous les 404, et `-res:timeout` masque les réponses
+dont le corps contient « timeout ».
+
+Exemple combiné, sur une seule ligne :
+
+```text
+api:payments status:>=500 method:POST body:"insufficient funds"
+```
+
+Quatre boutons sous la zone remplissent la barre avec un exemple de recherche : `status:>=500`, `status:4xx`,
+`latency:>800 method:POST` et `body:"insufficient funds"`. Un bouton remplace tout ce qui se trouve dans la barre.
+
+## Comportement des pastilles
+
+- Une pastille dont le filtre est compris par la page est neutre. Une pastille d’exclusion s’affiche dans une couleur d’avertissement.
+- Une pastille que la page ne comprend pas est rouge, et la raison apparaît sous la zone. Par exemple :
+  « Le statut ressemble à >=500, 404, 5xx, 200-299 ou 404,429. » Les résultats restent masqués tant que vous ne l’avez pas corrigée ou supprimée.
+- Cliquez sur une pastille pour remettre son texte dans la zone et le modifier. Cliquez sur le **x** d’une pastille pour la supprimer.
+  **Retour arrière** dans une zone vide supprime la dernière pastille.
+
+## L’URL et la période
+
+La recherche est conservée dans l’adresse de la page, sous la forme `?q=` suivi de vos filtres. Copiez l’adresse pour partager une recherche,
+ou rechargez la page sans la perdre. Le sélecteur de période propose 1h, 24h, 7d et 30d (**Dernière heure**, **Dernières 24 heures**,
+**7 derniers jours** et **30 derniers jours** en info-bulles). La valeur par défaut est Dernières 24 heures, et `range=` est ajouté à l’adresse quand vous
+en choisissez une autre.
+
+## Limites
+
+- 8 filtres au maximum par recherche.
+- 3 d’entre eux au maximum peuvent être des filtres de mots du corps (`body:`, `req:` ou `res:`).
+- Un filtre de mots exige au moins 3 lettres ou chiffres.
+- Une valeur de filtre peut faire 200 caractères au maximum.
+- Une recherche composée uniquement de mots courants est refusée : `id`, `data`, `name`, `value`, `true`, `false`, `null`,
+  `type`, `status` et `message`. Ils apparaissent dans presque toutes les requêtes. Une expression contenant au moins un autre mot
+  est acceptée.
+- Seuls les 16 premiers Kio de chaque capture sont conservés et recherchés, et les en-têtes comptent dans cette limite. Un résultat marqué **coupé à 16 Kio** était plus long : un
+  mot situé plus loin ne peut pas être trouvé.
+- Les corps multipart ne sont pas indexés, et une capture qui n’est pas de l’UTF-8 valide est remplacée en bloc.
+- La recherche de mots ne fait pas de radicalisation. `fund` ne trouve pas `funds` ; cherchez le mot exact.
+- Une recherche qui prend trop de temps s’arrête avec « Cette recherche est trop large pour aboutir à temps. » Ajoutez un statut, une API,
+  une période plus courte ou un mot plus précis.
+
+## Ce que vous ne pouvez pas voir ni rechercher
+
+Les secrets sont remplacés par `[REDACTED]`, selon leur nom (et les JWT selon leur forme), avant tout stockage ou toute recherche. Cela couvre les valeurs des
+en-têtes, des paramètres de requête et de formulaire, et des champs JSON dont le nom ressemble à des identifiants. Une valeur masquée ne peut pas être
+recherchée. Un en-tête masqué garde son nom : `reqh:authorization` trouve donc les requêtes qui l’ont envoyé, mais aucune valeur
+ne correspond. Certains champs inoffensifs aux noms proches sont aussi masqués.
+
+## La fraîcheur des résultats
+
+Sous la zone, la page affiche « Indexé jusqu’à » et une heure. Les requêtes plus récentes que cette heure ne sont pas encore recherchables :
+un résultat vide avant cette heure est donc réel. Avant la première indexation, la page indique que l’index de recherche n’a pas démarré.
+Les requêtes capturées apparaissent peu après leur enregistrement.
+
+## Ce qu’elle ne sait pas faire
+
+- Trouver une partie de mot (recherche de sous-chaîne). L’opérateur `~` est refusé ; seul `:` fonctionne.
+- Faire correspondre une expression régulière.
+- Chercher à l’intérieur d’un seul champ JSON.
+
+Cliquez sur l’heure d’un résultat pour ouvrir la requête et la réponse, avec leurs en-têtes et leurs corps. Un corps coupé à 16 Kio porte un marqueur **Corps tronqué**.

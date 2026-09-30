@@ -1,0 +1,81 @@
+---
+title: Developer portal
+description: How developers find products, subscribe, receive a key, try the API and revoke access.
+---
+
+The developer portal is a separate area for the developers who call your APIs. They use it to
+browse what you offer, get a key without asking you, and try the API in the browser. It is served
+under `/portal` on the same address as the dashboard.
+
+## Who uses it
+
+Portal sign-in is separate from dashboard sign-in: the portal has its own pages and its own
+developer session, and a portal session is not accepted by the dashboard's API.
+
+Each developer registers into one tenant. On **Create your developer account** they enter:
+
+- **Organization slug**: the slug of your tenant, shown on the **Tenants** page.
+- **Full name**, **Email**, **Password** and **Confirm password**.
+
+After **Create account**, the page says to check the email to verify the account, then sign in. The
+**Sign in** page also offers **Forgot password?**. The header has **Catalog**, **My Applications**
+and **Sign out**.
+
+## What you prepare in the dashboard
+
+The portal shows what the tenant has configured:
+
+1. Make each API **Active**. The portal only serves documentation for active APIs. For a draft or
+   disabled API, its section shows an error instead of documentation.
+2. Create a **Product** that bundles the APIs. The catalog lists every product of the tenant; there is
+   no separate publish switch. A product with no APIs shows **This product has no APIs yet.**
+3. Create at least one **Plan** and leave **Active** on. Inactive plans are hidden from the portal.
+
+See [Keys and plans](/docs/keys-and-plans) for plans and products.
+
+## Find a product
+
+**Catalog** (titled **API Catalog**) shows a card per product with its name, description and number
+of APIs. If there are none it says **No products are available yet.** Clicking a card opens the
+product page. It lists each API's endpoints with their methods and paths, and a **Test request**
+console under each API.
+
+## Subscribe and get a key
+
+An application holds a developer's subscriptions and keys.
+
+1. Open **My Applications** and click **New application**. Enter a **Name** and an optional
+   **Description**, then click **Create**.
+2. Open the application and click **Subscribe**.
+3. Choose a **Product** and a **Plan**, then click **Subscribe**.
+4. If the plan issues keys at once, a dialog titled **Copy your key** appears, with a **Copy key**
+   button. The key is shown only once and cannot be retrieved later.
+5. Approval is not configurable yet: the dashboard has no setting to require it, so a subscription normally
+   issues its key at once. If one is ever held, it shows **Pending** and
+   "Waiting for approval — no key has been issued yet."
+
+An application can subscribe to a product once. Subscriptions show **Pending**, **Active** or
+**Revoked**. An **Active** subscription shows its usage: **Requests (24h)**, **Error rate**, **Avg
+latency** and **Quota**.
+
+## Try the API
+
+On a product page, each API has a **Test request** form:
+
+- **Method**: GET, POST, PUT, PATCH or DELETE.
+- **Path**: must start with `/`.
+- **Your key (Authorization)**: paste the key. The label names the header the API expects.
+- **Body**: shown for every method except GET.
+
+Click **Send**. The page shows **Response status** and the response body. The request goes from the
+developer's browser straight to the gateway with their own key, so the key is never stored by the
+portal; it must be pasted each time. If the browser cannot reach the gateway, the form says so.
+
+The status the gateway returns has the same meaning as for any caller. See
+[Keys and plans](/docs/keys-and-plans#what-callers-see).
+
+## Revoke access
+
+On the application page, click **Revoke** on a subscription. The **Revoke this subscription?** dialog
+says the key for that product stops working immediately and this cannot be undone. A revoked
+subscription shows **Revoked** and no longer offers **Revoke**.

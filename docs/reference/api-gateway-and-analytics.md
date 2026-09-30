@@ -532,7 +532,9 @@ insert-time redaction trigger.
 `services/analytics.service.ts`, `services/traffic-analytics.service.ts`,
 `services/traffic-query.builder.ts`, `services/pump-query.builder.ts`,
 `services/traffic-inspector.service.ts`, `services/http-dump-parser.ts`,
-`services/analytics-retention.scheduler.ts`, `services/pump-health.service.ts`, `dto/*`.
+`services/analytics-retention.scheduler.ts`, `services/pump-health.service.ts`, `dto/*`, and `search/` (the
+traffic-search projection: `traffic-search.types.ts`, `.validate.ts`, `.query.builder.ts`, `.sql.ts`, `.ddl.ts`,
+`.row.ts`, `.store.service.ts`, `.indexer.service.ts`, `.service.ts`, `.query.ts`).
 `AnalyticsModule` exports `AnalyticsService` and `TrafficInspectorService`.
 
 ### HTTP endpoints
@@ -550,7 +552,9 @@ default `24h`.
 | GET | `/analytics/status-codes` | `analytics:read` | Status-code breakdown. |
 | GET | `/analytics/traffic` | `analytics:read` | Filtered KPIs, time series, status and method breakdowns, top and slowest endpoints. Not cached. |
 | GET | `/analytics/health` | `analytics:read` | `pipelineReady`, `pumpReachable`, table presence, tenant-scoped `rowCount` and `lastRecordAt`. |
-| GET | `/analytics/export` | `analytics:export` (replaces the class-level permission) | Streams CSV (`format=csv` only), newest first, capped at 50,000 rows in batches of 1,000. Header has 6 columns (Timestamp, API, Method, Path, Status, Latency (ms)) but see the export gotcha below; never `rawrequest`/`rawresponse`. |
+| GET | `/analytics/export` | `analytics:export` (replaces the class-level permission) | Streams CSV (`format=csv` only), newest first, capped at 50,000 rows in batches of 1,000. Header and rows both have 7 columns (Timestamp, API ID, API, Method, Path, Status, Latency (ms)); never `rawrequest`/`rawresponse`. |
+| POST | `/analytics/traffic/search` | `analytics:read` **and** `api:update` (replaces the class-level list) | Search captured request/response detail with typed clauses, see [Traffic search](#traffic-search-post-analyticstrafficsearch). |
+| GET | `/analytics/traffic/search/:id?ts=` | `analytics:read` **and** `api:update` | One search result with its headers and bodies; `ts` is the value the search returned. |
 | GET | `/apis/:id/traffic` | `api:update` (on the API controller) | Traffic Inspector page, see below. |
 
 ### `GET /analytics/traffic`
@@ -629,6 +633,57 @@ flowchart LR
     RET --> T2
 ```
 
+### Traffic search (`POST /analytics/traffic/search`)
+
+Searches the redacted projection `og_traffic_search` (one row per captured request, filled from `tyk_analytics`
+by `TrafficSearchIndexerService`; see [ANALYTICS-PIPELINE.md](../ANALYTICS-PIPELINE.md#traffic-search-projection)),
+not the pump table. Code: `apps/api/src/modules/analytics/search/`.
+
+**Permission.** `analytics:read` **and** `api:update`, declared on the method (it replaces the class-level
+`analytics:read`, so both are listed). This is the bar of the per-API inspector (`GET /apis/:id/traffic`),
+because a search returns captured bodies across every API. There is no `@Audit` marker, so a search writes no
+audit row (a decision, asserted by a test; revisit if reading captured bodies needs a trail).
+
+**Request body** (validated by `validateSearchRequest`; unknown keys are dropped, unknown kinds refused):
+
+| Field | Meaning |
+|---|---|
+| `range` | `1h`, `24h` (default), `7d` or `30d`. Always applied, which is what lets Postgres skip the other days' partitions. |
+| `clauses` | At most 8. Each has `kind`, optional `neg` (exclude), and the fields below. |
+| `limit` | 1-100, default 50. The server fetches one extra row to know whether there is a next page; there is no total count. |
+| `cursor` | `{ ts, id }` from the previous page's `nextCursor`. `ts` keeps microseconds. |
+
+| `kind` | Fields | Notes |
+|---|---|---|
+| `status` | `match`: `{type:'cmp',op,value}`, `{type:'range',from,to}` or `{type:'in',values}` | 100-599; up to 10 values |
+| `latency` | `op`, `value` (ms) | `>`, `>=`, `<`, `<=` |
+| `method` | `values` | upper-case, up to 7 |
+| `path` | `value` | prefix match (`LIKE 'value%'`, wildcards in the typed text escaped); at least 3 letters or digits |
+| `api` | `value` | an API of the caller's tenant by id, name or slug; anything else matches nothing |
+| `key` | `value` | key alias |
+| `header` | `side` (`req`/`res`), `name` (lower-case), optional `value` | no `value` = the header exists. A redacted header keeps its name, so `authorization` exists but its value matches nothing. |
+| `body` | `side` (`req`/`res`/`any`), `value` | whole words in order (`phraseto_tsquery('simple', ...)`): no stemming, so `fund` does not match `funds`. At least 3 letters or digits; refused when every word is one of `id, data, name, value, true, false, null, type, status, message`; at most 3 body clauses. |
+
+Not in the lean core (measured too slow or too costly, see the pipeline doc): substring, regular expression,
+JSON-field and path-glob search. `json` and `regex` are refused as unknown kinds.
+
+**Scope.** `apiid = ANY(<tenant's Tyk API ids>)` is the first predicate of every query, built from the caller's
+own `ApiDefinition` rows with a `tykApiId`; the projection rows carry no tenant. A tenant with no synced API gets
+an empty page without touching the table.
+
+**Response.** `{ range, items, hasMore, nextCursor, indexedUntil }`. Each item: `id`, `ts`, `apiId`/`apiName`
+(`null` if the API was deleted), `method`, `path`, `status`, `latencyMs`, `keyAlias`, `reqTruncated`,
+`resTruncated` (the body was cut at 16 KiB before it was indexed, so a search only saw the part that was kept).
+`indexedUntil` is how far the indexer has caught up; an empty result before it is real.
+
+**Errors** (`error.code` in the usual envelope): `400 SEARCH_INVALID` for a bad request or clause,
+`422 SEARCH_TOO_BROAD` when the statement runs past its budget (`SET LOCAL statement_timeout`, default 3000 ms,
+`TRAFFIC_SEARCH_TIMEOUT_MS` clamped to 100-10000), `403` without both permissions.
+
+**Detail.** `GET /analytics/traffic/search/:id?ts=<ts>` returns the item plus `ip`, `reqHeaders`, `resHeaders`,
+`reqBody`, `resBody`. `id` must be digits and `ts` an ISO timestamp; `ts` selects the day partition. A row of
+another tenant, a row that aged out and a row that never existed all answer `404`.
+
 ### Traffic Inspector (`GET /apis/:id/traffic`)
 
 `TrafficInspectorService.list(tenantId, apiDefId, range, page, pageSize)` returns the captured raw
@@ -672,6 +727,13 @@ stores the original and never raises (a raising row would abort Pump's multi-row
 - `PumpHealthService`: `GET PUMP_HEALTH_URL` (3 s). Never throws; unset URL, error and non-2xx all read as
   not reachable. Not circuit-broken.
 - `AnalyticsRetentionScheduler`: see jobs.
+- `TrafficSearchStoreService` (`search/`): creates `og_traffic_search` and its indexes at boot and every 6 hours,
+  keeps the partitions of today and the next two days, drops partitions older than `ANALYTICS_RETENTION_DAYS`.
+  Never throws.
+- `TrafficSearchIndexerService` (`search/`): every 10 s (and hourly over 6 h) copies captured rows from
+  `tyk_analytics` into the projection through `parseHttpDump` with each API's `authHeaderName`; paused while the
+  redaction trigger is missing. `TRAFFIC_SEARCH_BACKFILL_DAYS` (default 7, never above retention) bounds the first scan.
+- `TrafficSearchService` (`search/`): the endpoint logic above; `queryWithTimeout` applies the statement budget.
 
 ### Data
 
@@ -705,10 +767,7 @@ pump's index stays usable.
 - `/analytics/traffic` always reads raw rows, so with the 30-day default retention a `30d` range is only
   complete if raw retention has not been lowered. Overview totals for `24h+` come from the aggregate, so
   the two endpoints can disagree by the raw/aggregate difference (**unverified** in practice).
-- **CSV export is misaligned (bug found while reading).** `EXPORT_CSV_HEADER` in `analytics.service.ts` has
-  6 columns, but each data row writes 7 values (`ts, apiid, api_name, method, path, responsecode,
-  latency_total`; `exportRowsQuery` selects both `apiid` and `api_name`). Every data row is shifted one
-  column against the header. Pagination is `OFFSET` over `ORDER BY "timestamp" DESC` with no tiebreaker.
+- **CSV export.** `EXPORT_CSV_HEADER` in `analytics.service.ts` and `exportRowsQuery` both carry 7 columns (`ts, apiid, api_name, method, path, responsecode, latency_total`); an earlier header of 6 columns shifted every row and was fixed in `96fb27b`. Pagination is `OFFSET` over `ORDER BY "timestamp" DESC` with no tiebreaker, so rows that share a timestamp can repeat or be skipped across batches.
 - Adding an `@Permissions()` on a method overrides the class-level `analytics:read` (used deliberately for
   export).
 
