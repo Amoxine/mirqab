@@ -5,6 +5,7 @@ import { PumpHealthService } from './services/pump-health.service';
 import { TrafficAnalyticsService } from './services/traffic-analytics.service';
 import { TrafficInspectorService } from './services/traffic-inspector.service';
 import { AnalyticsController } from './controllers/analytics.controller';
+import { TrafficSearchStoreService } from './search/traffic-search.store.service';
 
 /**
  * Analytics reads the Tyk Pump tables directly (D7), so this module needs neither
@@ -18,6 +19,7 @@ import { AnalyticsController } from './controllers/analytics.controller';
     PumpHealthService,
     TrafficInspectorService,
     TrafficAnalyticsService,
+    TrafficSearchStoreService,
   ],
   // TrafficInspectorService: served by `GET /apis/:id/traffic` on the API controller (V1-LOG-02).
   exports: [AnalyticsService, TrafficInspectorService],
