@@ -3,6 +3,7 @@ import { getLocale } from 'next-intl/server';
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import { RTL_LOCALES } from '@/i18n/locales';
+import { DocsNavActions } from '@/components/docs/docs-nav-actions';
 import { source } from '@/lib/docs/source';
 import { docsI18nUI } from '@/lib/docs/ui-translations';
 import '@/styles/docs.css';
@@ -20,7 +21,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
       search={{ options: { api: '/docs/search-index' } }}
       i18n={docsI18nUI.provider(locale)}
     >
-      <DocsLayout tree={source.getPageTree(locale)} nav={{ title: 'MIRQAB', url: '/' }}>
+      <DocsLayout tree={source.getPageTree(locale)} nav={{ title: 'MIRQAB', url: '/', children: <DocsNavActions /> }}>
         {children}
       </DocsLayout>
     </RootProvider>

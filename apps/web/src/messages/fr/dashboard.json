@@ -55,7 +55,8 @@
     "system": "Système",
     "logLabel": "Journal d'activité récente",
     "logName": "activity.log",
-    "events": "{count, plural, one {# événement} other {# événements}}"
+    "events": "{count, plural, one {# événement} other {# événements}}",
+    "emptyScoped": "Aucune activité enregistrée sur cette API pour le moment."
   },
   "syncSummary": {
     "title": "État de synchronisation des API",
@@ -97,7 +98,8 @@
     "logOut": "Se déconnecter",
     "userMenu": "Ouvrir le menu utilisateur",
     "tenantLabel": "Locataire",
-    "switchTenantCurrent": "Changer de locataire (actuel : {name})"
+    "switchTenantCurrent": "Changer de locataire (actuel : {name})",
+    "docs": "Ouvrir la documentation"
   },
   "mobileNav": {
     "openMenu": "Ouvrir le menu de navigation",
@@ -216,7 +218,9 @@
     "description": "Accéder à une page.",
     "placeholder": "Rechercher des pages…",
     "empty": "Aucune page correspondante.",
-    "pages": "Pages"
+    "pages": "Pages",
+    "docs": "Documentation",
+    "docsHome": "Documentation"
   },
   "help": {
     "title": "Aide et raccourcis",

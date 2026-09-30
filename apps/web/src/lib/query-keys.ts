@@ -110,6 +110,9 @@ export const queryKeys = {
     timeseries: (metric: string, range: string) => [...queryKeys.analytics.all, 'timeseries', metric, range] as const,
     statusCodes: (range: string) => [...queryKeys.analytics.all, 'status-codes', range] as const,
     traffic: (filters: object) => [...queryKeys.analytics.all, 'traffic', filters] as const,
+    /** Captured-request search: one infinite list per (range, clauses), and one row's detail. */
+    search: (query: object) => [...queryKeys.analytics.all, 'search', query] as const,
+    searchDetail: (id: string, ts: string) => [...queryKeys.analytics.all, 'search', 'detail', id, ts] as const,
     get health() {
       return scoped('analytics', 'health');
     },

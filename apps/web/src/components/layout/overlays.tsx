@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { OverlaysContext, type Overlays } from '@/components/layout/overlays-context';
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useDocsSearch } from '@/hooks/use-docs-search';
 
 /** Page search over the permission-gated navigation (⌘/Ctrl + K). */
 function SearchDialog({
@@ -34,12 +36,20 @@ function SearchDialog({
   const t = useTranslations('dashboard.palette');
   const router = useRouter();
   const items = useNavItems();
+  const [query, setQuery] = useState('');
+  const docs = useDocsSearch(open ? query : '');
+
+  const go = (href: string) => {
+    onOpenChange(false);
+    setQuery('');
+    router.push(href);
+  };
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <DialogTitle className="sr-only">{t('title')}</DialogTitle>
       <DialogDescription className="sr-only">{t('description')}</DialogDescription>
-      <CommandInput placeholder={t('placeholder')} aria-label={t('placeholder')} />
+      <CommandInput placeholder={t('placeholder')} aria-label={t('placeholder')} value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>{t('empty')}</CommandEmpty>
         <CommandGroup heading={t('pages')}>
@@ -59,6 +69,40 @@ function SearchDialog({
               </CommandItem>
             );
           })}
+        </CommandGroup>
+        <CommandGroup heading={t('docs')}>
+          <CommandItem
+            value={t('docsHome')}
+            onSelect={() => {
+              go('/docs');
+            }}
+          >
+            <BookOpen className="me-2 h-4 w-4" aria-hidden="true" />
+            {t('docsHome')}
+          </CommandItem>
+          {/* Hits come from the docs' own search, which already matched them: `forceMount` stops cmdk filtering them out again. */}
+          {(docs.data ?? []).map((hit) => (
+            <CommandItem
+              key={hit.url}
+              value={`docs ${hit.url}`}
+              forceMount
+              onSelect={() => {
+                go(hit.url);
+              }}
+            >
+              <BookOpen className="me-2 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0">
+                <span dir="auto" className="block truncate">
+                  {hit.title}
+                </span>
+                {hit.trail && (
+                  <span dir="auto" className="text-muted-foreground block truncate text-xs">
+                    {hit.trail}
+                  </span>
+                )}
+              </span>
+            </CommandItem>
+          ))}
         </CommandGroup>
       </CommandList>
     </CommandDialog>

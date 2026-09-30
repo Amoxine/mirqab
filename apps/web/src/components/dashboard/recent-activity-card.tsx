@@ -12,12 +12,14 @@ import { useRecentAudit } from '@/hooks/use-audit';
 import { auditActionLabel } from '@/lib/audit-actions';
 import { dateFnsLocale } from '@/lib/date-fns-locale';
 import type { Locale } from '@/i18n/locales';
+import { ScopeTag } from './scope-tag';
 import { useFormat } from '@/hooks/use-format';
 
 const DESTRUCTIVE_ACTIONS = new Set(['DELETED', 'REVOKED', 'SYNC_FAILED', 'QUOTA_EXCEEDED']);
 
-export function RecentActivityCard() {
-  const { data, isLoading, error, refetch } = useRecentAudit();
+/** The latest audit entries; narrowed to one API's own entries when the dashboard is scoped to it (`scope`). */
+export function RecentActivityCard({ scope }: { scope?: { id: string; name: string } | null }) {
+  const { data, isLoading, error, refetch } = useRecentAudit(scope?.id);
   const t = useTranslations('dashboard.recentActivity');
   // Known actions are translated (the same labels as the Audit Logs page); an unknown one shows its raw code.
   const tAnalytics = useTranslations('analytics');
@@ -27,7 +29,10 @@ export function RecentActivityCard() {
   return (
     <Card variant="ink">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base">{t('title')}</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base">
+          {t('title')}
+          <ScopeTag name={scope?.name} />
+        </CardTitle>
         <Link
           href="/audit-logs"
           className="text-primary rounded-sm text-sm font-medium hover:underline"
@@ -47,7 +52,7 @@ export function RecentActivityCard() {
         ) : !data?.length ? (
           <StateMessage
             icon={<History aria-hidden="true" />}
-            message={t('empty')}
+            message={scope ? t('emptyScoped') : t('empty')}
             className="py-6"
           />
         ) : (

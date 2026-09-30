@@ -25,12 +25,20 @@ export function PermissionGate({ permission, fallback = null, children }: Permis
  * Page-level gate: a skeleton while permissions load, a no-access state when `permission` is missing, else `children`.
  * `children` are only mounted when allowed, so their data queries never fire for a user who may not read the page.
  */
-export function PagePermissionGate({ permission, children }: Omit<PermissionGateProps, 'fallback'>) {
+export function PagePermissionGate({
+  permission,
+  children,
+}: {
+  /** One permission, or a list that must ALL be held; the no-access state names the first one missing. */
+  permission: string | readonly string[];
+  children: ReactNode;
+}) {
   const t = useTranslations('auth');
   const { can, isLoading } = usePermissions();
 
   if (isLoading) return <Skeleton className="h-64 w-full" aria-busy="true" />;
-  if (!can(permission)) {
+  const missing = [permission].flat().find((p) => !can(p));
+  if (missing !== undefined) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
@@ -38,7 +46,7 @@ export function PagePermissionGate({ permission, children }: Omit<PermissionGate
           <h2 className="text-lg font-semibold">{t('permissionGate.noAccessTitle')}</h2>
           <p className="max-w-md text-sm text-muted-foreground">
             {t.rich('permissionGate.noAccessDescription', {
-              permission,
+              permission: missing,
               code: (chunks) => <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{chunks}</code>,
             })}
           </p>

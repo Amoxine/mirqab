@@ -12,6 +12,7 @@ export default [
       '**/node_modules/**',
       '**/dist/**',
       '**/.next/**',
+      '**/.source/**',
       '**/coverage/**',
       '**/*.config.js',
       '**/*.config.ts',

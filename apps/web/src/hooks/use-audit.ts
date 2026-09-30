@@ -14,12 +14,12 @@ export interface AuditLogEntry {
 }
 
 /** The most recent audit entries for the dashboard home. */
-export function useRecentAudit() {
+export function useRecentAudit(apiId?: string) {
   return useQuery({
-    queryKey: queryKeys.audit.recent,
+    queryKey: [...queryKeys.audit.recent, { apiId: apiId ?? null }],
     queryFn: () =>
       api
-        .get<PaginatedResponse<AuditLogEntry>>('/audit-logs?page=1&pageSize=10')
+        .get<PaginatedResponse<AuditLogEntry>>(`/audit-logs?page=1&pageSize=10${apiId ? `&apiId=${encodeURIComponent(apiId)}` : ''}`)
         .then((res) => res.data.data),
   });
 }

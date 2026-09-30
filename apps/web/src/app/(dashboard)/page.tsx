@@ -289,7 +289,7 @@ export default function DashboardPage() {
   const activity = (
     <PermissionGate permission="audit:read">
       <div className="motion-enter" style={rise(6)}>
-        <RecentActivityCard />
+        <RecentActivityCard scope={scope.api} />
       </div>
     </PermissionGate>
   );

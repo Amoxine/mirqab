@@ -55,7 +55,8 @@
     "system": "النظام",
     "logLabel": "سجل النشاط الأخير",
     "logName": "activity.log",
-    "events": "{count, plural, zero {# أحداث} one {حدث #} two {حدثان} few {# أحداث} many {# حدثًا} other {# حدث}}"
+    "events": "{count, plural, zero {# أحداث} one {حدث #} two {حدثان} few {# أحداث} many {# حدثًا} other {# حدث}}",
+    "emptyScoped": "لا يوجد نشاط مسجل على هذه الواجهة بعد."
   },
   "syncSummary": {
     "title": "حالة مزامنة واجهات البرمجة",
@@ -97,7 +98,8 @@
     "logOut": "تسجيل الخروج",
     "userMenu": "فتح قائمة المستخدم",
     "tenantLabel": "المستأجر",
-    "switchTenantCurrent": "تبديل المستأجر (الحالي: {name})"
+    "switchTenantCurrent": "تبديل المستأجر (الحالي: {name})",
+    "docs": "فتح الوثائق"
   },
   "mobileNav": {
     "openMenu": "فتح قائمة التنقل",
@@ -216,7 +218,9 @@
     "description": "انتقل إلى صفحة.",
     "placeholder": "ابحث عن صفحات…",
     "empty": "لا توجد صفحة مطابقة.",
-    "pages": "الصفحات"
+    "pages": "الصفحات",
+    "docs": "الوثائق",
+    "docsHome": "الوثائق"
   },
   "help": {
     "title": "المساعدة والاختصارات",

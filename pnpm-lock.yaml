@@ -261,6 +261,9 @@ importers:
       '@open-gateway/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@orama/orama':
+        specifier: 3.1.18
+        version: 3.1.18
       '@ory/client-fetch':
         specifier: ^1.22.66
         version: 1.22.66

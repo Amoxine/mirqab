@@ -49,6 +49,32 @@ describe('docs content and locales', () => {
   });
 });
 
+describe('internal links', () => {
+  const slugsOf = (locale: string) => new Set(pagesOf(locale).map((f) => f.replace(/\.mdx$/, '')));
+  const linksOf = (locale: string, file: string): string[] =>
+    [...readFileSync(join(CONTENT, locale, file), 'utf8').matchAll(/\]\((\/docs[^)\s]*)\)/g)].map((m) => String(m[1]));
+
+  it.each(LOCALES.flatMap((locale) => pagesOf(locale).map((file) => [locale, file] as const)))(
+    '%s/%s links only to pages that exist',
+    (locale, file) => {
+      const known = slugsOf(DEFAULT_LOCALE); // a link may point at any English page: a missing translation falls back to it
+      for (const link of linksOf(locale, file)) {
+        const path = link.split('#')[0] ?? '';
+        if (path === '/docs') continue;
+        expect(path.startsWith('/docs/'), `${link} is not under /docs/`).toBe(true);
+        expect(known.has(path.slice('/docs/'.length)), `${locale}/${file} links to ${link}, which has no page`).toBe(true);
+      }
+    },
+  );
+
+  it('every page is reachable: listed in the sidebar of each language', () => {
+    for (const locale of LOCALES) {
+      const listed = new Set(metaOf(locale).pages);
+      for (const slug of slugsOf(locale)) expect(listed.has(slug), `${locale}/${slug} is not in meta.json`).toBe(true);
+    }
+  });
+});
+
 describe('remarkMermaid', () => {
   const run = (children: unknown[]) => {
     const tree = { type: 'root', children };

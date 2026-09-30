@@ -205,5 +205,58 @@
       "avg": "Moy.",
       "p95": "P95"
     }
+  },
+  "search": {
+    "title": "Recherche de requêtes",
+    "description": "Retrouvez les requêtes et réponses capturées par statut, latence, en-têtes ou mots de leur corps.",
+    "inputLabel": "Filtres de recherche",
+    "placeholder": "status:>=500 method:POST body:\"fonds insuffisants\"",
+    "removeChip": "Supprimer le filtre {text}",
+    "editChip": "Modifier le filtre {text}",
+    "presetsLabel": "Exemples de recherche",
+    "syntaxHint": "Saisissez un filtre puis Entrée : status:>=500, method:POST, latency:>800, path:/orders, api:nom, key:nom, reqh:nom=valeur, resh:nom, body:\"deux mots\", req:mot, res:mot. Un - au début exclut.",
+    "loading": "Chargement des résultats",
+    "loadMore": "Charger plus",
+    "loadingMore": "Chargement…",
+    "indexedUntil": "Indexé jusqu’à {when}",
+    "notIndexedYet": "L’index de recherche n’a pas encore démarré. Les requêtes capturées apparaissent ici peu après leur enregistrement.",
+    "coverage": "La recherche de mots couvre les 16 premiers Kio de chaque corps.",
+    "emptyNoCapture": "Aucune requête capturée sur cette période. Activez l’enregistrement détaillé d’une API pour en capturer.",
+    "emptyNoMatch": "Aucune requête capturée ne correspond à ces filtres sur cette période.",
+    "openDetail": "Ouvrir {method} {path}",
+    "truncatedBadge": "coupé à 16 Kio",
+    "truncatedHint": "Seuls les 16 premiers Kio d’un corps sont conservés et recherchés.",
+    "columns": {
+      "time": "Heure",
+      "api": "API",
+      "request": "Requête",
+      "status": "Statut",
+      "latency": "Latence",
+      "key": "Clé"
+    },
+    "errors": {
+      "unknownField": "Filtre « {field} » inconnu.",
+      "needsValue": "« {field} » attend une valeur.",
+      "tooLong": "Cette valeur dépasse {max} caractères.",
+      "status": "Le statut ressemble à >=500, 404, 5xx, 200-299 ou 404,429.",
+      "latency": "La latence ressemble à >800 (millisecondes).",
+      "method": "Les méthodes ressemblent à GET ou POST,PUT.",
+      "headerName": "Les noms d’en-tête utilisent des lettres, chiffres et tirets.",
+      "termTooShort": "Utilisez au moins {min} lettres ou chiffres : un terme plus court correspond à trop de choses.",
+      "commonWord": "« {term} » apparaît dans presque toutes les requêtes ; cherchez quelque chose de plus précis.",
+      "unsupportedOperator": "Seul « : » est pris en charge, par exemple {field}:valeur.",
+      "tooManyClauses": "8 filtres au maximum par recherche.",
+      "tooManyBodyClauses": "3 filtres de mots du corps au maximum par recherche."
+    },
+    "apiErrors": {
+      "tooBroad": "Cette recherche est trop large pour aboutir à temps. Ajoutez un statut, une API ou une période plus courte, ou utilisez un mot plus précis.",
+      "invalid": "Le serveur n’a pas compris l’un des filtres.",
+      "forbidden": "Vous n’avez pas accès à la recherche de requêtes capturées.",
+      "generic": "La recherche a échoué. Réessayez."
+    },
+    "detail": {
+      "redactionNote": "Les secrets sont masqués par leur nom avant tout stockage ou toute recherche. Les corps sont coupés à 16 Kio.",
+      "loadError": "La requête n’a pas pu être chargée."
+    }
   }
 }

@@ -55,7 +55,8 @@
     "system": "System",
     "logLabel": "Recent activity log",
     "logName": "activity.log",
-    "events": "{count, plural, one {# event} other {# events}}"
+    "events": "{count, plural, one {# event} other {# events}}",
+    "emptyScoped": "No recorded activity on this API yet."
   },
   "syncSummary": {
     "title": "API sync status",
@@ -97,7 +98,8 @@
     "logOut": "Log out",
     "userMenu": "Open user menu",
     "tenantLabel": "Tenant",
-    "switchTenantCurrent": "Switch tenant (current: {name})"
+    "switchTenantCurrent": "Switch tenant (current: {name})",
+    "docs": "Open the documentation"
   },
   "mobileNav": {
     "openMenu": "Open navigation menu",
@@ -216,7 +218,9 @@
     "description": "Jump to a page.",
     "placeholder": "Search pages…",
     "empty": "No matching page.",
-    "pages": "Pages"
+    "pages": "Pages",
+    "docs": "Documentation",
+    "docsHome": "Documentation"
   },
   "help": {
     "title": "Help & shortcuts",

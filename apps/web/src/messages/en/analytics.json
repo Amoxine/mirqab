@@ -205,5 +205,58 @@
       "avg": "Avg",
       "p95": "P95"
     }
+  },
+  "search": {
+    "title": "Request search",
+    "description": "Find captured requests and responses by status, latency, headers or the words in their bodies.",
+    "inputLabel": "Search filters",
+    "placeholder": "status:>=500 method:POST body:\"insufficient funds\"",
+    "removeChip": "Remove filter {text}",
+    "editChip": "Edit filter {text}",
+    "presetsLabel": "Example searches",
+    "syntaxHint": "Type a filter and press Enter: status:>=500, method:POST, latency:>800, path:/orders, api:name, key:name, reqh:name=value, resh:name, body:\"two words\", req:word, res:word. A leading - excludes.",
+    "loading": "Loading results",
+    "loadMore": "Load more",
+    "loadingMore": "Loading…",
+    "indexedUntil": "Indexed up to {when}",
+    "notIndexedYet": "The search index has not started yet. Captured requests appear here shortly after they are recorded.",
+    "coverage": "Word search covers the first 16 KiB of each body.",
+    "emptyNoCapture": "No captured requests in this window. Turn on detailed recording for an API to capture them.",
+    "emptyNoMatch": "No captured request matches these filters in this window.",
+    "openDetail": "Open {method} {path}",
+    "truncatedBadge": "cut at 16 KiB",
+    "truncatedHint": "Only the first 16 KiB of a body is kept and searched.",
+    "columns": {
+      "time": "Time",
+      "api": "API",
+      "request": "Request",
+      "status": "Status",
+      "latency": "Latency",
+      "key": "Key"
+    },
+    "errors": {
+      "unknownField": "Unknown filter \"{field}\".",
+      "needsValue": "\"{field}\" needs a value.",
+      "tooLong": "That value is longer than {max} characters.",
+      "status": "Status looks like >=500, 404, 5xx, 200-299 or 404,429.",
+      "latency": "Latency looks like >800 (milliseconds).",
+      "method": "Methods look like GET or POST,PUT.",
+      "headerName": "Header names use letters, digits and dashes.",
+      "termTooShort": "Use at least {min} letters or digits: a shorter term matches too much.",
+      "commonWord": "\"{term}\" appears in almost every request; search for something more specific.",
+      "unsupportedOperator": "Only \":\" is supported, for example {field}:value.",
+      "tooManyClauses": "At most 8 filters per search.",
+      "tooManyBodyClauses": "At most 3 body-word filters per search."
+    },
+    "apiErrors": {
+      "tooBroad": "That search is too broad to finish in time. Add a status, an API or a shorter window, or use a more specific word.",
+      "invalid": "The server did not understand one of the filters.",
+      "forbidden": "You do not have access to search captured requests.",
+      "generic": "The search failed. Try again."
+    },
+    "detail": {
+      "redactionNote": "Secrets are hidden by name before anything is stored or searched. Bodies are cut at 16 KiB.",
+      "loadError": "The request could not be loaded."
+    }
   }
 }

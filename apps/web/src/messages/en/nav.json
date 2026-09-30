@@ -19,5 +19,6 @@
     "trust": "Trust & operations"
   },
   "help": "Help & shortcuts",
-  "traffic": "Traffic"
+  "traffic": "Traffic",
+  "trafficSearch": "Request search"
 }

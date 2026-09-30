@@ -18,60 +18,12 @@ import { RangeControl } from '@/components/dashboard/range-control';
 import { DataTable } from '@/components/shared/data-table';
 import { StateMessage } from '@/components/shared/state-card';
 import { FormattedDateTime } from '@/components/shared/formatted';
-import { useApiTraffic, type HttpDump, type TrafficEntry } from '@/hooks/use-apis';
+import { useApiTraffic, type TrafficEntry } from '@/hooks/use-apis';
+import { HttpDumpSection } from '@/components/shared/http-dump-section';
+import { statusVariant } from '@/lib/http-status';
 import type { AnalyticsRange } from '@/types';
 
 const NO_ROWS: TrafficEntry[] = [];
-
-function statusVariant(code: number): 'default' | 'secondary' | 'destructive' {
-  if (code >= 500) return 'destructive';
-  if (code >= 400) return 'secondary';
-  return 'default';
-}
-
-/** One request or response side of the detail dialog: its start line, headers, then its body. */
-function DumpSection({
-  label,
-  dump,
-  empty,
-}: {
-  label: string;
-  dump: HttpDump | null;
-  empty: string;
-}) {
-  const t = useTranslations('apis');
-  if (!dump) {
-    return (
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold">{label}</h3>
-        <p className="text-muted-foreground text-xs">{empty}</p>
-      </div>
-    );
-  }
-  const entries = Object.entries(dump.headers);
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold">{label}</h3>
-      <p className="break-all font-mono text-xs">{dump.startLine}</p>
-      {entries.length > 0 && (
-        <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1 text-xs">
-          {entries.map(([name, value]) => (
-            <div key={name} className="contents">
-              <dt className="text-muted-foreground font-mono">{name}</dt>
-              <dd className="min-w-0 break-all font-mono">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {dump.body && (
-        <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs">{dump.body}</pre>
-      )}
-      {dump.truncated && (
-        <p className="text-muted-foreground text-xs">{t('trafficTab.truncated')}</p>
-      )}
-    </div>
-  );
-}
 
 function TrafficDetailDialog({
   entry,
@@ -96,15 +48,17 @@ function TrafficDetailDialog({
         </DialogHeader>
         {entry && (
           <div className="space-y-4">
-            <DumpSection
+            <HttpDumpSection
               label={t('trafficTab.request')}
               dump={entry.request}
               empty={t('trafficTab.noRequest')}
+              truncatedLabel={t('trafficTab.truncated')}
             />
-            <DumpSection
+            <HttpDumpSection
               label={t('trafficTab.response')}
               dump={entry.response}
               empty={t('trafficTab.noResponse')}
+              truncatedLabel={t('trafficTab.truncated')}
             />
           </div>
         )}
