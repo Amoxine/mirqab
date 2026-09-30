@@ -5,6 +5,7 @@ import { PumpHealthService } from './services/pump-health.service';
 import { TrafficAnalyticsService } from './services/traffic-analytics.service';
 import { TrafficInspectorService } from './services/traffic-inspector.service';
 import { AnalyticsController } from './controllers/analytics.controller';
+import { TrafficSearchIndexerService } from './search/traffic-search.indexer.service';
 import { TrafficSearchStoreService } from './search/traffic-search.store.service';
 
 /**
@@ -20,6 +21,7 @@ import { TrafficSearchStoreService } from './search/traffic-search.store.service
     TrafficInspectorService,
     TrafficAnalyticsService,
     TrafficSearchStoreService,
+    TrafficSearchIndexerService,
   ],
   // TrafficInspectorService: served by `GET /apis/:id/traffic` on the API controller (V1-LOG-02).
   exports: [AnalyticsService, TrafficInspectorService],
