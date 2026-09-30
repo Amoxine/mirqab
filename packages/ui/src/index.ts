@@ -40,6 +40,7 @@ export * from './components/tooltip';
 export * from './components/tabs';
 export * from './components/alert-dialog';
 export * from './components/popover';
+export * from './components/chip-input';
 export * from './components/page-filter';
 export * from './components/segmented-control';
 export * from './components/state-card';
