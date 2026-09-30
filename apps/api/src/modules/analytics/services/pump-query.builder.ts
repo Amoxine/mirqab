@@ -586,9 +586,15 @@ BEGIN
         IF fields <> '' THEN
           FOREACH f IN ARRAY string_to_array(fields, '|') LOOP
             plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)|-?[0-9][0-9.eE+-]*)', '"' || f || '":"[REDACTED]"', 'gi');
-            plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*(?:\\{(?:[^{}"]|"(?:[^"\\\\]|\\\\.)*")*\\}|\\[(?:[^\\[\\]"]|"(?:[^"\\\\]|\\\\.)*")*\\])', '"' || f || '":"[REDACTED]"', 'gi');
-            plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*[{\\[][\\s\\S]*$', '"' || f || '":"[REDACTED]"', 'gi');
           END LOOP;
+          -- Containers are rare: pay for the two bracket passes only when a listed field is followed by
+          -- one. Unguarded they cost ~40x per dump (measured 0.25 ms -> 10.7 ms) and stall the pump's batch.
+          IF plain ~* ('"(?:' || fields || ')"\\s*:\\s*[{\\[]') THEN
+            FOREACH f IN ARRAY string_to_array(fields, '|') LOOP
+              plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*(?:\\{(?:[^{}"]|"(?:[^"\\\\]|\\\\.)*")*\\}|\\[(?:[^\\[\\]"]|"(?:[^"\\\\]|\\\\.)*")*\\])', '"' || f || '":"[REDACTED]"', 'gi');
+              plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*[{\\[][\\s\\S]*$', '"' || f || '":"[REDACTED]"', 'gi');
+            END LOOP;
+          END IF;
         END IF;
         IF truncated THEN
           plain := plain || E'\\n${TRUNCATED_DUMP_MARKER}';

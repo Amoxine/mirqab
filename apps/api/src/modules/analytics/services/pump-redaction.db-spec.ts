@@ -333,4 +333,23 @@ describe('tyk_analytics redaction trigger on a real Postgres', () => {
     });
     expect(plan.map((r) => r['QUERY PLAN']).join('\n')).toContain('og_tyk_analytics_captured_apiid_ts');
   });
+
+  // Last on purpose: its bulk insert/delete changes the table statistics, which the planner-sensitive
+  // index test above would otherwise see.
+  it('an ordinary batch costs about the same as before containers were handled: 1200 small rows in seconds, not minutes', async () => {
+    // Measured when container redaction was first added without a guard: 0.25 ms -> 10.7 ms per dump
+    // (x2 columns), i.e. ~24 s for this batch and a stalled pump. The guard skips the bracket passes
+    // unless a listed field is followed by `{` or `[`.
+    const dump = b64('POST /orders HTTP/1.1\r\nHost: gw\r\n\r\n{"user":"bob","note":"refund declined","amount":120,"items":[{"sku":"A1","qty":2}]}');
+    const started = Date.now();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.tyk_analytics (apiid, apikey, rawrequest, rawresponse)
+       SELECT 'batch-' || g, 'k', $1, $1 FROM generate_series(1, 1200) g`,
+      dump,
+    );
+    const elapsedMs = Date.now() - started;
+    await prisma.$executeRawUnsafe(`DELETE FROM public.tyk_analytics WHERE apiid LIKE 'batch-%'`);
+
+    expect(elapsedMs).toBeLessThan(8_000); // ~0.6 s measured after the guard; 24 s without it
+  });
 });
