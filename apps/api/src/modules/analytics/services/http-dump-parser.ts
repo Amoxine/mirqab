@@ -46,6 +46,14 @@ const SECRET_EXACT = new Set(['pass', 'pin', 'otp', 'sig', 'auth', 'jwt', 'ssn']
 const KEY_SUFFIX = /(?:^|[-_.])key$/i;
 const CAMEL_KEY_SUFFIX = /[a-z0-9]Key$/;
 
+/**
+ * A JSON Web Token by shape: three base64url segments, the first starting `eyJ` (base64 of `{"`). The
+ * third may be empty (an unsecured JWT). Found by value, so a token in a field with an innocent name
+ * (`"payload":"eyJ..."`, a `Referer`, a path) is hidden too: the name-based passes cannot see it. Segment
+ * lengths are bounded so a body of `eyJeyJeyJ…` cannot make the scan quadratic.
+ */
+const JWT_VALUE = /eyJ[\w-]{4,200}\.[\w-]{4,4096}\.[\w-]{0,1024}/g;
+
 /** `name=value` at the start or after `?`/`&`/`;`. Values stop at whitespace and `"`, so ` HTTP/1.1` and JSON quotes survive. */
 const PAIR = /(^|[?&;])([^=&;#\s?"]+)=([^&;#\s"]*)/g;
 
@@ -105,9 +113,11 @@ function isSecretName(raw: string): boolean {
  * authorization code, as a JSON key it is almost always an error code.
  */
 function redactPairs(text: string): string {
-  return text.replace(PAIR, (pair, sep: string, name: string) =>
-    isSecretName(name) || name.toLowerCase() === 'code' ? `${sep}${name}=${REDACTED}` : pair,
-  );
+  return text
+    .replace(PAIR, (pair, sep: string, name: string) =>
+      isSecretName(name) || name.toLowerCase() === 'code' ? `${sep}${name}=${REDACTED}` : pair,
+    )
+    .replace(JWT_VALUE, REDACTED);
 }
 
 /** Index just past the `{`/`[` at `open`'s matching close, string-aware; the end of the text when a clip cut it open. Linear. */

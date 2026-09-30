@@ -5,13 +5,13 @@ import type { PrismaClient } from '@prisma/client';
 import { countJobRun } from '../../../common/metrics/ops-metrics';
 import {
   ANALYTICS_INDEX_DDL,
-  analyticsRedactionDdl,
   redactFieldsFrom,
   retentionAggregateQuery,
   retentionRawQuery,
   tablePresenceQuery,
   type TablePresenceRow,
 } from './pump-query.builder';
+import { ensureRedaction } from './redaction-installer';
 
 const DEFAULT_RAW_RETENTION_DAYS = 30;
 const DEFAULT_AGGREGATE_RETENTION_DAYS = 365;
@@ -91,7 +91,7 @@ export class AnalyticsRetentionScheduler {
   private async ensureRedactionTrigger(): Promise<void> {
     try {
       const fields = redactFieldsFrom(this.configService.get<string>('ANALYTICS_REDACT_FIELDS'));
-      await this.prisma.$queryRawUnsafe(analyticsRedactionDdl(fields));
+      await ensureRedaction(this.prisma, fields, this.rawRetentionDays());
     } catch (err) {
       this.logger.error(
         `Could not ensure analytics redaction trigger: ${err instanceof Error ? err.message : String(err)}`,

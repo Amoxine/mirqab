@@ -583,6 +583,11 @@ BEGIN
         plain := regexp_replace(plain, 'Set-Cookie:[ \\t]*[^\\r\\n]*', 'Set-Cookie: [REDACTED]', 'gi');
         plain := regexp_replace(plain, 'X-Tyk-Authorization:[ \\t]*[^\\r\\n]*', 'X-Tyk-Authorization: [REDACTED]', 'gi');
         plain := regexp_replace(plain, 'X-Api-Key:[ \\t]*[^\\r\\n]*', 'X-Api-Key: [REDACTED]', 'gi');
+        -- A JSON Web Token by shape (three base64url segments, the first starting eyJ), wherever it sits:
+        -- a field, header, query string or path with an innocent name. The first segment is capped at 255
+        -- (PG's repetition limit, and a real header is ~36 characters); the payload is not, so a long one is
+        -- still hidden whole. No capture group, for the same cost reason as the field passes below.
+        plain := regexp_replace(plain, 'eyJ[A-Za-z0-9_-]{4,255}\\.[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]*)?', '[REDACTED]', 'g');
         IF fields <> '' THEN
           FOREACH f IN ARRAY string_to_array(fields, '|') LOOP
             plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)|-?[0-9][0-9.eE+-]*)', '"' || f || '":"[REDACTED]"', 'gi');

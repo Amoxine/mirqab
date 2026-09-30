@@ -215,6 +215,28 @@ describe('tyk_analytics redaction trigger on a real Postgres', () => {
     expect(decodeStrict(row.rawrequest)).not.toContain('"a"');
   });
 
+  it('a JWT is hidden by its shape, in a field, header, query string or path with an innocent name', async () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+    const long = `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiIx'.repeat(120)}.c2lnbmF0dXJl`; // a payload well past 255 characters
+    const [row] = await insert([
+      {
+        req: b64(`GET /cb/${jwt}?data=${jwt} HTTP/1.1\r\nX-Trace: ${jwt}\r\n\r\n{"payload":"${jwt}","long":"${long}","keep":"visible"}`),
+        res: b64(`HTTP/1.1 200 OK\r\n\r\nnote=${jwt}&keep=visible`),
+      },
+    ]);
+    for (const dump of [decodeStrict(row.rawrequest), decodeStrict(row.rawresponse)]) {
+      expect(dump).not.toContain('eyJ');
+      expect(dump).toContain('visible');
+    }
+  });
+
+  it('a body of repeated eyJ cannot make the trigger slow (16 KiB is the most it ever sees)', async () => {
+    const started = Date.now();
+    const [row] = await insert([{ req: b64(`POST / HTTP/1.1\r\n\r\n${'eyJ'.repeat(6_000)}`), res: b64(`HTTP/1.1 200 OK\r\n\r\n${'eyJabcd.'.repeat(2_500)}`) }]);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(decodeStrict(row.rawrequest).length).toBeGreaterThan(0);
+  });
+
   it('default fields cover an OAuth token response: exact keys, so token_type is not redacted', async () => {
     const body = '{"access_token":"at-1","refresh_token":"rt-2","client_secret":"cs-3","token_type":"Bearer"}';
     const [row] = await insert([{ req: '', res: b64(`HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n${body}`) }]);

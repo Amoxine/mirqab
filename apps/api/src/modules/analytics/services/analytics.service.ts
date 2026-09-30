@@ -16,7 +16,6 @@ import type {
 } from '../dto/analytics-response.dto';
 import {
   ANALYTICS_INDEX_DDL,
-  analyticsRedactionDdl,
   analyticsWindow,
   apiRollupQuery,
   errorRatePercent,
@@ -40,6 +39,7 @@ import {
   type TablePresenceRow,
   type TimeSeriesRow,
 } from './pump-query.builder';
+import { ensureRedaction } from './redaction-installer';
 import { PumpHealthService } from './pump-health.service';
 
 const CACHE_TTL_SECONDS = 60;
@@ -110,7 +110,8 @@ export class AnalyticsService implements OnModuleInit {
     try {
       // The retention scheduler re-runs this install with the same field rule (cold stack, D9).
       const fields = redactFieldsFrom(this.configService.get<string>('ANALYTICS_REDACT_FIELDS'));
-      await this.prisma.$queryRawUnsafe(analyticsRedactionDdl(fields));
+      const install = await ensureRedaction(this.prisma, fields, this.retentionDays());
+      if (install.upgrading) this.logger.warn('Analytics redaction rules changed: re-redacting stored rows in the background');
       this.logger.log(
         `Analytics redaction trigger ensured on tyk_analytics (${String(fields.length)} body field(s), skipped if the table is absent)`,
       );
@@ -514,6 +515,12 @@ export class AnalyticsService implements OnModuleInit {
     } catch (err) {
       this.logger.warn(`Analytics cache write failed for ${key}: ${this.describe(err)}`);
     }
+  }
+
+  /** The raw table's retention, which also bounds how far back a redaction upgrade rewrites. */
+  private retentionDays(): number {
+    const v = Number(this.configService.get<string>('ANALYTICS_RETENTION_DAYS'));
+    return Number.isInteger(v) && v > 0 ? v : 30;
   }
 
   private describe(err: unknown): string {

@@ -132,6 +132,34 @@ describe('parseHttpDump', () => {
       expect(shown('HTTP/1.1 200 OK\r\n\r\n{"pin":1234,"passphrase":"PP-1"}')).not.toMatch(/1234|PP-1/);
     });
 
+    describe('JWT-shaped values, found by value', () => {
+      const JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+      const shown = (head: string, body = '') => JSON.stringify(parseHttpDump(b64(`${head}\r\n\r\n${body}`)));
+
+      it('hides a token in a JSON field whose name looks harmless', () => {
+        expect(shown('HTTP/1.1 200 OK', `{"payload":"${JWT}","keep":"visible"}`)).not.toContain('eyJ');
+        expect(shown('HTTP/1.1 200 OK', `{"payload":"${JWT}","keep":"visible"}`)).toContain('visible');
+      });
+
+      it('hides it in a header with an innocent name, a query parameter, a path and a form body', () => {
+        expect(shown(`GET /callback/${JWT}?data=${JWT} HTTP/1.1\r\nX-Trace: ${JWT}\r\nReferer: https://a/?x=${JWT}`)).not.toContain('eyJ');
+        expect(shown('POST /x HTTP/1.1', `note=${JWT}&keep=visible`)).not.toContain('eyJ');
+      });
+
+      it('hides an unsecured token (empty signature) and leaves ordinary base64 alone', () => {
+        expect(shown('HTTP/1.1 200 OK', 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.')).not.toContain('eyJ');
+        expect(shown('HTTP/1.1 200 OK', '{"img":"iVBORw0KGgoAAAANSUhEUgAA","v":"eyJ"}')).toContain('iVBORw0KGgoAAAANSUhEUgAA');
+      });
+
+      it('stays linear on a body of repeated eyJ', () => {
+        const hostile = 'eyJ'.repeat(5_000);
+        const start = performance.now();
+        shown('HTTP/1.1 200 OK', hostile);
+        shown('HTTP/1.1 200 OK', 'eyJabcd.'.repeat(2_000));
+        expect(performance.now() - start).toBeLessThan(400);
+      });
+    });
+
     describe('a secret-named key holding an object or array', () => {
       const body = (json: string) => parseHttpDump(b64(`HTTP/1.1 200 OK\r\n\r\n${json}`))?.body ?? '';
 
