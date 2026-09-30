@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { analyticsWindow } from '../services/pump-query.builder';
 import { escapeLike } from '../services/traffic-query.builder';
+import { FULLTEXT_ANY, FULLTEXT_REQ, FULLTEXT_RES } from './traffic-search.sql';
 import type { SearchClause, StatusMatch, TrafficSearchRequest } from './traffic-search.types';
 
 /**
@@ -42,13 +43,6 @@ function status(match: StatusMatch): Prisma.Sql {
   return Prisma.sql`status = ANY(${match.values}::int[])`;
 }
 
-/** Both candidate encodings of one JSON leaf: the bare text may be a JSON string or a number. */
-function jsonProbes(path: string[], value: string): [string, string] {
-  const nest = (leaf: unknown) => JSON.stringify(path.reduceRight((inner, key) => ({ [key]: inner }), leaf));
-  const asNumber = /^-?\d+(\.\d+)?$/.test(value) && Number.isFinite(Number(value)) ? Number(value) : value;
-  return [nest(value), nest(asNumber)];
-}
-
 function predicate(clause: SearchClause, resolveApi: (value: string) => string[]): Prisma.Sql {
   switch (clause.kind) {
     case 'status':
@@ -58,9 +52,7 @@ function predicate(clause: SearchClause, resolveApi: (value: string) => string[]
     case 'method':
       return Prisma.sql`method = ANY(${clause.values}::text[])`;
     case 'path':
-      return clause.mode === 'prefix'
-        ? Prisma.sql`path LIKE ${`${escapeLike(clause.value)}%`} ESCAPE '\\'`
-        : Prisma.sql`path ILIKE ${escapeLike(clause.value).replace(/\*/g, '%')} ESCAPE '\\'`;
+      return Prisma.sql`path LIKE ${`${escapeLike(clause.value)}%`} ESCAPE '\\'`;
     case 'api':
       return Prisma.sql`apiid = ANY(${resolveApi(clause.value)}::text[])`;
     case 'key':
@@ -73,22 +65,13 @@ function predicate(clause: SearchClause, resolveApi: (value: string) => string[]
         : Prisma.sql`${column} @> ${JSON.stringify({ [clause.name]: clause.value })}::jsonb`;
     }
     case 'body': {
-      const sides = clause.side === 'any' ? (['req', 'res'] as const) : ([clause.side] as const);
-      const parts = sides.map((side) =>
-        clause.mode === 'word'
-          ? Prisma.sql`${Prisma.raw(`${side}_tsv`)} @@ phraseto_tsquery('simple', ${clause.value})`
-          : Prisma.sql`${Prisma.raw(`${side}_body`)} ILIKE ${`%${escapeLike(clause.value)}%`} ESCAPE '\\'`,
-      );
-      return parts.length === 1 ? (parts[0]) : Prisma.sql`(${Prisma.join(parts, ' OR ')})`;
+      // The combined-document expression is what the GIN index serves; a side-specific search adds an
+      // exact recheck on that side so `req:` never matches a word that only the response contains.
+      const any = Prisma.sql`${Prisma.raw(FULLTEXT_ANY)} @@ phraseto_tsquery('simple', ${clause.value})`;
+      if (clause.side === 'any') return any;
+      const side = Prisma.raw(clause.side === 'req' ? FULLTEXT_REQ : FULLTEXT_RES);
+      return Prisma.sql`(${any} AND ${side} @@ phraseto_tsquery('simple', ${clause.value}))`;
     }
-    case 'json': {
-      const [asText, asValue] = jsonProbes(clause.path, clause.value);
-      return asText === asValue
-        ? Prisma.sql`res_json @> ${asText}::jsonb`
-        : Prisma.sql`(res_json @> ${asText}::jsonb OR res_json @> ${asValue}::jsonb)`;
-    }
-    case 'regex':
-      return Prisma.sql`res_body ~* ${clause.value}`;
   }
 }
 

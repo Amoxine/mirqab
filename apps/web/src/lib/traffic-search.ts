@@ -11,7 +11,10 @@
  * Errors are codes, not sentences: the search bar translates them (`analytics.traffic.search.errors`).
  */
 
-export const SEARCH_LIMITS = { maxClauses: 8, minTerm: 3, maxValueLength: 200, maxJsonDepth: 6 } as const;
+export const SEARCH_LIMITS = { maxClauses: 8, maxBodyClauses: 3, minTerm: 3, maxValueLength: 200 } as const;
+
+/** Words in almost every captured body; a search for one only ever times out. Same set as the API. */
+const STOP_WORDS: ReadonlySet<string> = new Set(['id', 'data', 'name', 'value', 'true', 'false', 'null', 'type', 'status', 'message']);
 
 export type CompareOp = '>' | '>=' | '<' | '<=';
 export type StatusMatch =
@@ -23,13 +26,11 @@ export type SearchClause = { neg: boolean } & (
   | { kind: 'status'; match: StatusMatch }
   | { kind: 'latency'; op: CompareOp; value: number }
   | { kind: 'method'; values: string[] }
-  | { kind: 'path'; mode: 'prefix' | 'glob'; value: string }
+  | { kind: 'path'; value: string }
   | { kind: 'api'; value: string }
   | { kind: 'key'; value: string }
   | { kind: 'header'; side: 'req' | 'res'; name: string; value?: string }
-  | { kind: 'body'; side: 'req' | 'res' | 'any'; mode: 'word' | 'substring'; value: string }
-  | { kind: 'json'; path: string[]; value: string }
-  | { kind: 'regex'; value: string }
+  | { kind: 'body'; side: 'req' | 'res' | 'any'; value: string }
 );
 
 export type SearchErrorCode =
@@ -40,9 +41,10 @@ export type SearchErrorCode =
   | 'latency'
   | 'method'
   | 'headerName'
-  | 'json'
-  | 'jsonPath'
-  | 'termTooShort';
+  | 'termTooShort'
+  | 'commonWord'
+  /** `~` (substring) was measured too slow to offer; only `:` is understood. */
+  | 'unsupportedOperator';
 
 export interface SearchError {
   code: SearchErrorCode;
@@ -65,8 +67,6 @@ export const SEARCH_FIELDS = [
   'body',
   'req',
   'res',
-  'json',
-  'regex',
 ] as const;
 type SearchField = (typeof SEARCH_FIELDS)[number];
 
@@ -118,7 +118,7 @@ export function parseToken(raw: string): ParsedToken {
 
   const m = /^([a-z]+)([:~])(.*)$/.exec(text);
   const field = m?.[1] ?? 'body';
-  const substring = m?.[2] === '~';
+  if (m?.[2] === '~') return err('unsupportedOperator', { field });
   const value = (m ? (m[3] ?? '') : text).replace(/^"(.*)"$/, '$1');
 
   if (!isField(field)) return err('unknownField', { field });
@@ -143,8 +143,8 @@ export function parseToken(raw: string): ParsedToken {
         : err('method');
     }
     case 'path': {
-      if (value.replace(/\*/g, '').length < SEARCH_LIMITS.minTerm) return err('termTooShort', { min: SEARCH_LIMITS.minTerm });
-      return { ok: true, clause: { kind: 'path', neg, mode: value.includes('*') ? 'glob' : 'prefix', value } };
+      if (alnumLength(value) < SEARCH_LIMITS.minTerm) return err('termTooShort', { min: SEARCH_LIMITS.minTerm });
+      return { ok: true, clause: { kind: 'path', neg, value } };
     }
     case 'api':
       return { ok: true, clause: { kind: 'api', neg, value } };
@@ -163,25 +163,14 @@ export function parseToken(raw: string): ParsedToken {
         clause: headerValue === undefined ? { kind: 'header', neg, side, name } : { kind: 'header', neg, side, name, value: headerValue },
       };
     }
-    case 'json': {
-      const eq = value.indexOf('=');
-      if (eq < 1 || eq === value.length - 1) return err('json');
-      const path = value.slice(0, eq).split('.');
-      if (path.length > SEARCH_LIMITS.maxJsonDepth || !path.every((k) => /^[A-Za-z0-9_-]{1,64}$/.test(k))) {
-        return err('jsonPath', { max: SEARCH_LIMITS.maxJsonDepth });
-      }
-      return { ok: true, clause: { kind: 'json', neg, path, value: value.slice(eq + 1) } };
-    }
-    case 'regex':
-      return value.length < SEARCH_LIMITS.minTerm
-        ? err('termTooShort', { min: SEARCH_LIMITS.minTerm })
-        : { ok: true, clause: { kind: 'regex', neg, value } };
     case 'body':
     case 'req':
     case 'res': {
       if (alnumLength(value) < SEARCH_LIMITS.minTerm) return err('termTooShort', { min: SEARCH_LIMITS.minTerm });
+      const words = value.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+      if (words.every((w) => STOP_WORDS.has(w))) return err('commonWord', { term: value });
       const side = field === 'body' ? 'any' : field;
-      return { ok: true, clause: { kind: 'body', neg, side, mode: substring ? 'substring' : 'word', value } };
+      return { ok: true, clause: { kind: 'body', neg, side, value } };
     }
   }
 }

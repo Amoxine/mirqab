@@ -6,33 +6,37 @@ const rejects = (input: unknown, message: RegExp) => {
   expect(() => validateSearchRequest(input)).toThrow(SearchValidationError);
   expect(() => validateSearchRequest(input)).toThrow(message);
 };
+const body = (value: string, side = 'any') => ({ kind: 'body', side, value });
 
 describe('validateSearchRequest', () => {
   it('defaults to 24h, no clauses, the default page size and no cursor', () => {
     expect(validateSearchRequest({})).toEqual({ range: '24h', clauses: [], limit: SEARCH_LIMITS.defaultPageSize });
   });
 
-  it('accepts one of each clause kind and defaults neg to false', () => {
-    const all = [
-      { kind: 'status', match: { type: 'cmp', op: '>=', value: 500 } },
-      { kind: 'status', neg: true, match: { type: 'in', values: [404, 429] } },
-      { kind: 'status', match: { type: 'range', from: 200, to: 299 } },
-      { kind: 'latency', op: '>', value: 800 },
-      { kind: 'method', values: ['GET', 'POST'] },
-      { kind: 'path', mode: 'prefix', value: '/orders' },
-      { kind: 'path', mode: 'glob', value: '*fund*' },
-      { kind: 'api', value: 'orders-api' },
-      { kind: 'key', value: 'qbus-web' },
-      { kind: 'header', side: 'req', name: 'x-request-id', value: 'abc' },
-      { kind: 'header', side: 'res', name: 'x-cache' },
-      { kind: 'body', side: 'any', mode: 'word', value: 'insufficient funds' },
-      { kind: 'json', path: ['user', 'id'], value: '4242' },
-      { kind: 'regex', value: 'E4[0-9]{2}' },
-    ];
-    const parsed = [all.slice(0, 8), all.slice(8)].flatMap((clauses) => validateSearchRequest({ clauses }).clauses);
-    expect(parsed).toHaveLength(14);
-    expect(parsed[0]).toMatchObject({ neg: false });
-    expect(parsed[1]).toMatchObject({ neg: true });
+  it('accepts one of each lean clause kind and defaults neg to false', () => {
+    const request = validateSearchRequest({
+      clauses: [
+        { kind: 'status', match: { type: 'cmp', op: '>=', value: 500 } },
+        { kind: 'status', neg: true, match: { type: 'in', values: [404, 429] } },
+        { kind: 'status', match: { type: 'range', from: 200, to: 299 } },
+        { kind: 'latency', op: '>', value: 800 },
+        { kind: 'method', values: ['GET', 'POST'] },
+        { kind: 'path', value: '/orders' },
+        { kind: 'api', value: 'orders-api' },
+        { kind: 'key', value: 'qbus-web' },
+      ],
+    });
+    expect(request.clauses).toHaveLength(8);
+    expect(request.clauses[0]).toMatchObject({ neg: false });
+    expect(request.clauses[1]).toMatchObject({ neg: true });
+    const more = validateSearchRequest({
+      clauses: [
+        { kind: 'header', side: 'req', name: 'x-request-id', value: 'abc' },
+        { kind: 'header', side: 'res', name: 'x-cache' },
+        body('insufficient funds'),
+      ],
+    });
+    expect(more.clauses).toHaveLength(3);
   });
 
   it('accepts the largest page and a well-formed cursor', () => {
@@ -47,6 +51,18 @@ describe('validateSearchRequest', () => {
       op: '>',
       value: 5,
     });
+  });
+
+  it.each([
+    ['json', { kind: 'json', path: ['a'], value: '1' }],
+    ['regex', { kind: 'regex', value: 'E4[0-9]{2}' }],
+  ])('refuses the %s kind, which is not in the lean core', (_kind, input) => {
+    rejects({ clauses: [input] }, /Unknown filter kind/);
+  });
+
+  it('ignores a mode the old grammar had: body is always a word search, path always a prefix', () => {
+    expect(clause({ ...body('insufficient funds'), mode: 'substring' })).toEqual({ kind: 'body', neg: false, side: 'any', value: 'insufficient funds' });
+    expect(clause({ kind: 'path', mode: 'glob', value: '*orders*' })).toEqual({ kind: 'path', neg: false, value: '*orders*' });
   });
 
   it.each([
@@ -68,22 +84,39 @@ describe('validateSearchRequest', () => {
     ['a header name with an injection', { clauses: [{ kind: 'header', side: 'req', name: 'x"]', value: 'v' }] }, /Header names/],
     ['an upper-case header name', { clauses: [{ kind: 'header', side: 'req', name: 'X-Cache' }] }, /Header names/],
     ['a bad header side', { clauses: [{ kind: 'header', side: 'both', name: 'x-a' }] }, /side must be/],
-    ['a body term under 3 characters', { clauses: [{ kind: 'body', side: 'any', mode: 'substring', value: 'ab' }] }, /at least 3/],
-    ['a body term of only punctuation', { clauses: [{ kind: 'body', side: 'any', mode: 'word', value: '--- ---' }] }, /at least 3/],
-    ['a path of only wildcards', { clauses: [{ kind: 'path', mode: 'glob', value: '**' }] }, /path needs/],
-    ['a json path with a bracket', { clauses: [{ kind: 'json', path: ['items[0]'], value: '1' }] }, /json path/],
-    ['a json path deeper than 6', { clauses: [{ kind: 'json', path: Array(7).fill('a'), value: '1' }] }, /json path/],
+    ['a body term under 3 characters', { clauses: [body('ab')] }, /at least 3/],
+    ['a body term of only punctuation', { clauses: [body('--- ---')] }, /at least 3/],
+    ['a bad body side', { clauses: [body('funds', 'both')] }, /side must be/],
+    ['a path under 3 characters', { clauses: [{ kind: 'path', value: '/a' }] }, /path needs/],
     ['a value over 200 characters', { clauses: [{ kind: 'key', value: 'k'.repeat(201) }] }, /longer than 200/],
-    ['a short regex', { clauses: [{ kind: 'regex', value: 'a' }] }, /regex needs/],
     ['a cursor with a bad id', { cursor: { ts: '2026-09-29T10:06:17Z', id: '1; DROP' } }, /cursor is malformed/],
     ['a cursor with a bad timestamp', { cursor: { ts: 'yesterday', id: '1' } }, /cursor is malformed/],
   ])('rejects %s', (_label, input, message) => {
     rejects(input, message);
   });
 
-  it('counts letters and digits in any script, so a short Arabic term is still too short', () => {
-    rejects({ clauses: [{ kind: 'body', side: 'any', mode: 'word', value: 'مل' }] }, /at least 3/);
-    expect(clause({ kind: 'body', side: 'any', mode: 'word', value: 'المال' })).toMatchObject({ kind: 'body' });
+  describe('body terms', () => {
+    it.each(['id', 'data', 'name', 'value', 'true', 'false', 'null', 'type', 'status', 'message', 'DATA', 'true false'])(
+      'refuses the common word %s, which matches nearly every request',
+      (word) => {
+        rejects({ clauses: [body(word)] }, /almost every request|at least 3/);
+      },
+    );
+
+    it('allows a common word inside a more specific phrase', () => {
+      expect(clause(body('insufficient funds status'))).toMatchObject({ kind: 'body', value: 'insufficient funds status' });
+    });
+
+    it('allows at most 3 body clauses', () => {
+      const three = [body('timeout'), body('refused', 'res'), body('upstream', 'req')];
+      expect(validateSearchRequest({ clauses: three }).clauses).toHaveLength(3);
+      rejects({ clauses: [...three, body('gateway')] }, /At most 3 body-text/);
+    });
+
+    it('counts letters and digits in any script, so a short Arabic term is still too short', () => {
+      rejects({ clauses: [body('مل')] }, /at least 3/);
+      expect(clause(body('المال'))).toMatchObject({ kind: 'body' });
+    });
   });
 
   /**
@@ -97,16 +130,13 @@ describe('validateSearchRequest', () => {
     { kind: 'status', neg: true, match: { type: 'in', values: [404, 429] } },
     { kind: 'latency', neg: false, op: '>', value: 800 },
     { kind: 'method', neg: false, values: ['POST', 'PUT'] },
-    { kind: 'path', neg: false, mode: 'prefix', value: '/orders' },
-    { kind: 'path', neg: false, mode: 'glob', value: '*fund*' },
+    { kind: 'path', neg: false, value: '/orders' },
     { kind: 'api', neg: false, value: 'orders-api' },
     { kind: 'key', neg: false, value: 'qbus-web' },
     { kind: 'header', neg: false, side: 'req', name: 'x-request-id', value: 'abc' },
     { kind: 'header', neg: false, side: 'res', name: 'x-cache' },
-    { kind: 'body', neg: false, side: 'any', mode: 'word', value: 'insufficient funds' },
-    { kind: 'body', neg: false, side: 'res', mode: 'substring', value: 'fund' },
-    { kind: 'json', neg: false, path: ['user', 'id'], value: '4242' },
-    { kind: 'regex', neg: false, value: 'E4[0-9]{2}' },
+    { kind: 'body', neg: false, side: 'any', value: 'insufficient funds' },
+    { kind: 'body', neg: false, side: 'res', value: 'timeout' },
   ])('accepts what the web parser emits: $kind', (emitted) => {
     expect(validateSearchRequest({ clauses: [emitted] }).clauses[0]).toEqual(emitted);
   });

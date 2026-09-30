@@ -1,6 +1,7 @@
 import {
   SEARCH_LIMITS,
   SEARCH_RANGES,
+  SEARCH_STOP_WORDS,
   type CompareOp,
   type SearchClause,
   type SearchCursor,
@@ -14,7 +15,6 @@ export class SearchValidationError extends Error {}
 
 const COMPARE_OPS: readonly string[] = ['>', '>=', '<', '<='];
 const HEADER_NAME = /^[a-z0-9-]{1,64}$/;
-const JSON_KEY = /^[A-Za-z0-9_-]{1,64}$/;
 const METHOD = /^[A-Z]{3,7}$/;
 const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 const CURSOR_ID = /^\d{1,19}$/;
@@ -100,13 +100,11 @@ function clause(raw: unknown): SearchClause {
       return { kind: 'method', neg, values: values as string[] };
     }
     case 'path': {
-      const mode = raw.mode;
-      if (mode !== 'prefix' && mode !== 'glob') return fail('path mode must be prefix or glob.');
       const value = str(raw, 'value', 'path');
-      if (value.replace(/\*/g, '').length < SEARCH_LIMITS.minTerm) {
-        return fail(`path needs at least ${String(SEARCH_LIMITS.minTerm)} characters besides *.`);
+      if (alnumLength(value) < SEARCH_LIMITS.minTerm) {
+        return fail(`path needs at least ${String(SEARCH_LIMITS.minTerm)} letters or digits.`);
       }
-      return { kind: 'path', neg, mode, value };
+      return { kind: 'path', neg, value };
     }
     case 'api':
       return { kind: 'api', neg, value: str(raw, 'value', 'api') };
@@ -123,30 +121,15 @@ function clause(raw: unknown): SearchClause {
     case 'body': {
       const side = raw.side;
       if (side !== 'req' && side !== 'res' && side !== 'any') return fail('body side must be req, res or any.');
-      const mode = raw.mode;
-      if (mode !== 'word' && mode !== 'substring') return fail('body mode must be word or substring.');
       const value = str(raw, 'value', 'body');
+      const words = value.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
       if (alnumLength(value) < SEARCH_LIMITS.minTerm) {
-        return fail(`Use at least ${String(SEARCH_LIMITS.minTerm)} letters or digits: a shorter term scans the whole window.`);
+        return fail(`Use at least ${String(SEARCH_LIMITS.minTerm)} letters or digits: a shorter term matches too much.`);
       }
-      return { kind: 'body', neg, side, mode, value };
-    }
-    case 'json': {
-      const path = raw.path;
-      if (
-        !Array.isArray(path) ||
-        path.length < 1 ||
-        path.length > SEARCH_LIMITS.maxJsonDepth ||
-        !path.every((k) => typeof k === 'string' && JSON_KEY.test(k))
-      ) {
-        return fail(`json path must be 1 to ${String(SEARCH_LIMITS.maxJsonDepth)} keys of letters, digits, _ or -.`);
+      if (words.every((w) => SEARCH_STOP_WORDS.has(w))) {
+        return fail(`"${value}" appears in almost every request; search for something more specific.`);
       }
-      return { kind: 'json', neg, path: path as string[], value: str(raw, 'value', 'json value') };
-    }
-    case 'regex': {
-      const value = str(raw, 'value', 'regex');
-      if (value.length < SEARCH_LIMITS.minTerm) return fail(`regex needs at least ${String(SEARCH_LIMITS.minTerm)} characters.`);
-      return { kind: 'regex', neg, value };
+      return { kind: 'body', neg, side, value };
     }
     default:
       return fail('Unknown filter kind.');
@@ -177,9 +160,13 @@ export function validateSearchRequest(input: unknown): TrafficSearchRequest {
     return fail(`limit must be a whole number from 1 to ${String(SEARCH_LIMITS.maxPageSize)}.`);
   }
   const parsedCursor = cursor(input.cursor);
+  const clauses = rawClauses.map(clause);
+  if (clauses.filter((c) => c.kind === 'body').length > SEARCH_LIMITS.maxBodyClauses) {
+    return fail(`At most ${String(SEARCH_LIMITS.maxBodyClauses)} body-text filters per search.`);
+  }
   return {
     range: range as SearchRange,
-    clauses: rawClauses.map(clause),
+    clauses,
     limit,
     ...(parsedCursor ? { cursor: parsedCursor } : {}),
   };

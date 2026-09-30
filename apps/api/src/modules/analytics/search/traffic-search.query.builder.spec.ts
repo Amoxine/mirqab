@@ -1,4 +1,5 @@
 import { trafficSearchQuery } from './traffic-search.query.builder';
+import { FULLTEXT_ANY, FULLTEXT_REQ, FULLTEXT_RES } from './traffic-search.sql';
 import { validateSearchRequest } from './traffic-search.validate';
 
 const NOW = new Date('2026-09-29T12:00:00.000Z');
@@ -26,7 +27,7 @@ describe('trafficSearchQuery', () => {
 
   it('never selects the body columns for the list', () => {
     const { sql } = build({});
-    expect(sql).not.toMatch(/req_body|res_body|req_headers|res_headers|res_json/);
+    expect(sql).not.toMatch(/req_body|res_body|req_headers|res_headers/);
   });
 
   it('binds every value: hostile text appears in the parameters and never in the SQL', () => {
@@ -34,10 +35,9 @@ describe('trafficSearchQuery', () => {
     const { sql, values } = build({
       clauses: [
         { kind: 'key', value: evil },
-        { kind: 'body', side: 'any', mode: 'substring', value: evil },
-        { kind: 'body', side: 'res', mode: 'word', value: evil.replace(/[^a-z ]/gi, 'x') },
-        { kind: 'regex', value: evil },
-        { kind: 'path', mode: 'prefix', value: evil },
+        { kind: 'body', side: 'res', value: 'weird timeout' },
+        { kind: 'path', value: evil },
+        { kind: 'header', side: 'req', name: 'x-a', value: evil },
       ],
     });
     expect(sql).not.toContain('DROP');
@@ -51,53 +51,40 @@ describe('trafficSearchQuery', () => {
       [{ kind: 'status', match: { type: 'in', values: [404, 429] } }, /status = ANY\(\$3::int\[\]\)/],
       [{ kind: 'latency', op: '>', value: 800 }, /latency_ms > \$3/],
       [{ kind: 'method', values: ['GET', 'POST'] }, /method = ANY\(\$3::text\[\]\)/],
-      [{ kind: 'path', mode: 'prefix', value: '/orders' }, /path LIKE \$3 ESCAPE/],
-      [{ kind: 'path', mode: 'glob', value: '*fund*' }, /path ILIKE \$3 ESCAPE/],
+      [{ kind: 'path', value: '/orders' }, /path LIKE \$3 ESCAPE/],
       [{ kind: 'key', value: 'qbus-web' }, /key_alias = \$3/],
       [{ kind: 'header', side: 'req', name: 'x-request-id', value: 'abc' }, /req_headers @> \$3::jsonb/],
       [{ kind: 'header', side: 'res', name: 'x-cache' }, /res_headers @\? \$3::jsonpath/],
-      [{ kind: 'body', side: 'res', mode: 'word', value: 'insufficient funds' }, /res_tsv @@ phraseto_tsquery\('simple', \$3\)/],
-      [{ kind: 'body', side: 'req', mode: 'substring', value: 'fund' }, /req_body ILIKE \$3 ESCAPE/],
-      [{ kind: 'regex', value: 'E4[0-9]{2}' }, /res_body ~\* \$3/],
     ];
     for (const [c, expected] of cases) expect(build({ clauses: [c] }).sql).toMatch(expected);
   });
 
-  it('searches both sides for body:any, as an OR the planner can bitmap-combine', () => {
-    const { sql } = build({ clauses: [{ kind: 'body', side: 'any', mode: 'word', value: 'insufficient' }] });
-    expect(sql).toContain("(req_tsv @@ phraseto_tsquery('simple', $3) OR res_tsv @@ phraseto_tsquery('simple', $4))");
+  describe('body word search', () => {
+    it('emits the exact expression the GIN index is built on, so the planner can use it', () => {
+      const { sql } = build({ clauses: [{ kind: 'body', side: 'any', value: 'insufficient funds' }] });
+      expect(sql).toContain(`${FULLTEXT_ANY} @@ phraseto_tsquery('simple', $3)`);
+    });
+
+    it('a side-specific search keeps the index probe and adds an exact recheck on that side', () => {
+      const res = build({ clauses: [{ kind: 'body', side: 'res', value: 'timeout' }] }).sql;
+      expect(res).toContain(`(${FULLTEXT_ANY} @@ phraseto_tsquery('simple', $3) AND ${FULLTEXT_RES} @@ phraseto_tsquery('simple', $4))`);
+      const req = build({ clauses: [{ kind: 'body', side: 'req', value: 'timeout' }] }).sql;
+      expect(req).toContain(`AND ${FULLTEXT_REQ} @@`);
+    });
+
+    it('binds the phrase twice for a side search, and once for either side', () => {
+      expect(build({ clauses: [{ kind: 'body', side: 'res', value: 'timeout' }] }).values.slice(2)).toEqual(['timeout', 'timeout', 51]);
+      expect(build({ clauses: [{ kind: 'body', side: 'any', value: 'timeout' }] }).values.slice(2)).toEqual(['timeout', 51]);
+    });
   });
 
-  it('escapes LIKE wildcards in a typed path and turns * into %', () => {
-    const { values } = build({ clauses: [{ kind: 'path', mode: 'glob', value: '*100%_done*' }] });
-    expect(values[2]).toBe('%100\\%\\_done%');
-    expect(build({ clauses: [{ kind: 'path', mode: 'prefix', value: '/a_b' }] }).values[2]).toBe('/a\\_b%');
-  });
-
-  it('escapes LIKE wildcards in a substring body search', () => {
-    expect(build({ clauses: [{ kind: 'body', side: 'res', mode: 'substring', value: '50%_off' }] }).values[2]).toBe('%50\\%\\_off%');
-  });
-
-  it('json: probes both the text and the numeric encoding of a numeric-looking value', () => {
-    const { sql, values } = build({ clauses: [{ kind: 'json', path: ['user', 'id'], value: '4242' }] });
-    expect(sql).toContain('(res_json @> $3::jsonb OR res_json @> $4::jsonb)');
-    expect(values.slice(2, 4)).toEqual(['{"user":{"id":"4242"}}', '{"user":{"id":4242}}']);
-  });
-
-  it('json: a non-numeric value needs one probe only', () => {
-    const { sql, values } = build({ clauses: [{ kind: 'json', path: ['status'], value: 'shipped' }] });
-    expect(sql).toContain('res_json @> $3::jsonb');
-    expect(sql).not.toContain('OR res_json');
-    expect(values[2]).toBe('{"status":"shipped"}');
-  });
-
-  it('json: keys that look like operators stay data inside the JSON parameter', () => {
-    expect(build({ clauses: [{ kind: 'json', path: ['__proto__'], value: 'x' }] }).values[2]).toBe('{"__proto__":"x"}');
+  it('escapes LIKE wildcards in a typed path prefix', () => {
+    expect(build({ clauses: [{ kind: 'path', value: '/ab_c%' }] }).values[2]).toBe('/ab\\_c\\%%');
   });
 
   it('a negated clause keeps rows where the column is NULL', () => {
-    const { sql } = build({ clauses: [{ kind: 'json', neg: true, path: ['a'], value: 'b' }] });
-    expect(sql).toContain('NOT COALESCE((res_json @> $3::jsonb), false)');
+    const { sql } = build({ clauses: [{ kind: 'header', neg: true, side: 'res', name: 'x-cache' }] });
+    expect(sql).toContain('NOT COALESCE((res_headers @? $3::jsonpath), false)');
   });
 
   it('api: resolves only within the tenant, and an unknown name matches nothing', () => {

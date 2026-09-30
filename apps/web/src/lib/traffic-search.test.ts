@@ -23,17 +23,14 @@ const CONTRACT: [string, SearchClause][] = [
   ['latency:>800', { kind: 'latency', neg: false, op: '>', value: 800 }],
   ['latency:800', { kind: 'latency', neg: false, op: '>=', value: 800 }],
   ['method:post,put', { kind: 'method', neg: false, values: ['POST', 'PUT'] }],
-  ['path:/orders', { kind: 'path', neg: false, mode: 'prefix', value: '/orders' }],
-  ['path:*fund*', { kind: 'path', neg: false, mode: 'glob', value: '*fund*' }],
+  ['path:/orders', { kind: 'path', neg: false, value: '/orders' }],
   ['api:orders-api', { kind: 'api', neg: false, value: 'orders-api' }],
   ['key:qbus-web', { kind: 'key', neg: false, value: 'qbus-web' }],
   ['reqh:X-Request-Id=abc', { kind: 'header', neg: false, side: 'req', name: 'x-request-id', value: 'abc' }],
   ['resh:x-cache', { kind: 'header', neg: false, side: 'res', name: 'x-cache' }],
-  ['body:"insufficient funds"', { kind: 'body', neg: false, side: 'any', mode: 'word', value: 'insufficient funds' }],
-  ['res~fund', { kind: 'body', neg: false, side: 'res', mode: 'substring', value: 'fund' }],
-  ['timeout', { kind: 'body', neg: false, side: 'any', mode: 'word', value: 'timeout' }],
-  ['json:user.id=4242', { kind: 'json', neg: false, path: ['user', 'id'], value: '4242' }],
-  ['regex:E4[0-9]{2}', { kind: 'regex', neg: false, value: 'E4[0-9]{2}' }],
+  ['body:"insufficient funds"', { kind: 'body', neg: false, side: 'any', value: 'insufficient funds' }],
+  ['res:refused', { kind: 'body', neg: false, side: 'res', value: 'refused' }],
+  ['timeout', { kind: 'body', neg: false, side: 'any', value: 'timeout' }],
 ];
 
 describe('tokenize', () => {
@@ -65,17 +62,24 @@ describe('parseToken', () => {
     ['method:get!', 'method'],
     ['reqh:bad name=1', 'headerName'],
     ['reqh:x-a=', 'needsValue'],
-    ['json:user.id', 'json'],
-    ['json:=5', 'json'],
-    ['json:a.b.c.d.e.f.g=1', 'jsonPath'],
-    ['json:items[0]=1', 'jsonPath'],
+    ['json:user.id=1', 'unknownField'],
+    ['regex:E4[0-9]{2}', 'unknownField'],
+    ['body~fund', 'unsupportedOperator'],
+    ['path~ord', 'unsupportedOperator'],
+    ['id', 'termTooShort'],
+    ['data', 'commonWord'],
+    ['body:DATA', 'commonWord'],
+    ['body:"true false"', 'commonWord'],
     ['body:ab', 'termTooShort'],
     ['body:"--- ---"', 'termTooShort'],
-    ['path:**', 'termTooShort'],
-    ['regex:a', 'termTooShort'],
+    ['path:/a', 'termTooShort'],
     [`key:${'k'.repeat(201)}`, 'tooLong'],
   ])('%s is refused as %s', (raw, code) => {
     expect(errorCode(raw)).toBe(code);
+  });
+
+  it('a common word inside a more specific phrase is fine', () => {
+    expect(errorCode('body:"insufficient funds status"')).toBeNull();
   });
 
   it('carries the numbers a translated message needs', () => {
