@@ -110,9 +110,53 @@ function redactPairs(text: string): string {
   );
 }
 
+/** Index just past the `{`/`[` at `open`'s matching close, string-aware; the end of the text when a clip cut it open. Linear. */
+function containerEnd(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      for (i++; i < text.length && text[i] !== '"'; i++) if (text[i] === '\\') i++;
+    } else if (c === '{' || c === '[') {
+      depth++;
+    } else if ((c === '}' || c === ']') && --depth === 0) {
+      return i + 1;
+    }
+  }
+  return text.length;
+}
+
+/** A secret-named key followed by `:` and an opening `{`/`[` (checked without slicing the text). */
+const CONTAINER_OPEN = /\s*:\s*[{[]/y;
+
+/**
+ * A secret-named key whose value is an object or array (`"cookies":{"sid":"…"}`, `"credentials":[…]`)
+ * is redacted WHOLE. `JSON_TOKEN` only knows string and number values, so it left the container alone
+ * and judged each inner key on its own name: `sid` matches nothing, and the session id stayed readable.
+ * Runs on the same linear token scan; a container is skipped in one pass, never re-scanned.
+ */
+function redactSecretContainers(text: string): string {
+  const tokens = new RegExp(JSON_TOKEN.source, 'g');
+  let out = '';
+  let last = 0;
+  for (let m = tokens.exec(text); m; m = tokens.exec(text)) {
+    // A string/number value is `redactJson`'s job; a bare key is the one that may hold a container.
+    const [, name = '', colon] = m as (string | undefined)[] as [string, string | undefined, string | undefined];
+    if (colon !== undefined || !isSecretName(name)) continue;
+    CONTAINER_OPEN.lastIndex = tokens.lastIndex;
+    const open = CONTAINER_OPEN.exec(text);
+    if (!open) continue;
+    const end = containerEnd(text, tokens.lastIndex + open[0].length - 1);
+    out += `${text.slice(last, m.index)}"${name}":"${REDACTED}"`;
+    last = end;
+    tokens.lastIndex = end;
+  }
+  return out + text.slice(last);
+}
+
 /** Redacts secret JSON fields, nested or not, including one whose value the clip cut off. */
 function redactJson(text: string): string {
-  return text
+  return redactSecretContainers(text)
     .replace(TRIGGER_TAIL, '$1')
     .replace(JSON_TOKEN, (token, name: string, colon: string | undefined, value: string | undefined) =>
       colon !== undefined && value !== undefined && isSecretName(name) ? `"${name}"${colon}"${REDACTED}"` : token,

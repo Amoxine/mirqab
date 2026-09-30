@@ -522,7 +522,10 @@ export function redactFieldsFrom(configured: string | undefined): string[] {
  * diagnostics) and configured JSON body FIELD values — then re-encodes. A field value is a JSON string
  * (escape-aware: `"a\"b"` is one value, so no tail survives past an escaped quote) or a number (`cvv`,
  * `ssn` are usually numeric); either becomes the string `"[REDACTED]"`. Keys match exactly, so
- * `access_token` is not covered by `token`. Nested objects/arrays under a field are not redacted.
+ * `access_token` is not covered by `token`. A field holding an object or array is redacted whole when it
+ * is flat (string-aware: a `}` inside a string does not end it); one nested deeper, which a regex cannot
+ * match, is redacted from its opening bracket to the end of the dump, since over-redacting the tail is
+ * safe and leaving the inner keys is not. `http-dump-parser.ts` redacts any depth by name pattern.
  *
  * Bounded cost: the dump is cut to `MAX_REDACTED_DUMP_CHARS` before any regex runs (then marked with
  * `TRUNCATED_DUMP_MARKER`, appended after redaction so no pattern can swallow it), and a string value
@@ -583,6 +586,8 @@ BEGIN
         IF fields <> '' THEN
           FOREACH f IN ARRAY string_to_array(fields, '|') LOOP
             plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)|-?[0-9][0-9.eE+-]*)', '"' || f || '":"[REDACTED]"', 'gi');
+            plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*(?:\\{(?:[^{}"]|"(?:[^"\\\\]|\\\\.)*")*\\}|\\[(?:[^\\[\\]"]|"(?:[^"\\\\]|\\\\.)*")*\\])', '"' || f || '":"[REDACTED]"', 'gi');
+            plain := regexp_replace(plain, '"' || f || '"\\s*:\\s*[{\\[][\\s\\S]*$', '"' || f || '":"[REDACTED]"', 'gi');
           END LOOP;
         END IF;
         IF truncated THEN

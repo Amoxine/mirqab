@@ -186,6 +186,35 @@ describe('tyk_analytics redaction trigger on a real Postgres', () => {
     });
   });
 
+  it('a configured field holding an object or array is redacted whole; a } inside a string does not end it', async () => {
+    const body =
+      '{"id":1,"credential":{"a":"x}y","b":"SECRET-B"},"token":["T1","T2"],"password":{"n":{"m":"DEEP-C"}},"tail":"after"}';
+    const [row] = await insert([{ req: b64(`POST /x HTTP/1.1\r\n\r\n${body}`), res: '' }]);
+
+    const stored = decodeStrict(row.rawrequest).split('\r\n\r\n')[1];
+    expect(stored).not.toMatch(/SECRET-B|T1|T2|DEEP-C|x}y/);
+    // Flat containers are replaced in place; the deeper one blanks to the end of the dump (safe, not precise).
+    expect(stored).toBe('{"id":1,"credential":"[REDACTED]","token":"[REDACTED]","password":"[REDACTED]"');
+  });
+
+  it('flat containers keep the fields after them readable', async () => {
+    const [row] = await insert([
+      { req: b64('POST /x HTTP/1.1\r\n\r\n{"secret":{"k":"v"},"keep":"me","token":[1,2],"n":3}'), res: '' },
+    ]);
+    expect(decodeStrict(row.rawrequest).split('\r\n\r\n')[1]).toBe(
+      '{"secret":"[REDACTED]","keep":"me","token":"[REDACTED]","n":3}',
+    );
+  });
+
+  it('a dense body of secret-named objects also stays fast', async () => {
+    const dense = `POST / HTTP/1.1\r\n\r\n{${'"token":{"a":"}"},'.repeat(1_000)}"n":1}`;
+    const started = Date.now();
+    const [row] = await insert([{ req: b64(dense), res: '' }]);
+
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(decodeStrict(row.rawrequest)).not.toContain('"a"');
+  });
+
   it('default fields cover an OAuth token response: exact keys, so token_type is not redacted', async () => {
     const body = '{"access_token":"at-1","refresh_token":"rt-2","client_secret":"cs-3","token_type":"Bearer"}';
     const [row] = await insert([{ req: '', res: b64(`HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n${body}`) }]);

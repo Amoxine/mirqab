@@ -132,6 +132,37 @@ describe('parseHttpDump', () => {
       expect(shown('HTTP/1.1 200 OK\r\n\r\n{"pin":1234,"passphrase":"PP-1"}')).not.toMatch(/1234|PP-1/);
     });
 
+    describe('a secret-named key holding an object or array', () => {
+      const body = (json: string) => parseHttpDump(b64(`HTTP/1.1 200 OK\r\n\r\n${json}`))?.body ?? '';
+
+      it('redacts the whole container, not only inner keys that look secret (an upstream echoing cookies)', () => {
+        const out = body('{"id":1,"cookies":{"sid":"SECRETCOOKIE77bd","theme":"dark"},"ok":true}');
+        expect(out).not.toMatch(/SECRETCOOKIE77bd|dark/);
+        expect(out).toBe('{"id":1,"cookies":"[REDACTED]","ok":true}');
+      });
+
+      it('handles arrays, deep nesting and brackets inside strings', () => {
+        const out = body('{"credentials":[{"a":{"b":["}","]","x\\"}]"]}}],"after":"kept","session":{"n":{"m":"DEEP"}}}');
+        expect(out).not.toMatch(/DEEP|"a"/);
+        expect(out).toBe('{"credentials":"[REDACTED]","after":"kept","session":"[REDACTED]"}');
+      });
+
+      it('redacts to the end when the clip cut the container open', () => {
+        expect(body('{"id":1,"cookies":{"sid":"CUT-COOK')).not.toContain('CUT-COOK');
+      });
+
+      it('leaves a container under a harmless key readable, redacting only its secret fields', () => {
+        expect(body('{"user":{"name":"bob","token":"T-1"}}')).toBe('{"user":{"name":"bob","token":"[REDACTED]"}}');
+      });
+
+      it('stays linear on 16 KB of nested brackets', () => {
+        const start = performance.now();
+        const out = body(`{"session":${'['.repeat(8_000)}${']'.repeat(8_000)},"k":1}`);
+        expect(performance.now() - start).toBeLessThan(200);
+        expect(out).toBe('{"session":"[REDACTED]","k":1}');
+      });
+    });
+
     it('redacts a secret value the column clip cut off mid-string', () => {
       const parsed = parseHttpDump(b64('HTTP/1.1 200 OK\r\n\r\n{"id":1,"password":"CUT-SEC'), { clipped: true });
       expect(JSON.stringify(parsed)).not.toContain('CUT-SEC');

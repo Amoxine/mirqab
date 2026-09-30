@@ -223,10 +223,14 @@ redact.
 
 Field keys match **exactly** (`token` does not cover `access_token`, hence the explicit OAuth
 entries). A field's value is redacted when it is a JSON string (escape-aware: `"a\"b"` is one value)
-or a JSON number; either becomes `"[REDACTED]"`. Nested objects/arrays under a field, form-encoded
-bodies and query-string secrets are not covered here; the traffic inspector adds a second,
-display-time pass that redacts by name pattern in headers, query/form parameters and JSON fields
-(`http-dump-parser.ts`). A redacted key is written back as configured (`"Password" : 1` is stored as
+or a JSON number; either becomes `"[REDACTED]"`. A field holding an object or array is redacted whole
+when it is flat (string-aware, so a `}` inside a string does not end it); one nested deeper, which a
+regex cannot match, is redacted from its opening bracket to the end of the dump (over-redacting the
+tail is safe, leaving inner keys is not). Rows stored before this rule keep the old behaviour: the
+backfill only runs when the trigger was missing. Form-encoded bodies and query-string secrets are not
+covered here; the traffic inspector adds a second, display-time pass that redacts by name pattern in
+headers, query/form parameters and JSON fields, and a secret-named key holding an object or array is
+redacted whole at any depth (`http-dump-parser.ts`). A redacted key is written back as configured (`"Password" : 1` is stored as
 `"password":"[REDACTED]"`).
 
 Cost is bounded: each decoded dump is cut to its first 16,384 characters **before** any regex runs,

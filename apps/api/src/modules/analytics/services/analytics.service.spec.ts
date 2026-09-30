@@ -551,7 +551,7 @@ describe('AnalyticsService', () => {
 
       // None of these values contain a comma, so splitting on it counts columns.
       const columns = (line: string) => line.trim().split(',').length;
-      expect(columns(res.chunks[1] as string)).toBe(columns(res.chunks[0] as string));
+      expect(columns(res.chunks[1])).toBe(columns(res.chunks[0]));
     });
   });
 
