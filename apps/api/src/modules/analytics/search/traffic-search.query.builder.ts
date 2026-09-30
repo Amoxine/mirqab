@@ -19,7 +19,7 @@ import type { SearchClause, StatusMatch, TrafficSearchRequest } from './traffic-
 
 /** Columns the list needs; the two body columns stay in the table until a row is opened. */
 const LIST_COLUMNS = Prisma.raw(
-  'id, ts, apiid, method, path, status, latency_ms, key_alias, req_truncated, res_truncated',
+  `id, ts, to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS ts_iso, apiid, method, path, status, latency_ms, key_alias, req_truncated, res_truncated`,
 );
 
 function compare(column: Prisma.Sql, op: string, value: number): Prisma.Sql {
@@ -95,7 +95,8 @@ export function trafficSearchQuery({ request, tykApiIds, resolveApi, now }: Traf
     where.push(clause.neg ? Prisma.sql`NOT COALESCE((${sql}), false)` : sql);
   }
   if (request.cursor) {
-    where.push(Prisma.sql`(ts, id) < (${new Date(request.cursor.ts)}, ${request.cursor.id}::bigint)`);
+    // The cursor stays text: a JS Date would round its microseconds to milliseconds and skip or repeat rows at the page edge.
+    where.push(Prisma.sql`(ts, id) < (${request.cursor.ts}::timestamptz, ${request.cursor.id}::bigint)`);
   }
 
   return Prisma.sql`

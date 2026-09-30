@@ -6,6 +6,7 @@ import { TrafficAnalyticsService } from './services/traffic-analytics.service';
 import { TrafficInspectorService } from './services/traffic-inspector.service';
 import { AnalyticsController } from './controllers/analytics.controller';
 import { TrafficSearchIndexerService } from './search/traffic-search.indexer.service';
+import { TrafficSearchService } from './search/traffic-search.service';
 import { TrafficSearchStoreService } from './search/traffic-search.store.service';
 
 /**
@@ -22,6 +23,7 @@ import { TrafficSearchStoreService } from './search/traffic-search.store.service
     TrafficAnalyticsService,
     TrafficSearchStoreService,
     TrafficSearchIndexerService,
+    TrafficSearchService,
   ],
   // TrafficInspectorService: served by `GET /apis/:id/traffic` on the API controller (V1-LOG-02).
   exports: [AnalyticsService, TrafficInspectorService],

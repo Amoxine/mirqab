@@ -25,6 +25,14 @@ describe('trafficSearchQuery', () => {
     expect(build({ limit: 10 }).values.at(-1)).toBe(11);
   });
 
+  it('keeps the cursor timestamp as text, so microseconds survive paging', () => {
+    expect(build({ cursor: { ts: '2026-09-29T10:06:17.159317Z', id: '5' } }).values[2]).toBe('2026-09-29T10:06:17.159317Z');
+  });
+
+  it('selects the timestamp as microsecond text for the next cursor', () => {
+    expect(build({}).sql).toContain(`to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS ts_iso`);
+  });
+
   it('never selects the body columns for the list', () => {
     const { sql } = build({});
     expect(sql).not.toMatch(/req_body|res_body|req_headers|res_headers/);
@@ -100,8 +108,8 @@ describe('trafficSearchQuery', () => {
 
   it('keyset: pages after the cursor with (ts, id)', () => {
     const { sql, values } = build({ cursor: { ts: '2026-09-29T10:06:17.159Z', id: '900' } });
-    expect(sql).toContain('(ts, id) < ($3, $4::bigint)');
-    expect(values[2]).toEqual(new Date('2026-09-29T10:06:17.159Z'));
+    expect(sql).toContain('(ts, id) < ($3::timestamptz, $4::bigint)');
+    expect(values[2]).toBe('2026-09-29T10:06:17.159Z');
     expect(values[3]).toBe('900');
   });
 
