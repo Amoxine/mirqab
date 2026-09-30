@@ -5,7 +5,7 @@ import { Activity, Crosshair } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { AnalyticsErrorState, formatCount } from '@/components/analytics/analytics-empty-state';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
-import { BrandMark } from '@/components/layout/brand-mark';
+import { ApiNodeIcon } from '@/components/dashboard/api-node-icon';
 import { StateMessage } from '@/components/shared/state-card';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -95,7 +95,7 @@ export function ApiTrafficTable({
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-3">
                         <span className="bg-muted text-primary grid size-8 shrink-0 place-items-center rounded-full">
-                          <BrandMark className="size-4" />
+                          <ApiNodeIcon className="size-4" />
                         </span>
                         <div className="min-w-0">
                           <Link

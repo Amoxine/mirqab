@@ -5,18 +5,19 @@ import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   Activity,
-  LayoutDashboard,
+  BarChart3,
+  CircleHelp,
+  FileText,
   KeyRound,
+  Layers,
+  LayoutDashboard,
+  Package,
+  PanelLeft,
+  PanelLeftClose,
+  ScanSearch,
+  Settings,
   ShieldCheck,
   Users,
-  BarChart3,
-  FileText,
-  Settings,
-  PanelLeftClose,
-  PanelLeft,
-  Layers,
-  Package,
-  CircleHelp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ interface NavItem {
     | 'tenants'
     | 'analytics'
     | 'traffic'
+    | 'trafficSearch'
     | 'auditLogs'
     | 'settings';
   href: string;
@@ -48,8 +50,8 @@ interface NavItem {
   group: NavGroup;
   /** Active only on `href` itself, not on the routes nested under it (`/analytics` vs `/analytics/traffic`). */
   exact?: boolean;
-  /** Permission required to see the entry; omitted = always visible. */
-  permission?: string;
+  /** Permission(s) required to see the entry (all of a list); omitted = always visible. */
+  permission?: string | readonly string[];
 }
 
 /** Sidebar section order; each key is also a `nav.groups.*` message. */
@@ -71,6 +73,14 @@ const navigation: NavItem[] = [
     icon: Activity,
     group: 'workspace',
     permission: 'analytics:read',
+  },
+  {
+    labelKey: 'trafficSearch',
+    href: '/analytics/search',
+    icon: ScanSearch,
+    group: 'workspace',
+    // The same bar as the API: a search returns captured request and response bodies.
+    permission: ['analytics:read', 'api:update'],
   },
   { labelKey: 'apis', href: '/apis', icon: ShieldCheck, group: 'manage', permission: 'api:read' },
   { labelKey: 'keys', href: '/keys', icon: KeyRound, group: 'manage', permission: 'key:read' },
@@ -116,7 +126,7 @@ export function useNavItems() {
     href === '/' || exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 
   return navigation
-    .filter((item) => !item.permission || can(item.permission))
+    .filter((item) => !item.permission || [item.permission].flat().every((p) => can(p)))
     .map((item) => ({ ...item, label: t(item.labelKey), active: isActive(item.href, item.exact) }));
 }
 
@@ -185,9 +195,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Link
             href="/"
             aria-label={t('brand')}
-            className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-2xl shadow-[0_6px_16px_-6px_var(--color-primary)]"
+            className="border-border grid size-11 shrink-0 place-items-center rounded-2xl border bg-white shadow-sm"
           >
-            <BrandMark className="size-7" />
+            <BrandMark className="size-8" />
           </Link>
           {!collapsed && (
             <div className="min-w-0 flex-1">
