@@ -12,11 +12,12 @@ interface SyncResult {
 }
 
 /** `GET /gateway/status` — gateway reachability plus API sync counts. Polled every 30 s (this query only). */
-export function useGatewayStatus() {
+export function useGatewayStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.gateway.status,
     queryFn: () => api.get<GatewayStatus>('/gateway/status').then((res) => res.data),
     refetchInterval: 30_000,
+    enabled,
   });
 }
 

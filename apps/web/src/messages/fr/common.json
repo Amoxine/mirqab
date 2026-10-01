@@ -19,10 +19,20 @@
   "clearFilters": "Effacer les filtres",
   "editItem": "Modifier : {name}",
   "themeSwitcher": {
-    "label": "Thème",
+    "label": "Apparence",
     "light": "Clair",
     "dark": "Sombre",
-    "system": "Système"
+    "system": "Système",
+    "mode": "Thème",
+    "color": "Couleur",
+    "brands": {
+      "teal": "Sarcelle (logo)",
+      "blue": "Bleu",
+      "indigo": "Indigo",
+      "violet": "Violet",
+      "fuchsia": "Fuchsia",
+      "slate": "Ardoise"
+    }
   },
   "filters": "Filtres",
   "activeFilters": "{count, plural, one {# filtre actif} other {# filtres actifs}}"

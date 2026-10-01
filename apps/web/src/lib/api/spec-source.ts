@@ -214,11 +214,12 @@ export function useCandidateDiff(apiId: string, candidateId: string | null) {
 }
 
 /** Pending updates of the tenant (≤ 100), for the dashboard card. The API list reads `specUpdateAvailable` per row. */
-export function useSpecUpdates() {
+export function useSpecUpdates(enabled = true) {
   return useQuery({
     queryKey: queryKeys.apis.specUpdates,
     queryFn: () => api.get<{ items: SpecUpdateItem[] }>('/spec-updates').then((res) => res.data.items),
     refetchInterval: pollUnlessFailed,
+    enabled,
   });
 }
 

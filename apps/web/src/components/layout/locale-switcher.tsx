@@ -2,13 +2,13 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Languages } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LOCALES } from '@/i18n/locales';
@@ -35,28 +35,36 @@ export function LocaleSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" disabled={isPending} aria-label={t('label')} className="size-11 rounded-full bg-foreground/[0.06] hover:bg-foreground/[0.1]">
-          <Languages className="h-4 w-4" aria-hidden="true" />
+        {/* The current language's code, not a bare icon: what is selected is visible without opening it. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={isPending}
+          aria-label={t('label')}
+          className="size-11 rounded-full bg-foreground/[0.06] font-mono text-xs font-semibold uppercase hover:bg-foreground/[0.1]"
+        >
+          {locale}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {LOCALES.map((code) => (
-          <DropdownMenuItem
-            key={code}
-            disabled={code === locale}
-            // The option names itself in its own language, so tag it for correct pronunciation.
-            lang={code}
-            onClick={() => {
-              startTransition(() => {
-                void setLocale(code).then(() => {
-                  router.refresh();
-                });
+        <DropdownMenuRadioGroup
+          value={locale}
+          onValueChange={(code) => {
+            if (code === locale) return;
+            startTransition(() => {
+              void setLocale(code as Locale).then(() => {
+                router.refresh();
               });
-            }}
-          >
-            {t(code)}
-          </DropdownMenuItem>
-        ))}
+            });
+          }}
+        >
+          {LOCALES.map((code) => (
+            // The option names itself in its own language, so tag it for correct pronunciation.
+            <DropdownMenuRadioItem key={code} value={code} lang={code}>
+              {t(code)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

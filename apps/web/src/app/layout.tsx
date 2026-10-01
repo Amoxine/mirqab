@@ -2,9 +2,11 @@ import type { Metadata } from 'next';
 import { IBM_Plex_Mono, Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale } from 'next-intl/server';
+import { cookies } from 'next/headers';
 import { Providers } from '@/components/providers';
 import { APP_URL } from '@/lib/hydra-admin';
 import { RTL_LOCALES } from '@/i18n/locales';
+import { BRAND_COOKIE, DEFAULT_BRAND, isBrand } from '@/lib/brand';
 import '@/styles/globals.css';
 
 const inter = Inter({
@@ -72,9 +74,11 @@ interface RootLayoutProps {
 export default async function RootLayout({ children }: RootLayoutProps) {
   const locale = await getLocale();
   const dir = (RTL_LOCALES as readonly string[]).includes(locale) ? 'rtl' : 'ltr';
+  const savedBrand = (await cookies()).get(BRAND_COOKIE)?.value;
+  const brand = isBrand(savedBrand) ? savedBrand : DEFAULT_BRAND;
 
   return (
-    <html lang={locale} dir={dir} suppressHydrationWarning>
+    <html lang={locale} dir={dir} data-brand={brand} suppressHydrationWarning>
       <body className={`${inter.variable} ${plexMono.variable} font-sans antialiased`}>
         <NextIntlClientProvider>
           <Providers dir={dir}>{children}</Providers>

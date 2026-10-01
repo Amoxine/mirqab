@@ -19,10 +19,20 @@
   "clearFilters": "Clear filters",
   "editItem": "Edit {name}",
   "themeSwitcher": {
-    "label": "Theme",
+    "label": "Appearance",
     "light": "Light",
     "dark": "Dark",
-    "system": "System"
+    "system": "System",
+    "mode": "Theme",
+    "color": "Color",
+    "brands": {
+      "teal": "Teal (logo)",
+      "blue": "Blue",
+      "indigo": "Indigo",
+      "violet": "Violet",
+      "fuchsia": "Fuchsia",
+      "slate": "Slate"
+    }
   },
   "filters": "Filters",
   "activeFilters": "{count, plural, one {# filter} other {# filters}} active"

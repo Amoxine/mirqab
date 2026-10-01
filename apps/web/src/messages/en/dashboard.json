@@ -232,7 +232,9 @@
     "closeKeys": "Esc",
     "chart": "Step through the traffic chart",
     "chartKeys": "← →",
-    "done": "Close"
+    "done": "Close",
+    "sidebar": "Collapse or expand the sidebar",
+    "sidebarKeys": "Ctrl/⌘ + B"
   },
   "kpis": {
     "title": "Key figures",
@@ -263,5 +265,30 @@
   "scope": {
     "chip": "Showing",
     "clear": "Show all APIs"
+  },
+  "notifications": {
+    "label": "Notifications",
+    "labelUnread": "Notifications, {count} unread",
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "unread": "Unread",
+    "empty": "You are all caught up.",
+    "emptyHint": "Gateway, sync and analytics problems, and new versions of watched API specs, show up here.",
+    "gatewayDown": {
+      "title": "The gateway is unreachable",
+      "body": "Changes cannot reach Tyk until it answers again."
+    },
+    "pipelineDown": {
+      "title": "Analytics is not recording",
+      "body": "Tyk Pump or its tables are missing, so new requests are not counted."
+    },
+    "syncFailed": {
+      "title": "{name} failed to sync",
+      "body": "The gateway is not running the latest version of this API."
+    },
+    "specUpdate": {
+      "title": "New spec version for {name}",
+      "body": "Review the changes before applying them."
+    }
   }
 }

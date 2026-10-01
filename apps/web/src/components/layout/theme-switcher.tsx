@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useTranslations } from 'next-intl';
@@ -7,10 +8,13 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { BRANDS, DEFAULT_BRAND, applyBrand, isBrand } from '@/lib/brand';
 
 const THEMES = [
   { value: 'light', icon: Sun },
@@ -18,14 +22,27 @@ const THEMES = [
   { value: 'system', icon: Monitor },
 ] as const;
 
-/** Light / dark / follow-the-OS. next-themes persists the pick in localStorage and sets the `.dark`
- * class on <html> before paint, so there's no cookie or reload like the locale switcher needs. */
+/** The brand on <html>; the menu content only renders in the browser, so `document` is there. */
+const currentBrand = () => {
+  const value = typeof document === 'undefined' ? undefined : document.documentElement.dataset.brand;
+  return isBrand(value) ? value : DEFAULT_BRAND;
+};
+
+/**
+ * Appearance: light / dark / follow-the-OS, and the brand colour. next-themes sets `.dark` before
+ * paint; the brand is a cookie the server reads, so neither flashes on load and neither reloads.
+ */
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
   const t = useTranslations('common.themeSwitcher');
+  const [brand, setBrand] = useState(currentBrand);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) setBrand(currentBrand());
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -42,12 +59,36 @@ export function ThemeSwitcher() {
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">{t('mode')}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={theme} onValueChange={setTheme} aria-label={t('mode')}>
           {THEMES.map(({ value, icon: Icon }) => (
             <DropdownMenuRadioItem key={value} value={value} className="gap-2">
               <Icon className="h-4 w-4" aria-hidden="true" />
               {t(value)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-muted-foreground text-xs font-medium">{t('color')}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          aria-label={t('color')}
+          value={brand}
+          onValueChange={(value) => {
+            if (!isBrand(value)) return;
+            applyBrand(value);
+            setBrand(value);
+          }}
+        >
+          {BRANDS.map((value) => (
+            <DropdownMenuRadioItem key={value} value={value} className="gap-2">
+              {/* The swatch carries its own data-brand, so it is drawn from the same CSS values. */}
+              <span
+                data-brand={value}
+                aria-hidden="true"
+                className="size-4 shrink-0 rounded-full bg-[var(--brand)] ring-1 ring-black/10 dark:bg-[var(--brand-on-dark)] dark:ring-white/15"
+              />
+              {t(`brands.${value}`)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

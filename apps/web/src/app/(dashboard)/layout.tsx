@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { FrameStrip } from '@/components/layout/frame-strip';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -28,7 +28,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, []);
 
-  const toggleSidebar = () => {
+  const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => {
       try {
         localStorage.setItem(SIDEBAR_KEY, String(!prev));
@@ -37,7 +37,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       }
       return !prev;
     });
-  };
+  }, []);
+
+  // Ctrl/⌘+B, the usual sidebar shortcut. Not while typing, where it can mean bold.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'b' || e.altKey || e.shiftKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
+      e.preventDefault();
+      toggleSidebar();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [toggleSidebar]);
 
   return (
     <OverlaysProvider>

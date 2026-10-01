@@ -232,7 +232,9 @@
     "closeKeys": "Échap",
     "chart": "Parcourir le graphique de trafic",
     "chartKeys": "← →",
-    "done": "Fermer"
+    "done": "Fermer",
+    "sidebar": "Réduire ou déployer la barre latérale",
+    "sidebarKeys": "Ctrl/⌘ + B"
   },
   "kpis": {
     "title": "Chiffres clés",
@@ -263,5 +265,30 @@
   "scope": {
     "chip": "Affichage de",
     "clear": "Afficher toutes les API"
+  },
+  "notifications": {
+    "label": "Notifications",
+    "labelUnread": "{count, plural, one {Notifications, # non lue} other {Notifications, # non lues}}",
+    "title": "Notifications",
+    "markAllRead": "Tout marquer comme lu",
+    "unread": "Non lue",
+    "empty": "Vous êtes à jour.",
+    "emptyHint": "Les problèmes de passerelle, de synchronisation et d’analytique, ainsi que les nouvelles versions des spécifications surveillées, apparaissent ici.",
+    "gatewayDown": {
+      "title": "La passerelle est injoignable",
+      "body": "Les modifications ne peuvent pas atteindre Tyk tant qu’elle ne répond pas."
+    },
+    "pipelineDown": {
+      "title": "L’analytique n’enregistre plus",
+      "body": "Tyk Pump ou ses tables manquent : les nouvelles requêtes ne sont pas comptées."
+    },
+    "syncFailed": {
+      "title": "Échec de synchronisation de {name}",
+      "body": "La passerelle n’exécute pas la dernière version de cette API."
+    },
+    "specUpdate": {
+      "title": "Nouvelle version de spécification pour {name}",
+      "body": "Examinez les changements avant de les appliquer."
+    }
   }
 }

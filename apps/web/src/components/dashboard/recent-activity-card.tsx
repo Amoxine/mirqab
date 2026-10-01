@@ -76,7 +76,7 @@ export function RecentActivityCard({ scope }: { scope?: { id: string; name: stri
                   >
                     {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale })}
                   </time>
-                  <span aria-hidden="true" className="shrink-0 text-[#22b8c9]">
+                  <span aria-hidden="true" className="shrink-0 text-primary">
                     {'›'}
                   </span>
                   <span className="min-w-0 break-words">
@@ -84,7 +84,7 @@ export function RecentActivityCard({ scope }: { scope?: { id: string; name: stri
                       className={
                         DESTRUCTIVE_ACTIONS.has(entry.action)
                           ? 'font-medium text-[#f87171]'
-                          : 'font-medium text-[#22b8c9]'
+                          : 'font-medium text-primary'
                       }
                     >
                       {auditActionLabel(tAnalytics, entry.action)}

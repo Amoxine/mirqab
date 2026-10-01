@@ -6,14 +6,13 @@ import { useLocale, useTranslations } from 'next-intl';
 import {
   Activity,
   BarChart3,
+  ChevronLeft,
   CircleHelp,
   FileText,
   KeyRound,
   Layers,
   LayoutDashboard,
   Package,
-  PanelLeft,
-  PanelLeftClose,
   ScanSearch,
   Settings,
   ShieldCheck,
@@ -28,6 +27,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { RTL_LOCALES } from '@/i18n/locales';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { useOverlays } from '@/components/layout/overlays-context';
+import { UserMenu } from '@/components/layout/user-menu';
 
 type NavGroup = 'workspace' | 'manage' | 'trust';
 
@@ -180,18 +180,41 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          // In the panel's flow (not fixed): sticky so it stays put while the page scrolls.
+          // In the panel's flow (not fixed): sticky so it stays put while the page scrolls. Sticky is
+          // also the positioning context of the edge toggle.
           'sticky top-0 flex h-dvh max-h-[calc(100dvh-3.5rem)] flex-col transition-[width] duration-300 ease-out',
           collapsed ? 'w-[5.25rem] items-center' : 'w-64 border-e',
         )}
       >
-        {/* Brand + collapse toggle */}
-        <div
-          className={cn(
-            'flex gap-3 px-4 pb-4 pt-5',
-            collapsed ? 'flex-col items-center' : 'items-center',
-          )}
-        >
+        {/* Collapse toggle on the sidebar's edge: always in the same place, whatever the width, and
+            out of the brand row. Ctrl/⌘+B does the same (app/(dashboard)/layout.tsx). */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? t('expandSidebar') : t('collapseSidebar')}
+              className="bg-background text-muted-foreground hover:text-foreground absolute -end-3.5 top-24 z-10 size-7 rounded-full shadow-sm"
+              onClick={onToggle}
+            >
+              {/* Points the way the sidebar will move; mirrored when the sidebar sits on the right. */}
+              <ChevronLeft
+                className={cn('h-4 w-4 transition-transform duration-300 rtl:-scale-x-100', collapsed && 'rotate-180')}
+                aria-hidden="true"
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>
+            {collapsed ? t('expandSidebar') : t('collapseSidebar')}
+            <kbd dir="ltr" className="ms-2 font-mono opacity-70">
+              {tDashboard('help.sidebarKeys')}
+            </kbd>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Brand */}
+        <div className={cn('flex items-center gap-3 px-4 pb-4 pt-5', collapsed && 'justify-center')}>
           <Link
             href="/"
             aria-label={t('brand')}
@@ -207,29 +230,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               </div>
             </div>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-foreground/[0.06] hover:bg-foreground/[0.12] size-10 shrink-0 rounded-full"
-                onClick={onToggle}
-              >
-                {/* Panel icons are drawn for a left-hand sidebar; mirror them when it sits on the right. */}
-                {collapsed ? (
-                  <PanelLeft className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
-                )}
-                <span className="sr-only">
-                  {collapsed ? t('expandSidebar') : t('collapseSidebar')}
-                </span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side={tooltipSide}>
-              {collapsed ? t('expandSidebar') : t('collapseSidebar')}
-            </TooltipContent>
-          </Tooltip>
         </div>
 
         {/* Tenant context for everything below it (guidelines §8) — not in the top bar. */}
@@ -292,8 +292,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </nav>
         </ScrollArea>
 
-        {/* Help & shortcuts */}
-        <div className={cn('w-full border-t px-2 py-3', collapsed && 'flex justify-center')}>
+        {/* Help & shortcuts, then who is signed in. */}
+        <div className={cn('flex w-full flex-col gap-1 border-t px-2 py-3', collapsed && 'items-center gap-2')}>
           {collapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>{helpButton}</TooltipTrigger>
@@ -302,6 +302,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           ) : (
             helpButton
           )}
+          <UserMenu variant="sidebar" collapsed={collapsed} side={tooltipSide} />
         </div>
       </aside>
     </TooltipProvider>

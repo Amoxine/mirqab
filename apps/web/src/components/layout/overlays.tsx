@@ -119,6 +119,7 @@ function HelpDialog({
   const t = useTranslations('dashboard.help');
   const shortcuts = [
     { keys: t('searchKeys'), label: t('search') },
+    { keys: t('sidebarKeys'), label: t('sidebar') },
     { keys: t('closeKeys'), label: t('close') },
     { keys: t('chartKeys'), label: t('chart') },
   ];

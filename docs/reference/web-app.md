@@ -192,14 +192,16 @@ Other keys hooks not tied to a component listed here: `useResetKeyUsage` (`POST 
 
 | Component | Purpose | Key props / hooks | API |
 |---|---|---|---|
-| `sidebar.tsx` `Sidebar`, `useNavItems`, `navLinkClass` | Permission-filtered nav (groups workspace / manage / trust), collapse toggle, help button, tenant switcher | `collapsed`, `onToggle`; `usePermissions`, `useOverlays` | none |
-| `header.tsx` `Header` | Sticky top bar: `MobileNav`, `Breadcrumb`, theme + locale switchers, user menu (account settings `/auth/settings`, log out) | `useAuth`; logout `fetch('/oauth2/session-logout')` then navigates to Kratos logout URL or `/auth/login` | `POST /oauth2/session-logout` (same origin) |
+| `sidebar.tsx` `Sidebar`, `useNavItems`, `navLinkClass` | Permission-filtered nav (groups workspace / manage / trust), collapse toggle on the sidebar's edge (also Ctrl/⌘+B, wired in `(dashboard)/layout.tsx`), help button, tenant switcher, user menu in the footer | `collapsed`, `onToggle`; `usePermissions`, `useOverlays` | none |
+| `header.tsx` `Header` | Sticky top bar: `MobileNav`, `Breadcrumb` (hidden on phones), Docs link, `NotificationsBell`, appearance + locale switchers; the user menu only below `lg` (the sidebar has it above) | none | none |
+| `user-menu.tsx` `UserMenu` | Account settings `/auth/settings`, log out; an avatar button (header) or the sidebar footer row | `variant`, `collapsed`, `side`; `useAuth`; logout `fetch('/oauth2/session-logout')` then the Kratos logout URL or `/auth/login` | `POST /oauth2/session-logout` (same origin) |
+| `notifications-bell.tsx` `NotificationsBell` | Bell with unread count; gateway down, analytics pipeline down, failed syncs, new spec versions, derived by `lib/notifications.ts` (nothing stored server-side; read state per browser in localStorage) | each source queried only with its permission | `GET /gateway/status` (`settings:read`), `GET /spec-updates` (`api:read`), `GET /analytics/health` (`analytics:read`) |
 | `frame-strip.tsx` `FrameStrip` | Strip on the dark frame (lg+): brand, tenant, pipeline state dot (needs `analytics:read`), local clock | `className`; `useAuth`, `usePermissions`, `useAnalyticsHealth` | `GET /analytics/health` |
 | `overlays.tsx` `OverlaysProvider`; `overlays-context.ts` `useOverlays` | Search palette (Ctrl/Cmd+K) over nav items and help dialog; `useOverlays()` returns `{openSearch, openHelp}` and throws outside the provider | context | none |
 | `mobile-nav.tsx` `MobileNav` | Sheet nav below `lg`; opens from the reading-direction start (`right` in RTL) | `useNavItems`, `useLocale` | none |
 | `tenant-switcher.tsx` `TenantSwitcher` | Shows active tenant; dropdown only if the user has more than one membership; calls `switchTenant` (cancel + remove tenant-scoped queries, store id, reload) | `collapsed?`; `useAuth` | none |
-| `theme-switcher.tsx` `ThemeSwitcher` | light / dark / system via next-themes | none | none |
-| `locale-switcher.tsx` `LocaleSwitcher` | en / fr / ar; POSTs `/locale`, reloads | none | `POST /locale` (same origin) |
+| `theme-switcher.tsx` `ThemeSwitcher` | Appearance: light / dark / system via next-themes, and the brand colour (`lib/brand.ts`: teal from the logo by default, blue, indigo, violet, fuchsia, slate). The colour is a `brand` cookie that `app/layout.tsx` turns into `data-brand` on `<html>` server-side, so it shows from the first paint | none | none |
+| `locale-switcher.tsx` `LocaleSwitcher` | en / fr / ar, shows the current code; POSTs `/locale`, reloads | none | `POST /locale` (same origin) |
 | `breadcrumb.tsx` `Breadcrumb`, `brand-mark.tsx` `BrandMark` | Path breadcrumb (UUID segments shown as "details"); logo | none | none |
 
 ### `src/components/portal`
@@ -422,7 +424,7 @@ flowchart TD
   L["(dashboard)/layout.tsx"] --> O[OverlaysProvider: Ctrl/Cmd+K search, help]
   O --> F[FrameStrip lg+]
   O --> S[Sidebar + TenantSwitcher]
-  O --> H[Header: MobileNav, Breadcrumb, Theme, Locale, user menu]
+  O --> H[Header: MobileNav, Breadcrumb, Docs, Notifications, Appearance, Locale]
   O --> P["page.tsx (/)"]
   P --> T[Title row: search button, RangeControl, RefreshButton, Create API]
   P --> Q{analytics:read?}
@@ -537,10 +539,15 @@ the same gate.
   (`src/lib/docs/docs.test.ts`) requires every language to list the same pages in its sidebar, every page to have a
   title and description, and the `docs` messages to have the same keys in all three locales.
 - **Search.** Local (Orama) over the loader, at `/docs/search-index?locale=&query=`; no external service. Arabic
-  search finds words as written and some stems; `الوثائق` (with the article) does not find `وثائق`, which is a known gap.
+  goes through `lib/docs/arabic.ts` (marks and letter variants normalised, the article dropped), so `الوثائق` and
+  `وثائق` find the same pages; French matches with or without accents (checked on the built server).
 - **Diagrams.** A ```` ```mermaid ```` fence becomes a client `Mermaid` component (`components/docs/mermaid.tsx`),
   loaded lazily so the cost (about 2.3 MB of JavaScript) is paid only by pages with a diagram.
 - **Build.** `.source/` is generated by `fumadocs-mdx` (`postinstall`, `next dev` and `next build`) and is
   gitignored. `tsconfig.json` has `declaration` off: the generated source cannot be given an explicit type.
-- **Styles.** `src/styles/docs.css`, imported only by the docs layout, maps Fumadocs' `--color-fd-*` tokens onto the
-  app's own, so the docs follow the dashboard's light and dark theme.
+- **Styles.** Fumadocs' CSS is imported by `src/styles/globals.css`, in the app's single Tailwind build, which also maps
+  its `--color-fd-*` tokens onto the app's own (so the docs follow the theme and the brand colour). It used to be a
+  second stylesheet loaded by the docs layout; after a client-side navigation back to the app it stayed loaded and its
+  `.hidden` overrode the app's `lg:block`, hiding the sidebar.
+- **Controls.** The app's appearance and language switchers replace Fumadocs' theme toggle at the foot of the docs
+  sidebar (`components/docs/docs-footer-actions.tsx`); the docs navbar has only the logo, title and search.

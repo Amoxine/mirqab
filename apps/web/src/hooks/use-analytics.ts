@@ -145,9 +145,10 @@ export function useAnalyticsTraffic(filters: TrafficFilters, enabled = true) {
 }
 
 /** Pump pipeline readiness. Cheap and range-independent: the home page uses it to decide whether analytics can be shown at all. */
-export function useAnalyticsHealth() {
+export function useAnalyticsHealth(enabled = true) {
   return useQuery({
     queryKey: queryKeys.analytics.health,
     queryFn: () => api.get<AnalyticsHealth>('/analytics/health').then((res) => res.data),
+    enabled,
   });
 }

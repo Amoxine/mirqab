@@ -20,9 +20,9 @@
     --color-accent: color-mix(in srgb, var(--color-secondary-foreground) 8%, transparent);
     --color-accent-foreground: var(--color-secondary-foreground);
     --color-secondary: color-mix(in srgb, var(--color-secondary-foreground) 16%, transparent);
-    --color-primary: #22b8c9;
-    --color-primary-foreground: #042f2e;
-    --color-ring: #22b8c9;
+    --color-primary: var(--brand-on-dark, #22b8c9);
+    --color-primary-foreground: var(--brand-on-dark-fg, #042f2e);
+    --color-ring: var(--brand-on-dark, #22b8c9);
     --color-success: #4ade80;
     --color-success-foreground: #052e16;
     --color-warning: #fbbf24;

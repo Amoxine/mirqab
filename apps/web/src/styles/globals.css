@@ -1,6 +1,11 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '../../../../packages/ui/src/styles.css';
+/* Fumadocs (/docs) lives in this same build on purpose. As a second Tailwind stylesheet it stayed loaded
+   after a client-side navigation back to the app, and its `.hidden` came after the app's `lg:block` in
+   the shared utilities layer: the sidebar vanished. One build keeps one, correctly ordered, layer. */
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
 /* Tailwind scans the shared package's sources for the utilities its components use. */
 @source '../../../../packages/ui/src';
 
@@ -10,10 +15,10 @@
   /* #0da9be only cleared 2.82:1 against white — below WCAG AA. #0a8090 fixed the button pair but,
      as text, sat at 4.46:1 on the page background and ~4.1:1 on the active-nav tint (primary/10).
      #087482 is the same teal hue clearing 4.5:1 in all three (see scripts/check-contrast.js). */
-  --color-primary: #087482;
+  --color-primary: var(--brand);
   --color-primary-foreground: #ffffff;
-  --color-primary-dark: #06606c;
-  --color-primary-light: #dff8fb;
+  --color-primary-dark: var(--brand-dark);
+  --color-primary-light: var(--brand-tint);
 
   --color-secondary: #1f2937;
   --color-secondary-foreground: #f9fafb;
@@ -48,7 +53,7 @@
   --color-accent-foreground: #0f172a;
   --color-border: #e2e8f0;
   --color-input: #e2e8f0;
-  --color-ring: #087482;
+  --color-ring: var(--brand);
 
   --color-text-primary: #111827;
   --color-text-secondary: #6b7280;
@@ -90,9 +95,9 @@
 .dark {
   color-scheme: dark;
 
-  --color-primary: #22b8c9;
-  --color-primary-foreground: #042f2e;
-  --color-ring: #22b8c9;
+  --color-primary: var(--brand-on-dark);
+  --color-primary-foreground: var(--brand-on-dark-fg);
+  --color-ring: var(--brand-on-dark);
   --color-destructive: #f87171;
   --color-destructive-foreground: #450a0a;
   --color-danger: #f87171;
@@ -137,6 +142,78 @@
   --color-frame: #05080f;
   --color-ink: #334155;
   --color-grid-dot: #26344a;
+}
+
+/* Brand colour. The logo teal is the default; a user's pick puts `data-brand` on <html> server-side
+   (from the `brand` cookie, app/layout.tsx), so the very first paint already uses it. Per brand:
+   the light-theme value (white text on it; ≥4.5:1 as text on the page), a darker and a tint step,
+   and the on-dark value for the dark theme and the always-dark "ink" cards, with its dark text.
+   Not tied to :root, so the picker's swatches (`data-brand` on a span) show each colour from these
+   same values. The list of names is BRANDS in lib/brand.ts. */
+:root,
+[data-brand='teal'] {
+  --brand: #087482;
+  --brand-dark: #06606c;
+  --brand-tint: #dff8fb;
+  --brand-on-dark: #22b8c9;
+  --brand-on-dark-fg: #042f2e;
+}
+[data-brand='blue'] {
+  --brand: #1d4ed8;
+  --brand-dark: #1e40af;
+  --brand-tint: #dbeafe;
+  --brand-on-dark: #60a5fa;
+  --brand-on-dark-fg: #172554;
+}
+[data-brand='indigo'] {
+  --brand: #4338ca;
+  --brand-dark: #3730a3;
+  --brand-tint: #e0e7ff;
+  --brand-on-dark: #818cf8;
+  --brand-on-dark-fg: #1e1b4b;
+}
+[data-brand='violet'] {
+  --brand: #6d28d9;
+  --brand-dark: #5b21b6;
+  --brand-tint: #ede9fe;
+  --brand-on-dark: #a78bfa;
+  --brand-on-dark-fg: #2e1065;
+}
+[data-brand='fuchsia'] {
+  --brand: #a21caf;
+  --brand-dark: #86198f;
+  --brand-tint: #fae8ff;
+  --brand-on-dark: #e879f9;
+  --brand-on-dark-fg: #4a044e;
+}
+[data-brand='slate'] {
+  --brand: #334155;
+  --brand-dark: #1e293b;
+  --brand-tint: #e2e8f0;
+  --brand-on-dark: #cbd5e1;
+  --brand-on-dark-fg: #0f172a;
+}
+
+/* Fumadocs reads its own --color-fd-* tokens; point them at the app's so /docs follows the theme
+   and the brand colour. */
+:root,
+.dark {
+  --color-fd-background: var(--color-background);
+  --color-fd-foreground: var(--color-foreground);
+  --color-fd-muted: var(--color-muted);
+  --color-fd-muted-foreground: var(--color-muted-foreground);
+  --color-fd-popover: var(--color-popover);
+  --color-fd-popover-foreground: var(--color-popover-foreground);
+  --color-fd-card: var(--color-card);
+  --color-fd-card-foreground: var(--color-card-foreground);
+  --color-fd-border: var(--color-border);
+  --color-fd-primary: var(--color-primary);
+  --color-fd-primary-foreground: var(--color-primary-foreground);
+  --color-fd-secondary: var(--color-secondary);
+  --color-fd-secondary-foreground: var(--color-secondary-foreground);
+  --color-fd-accent: var(--color-accent);
+  --color-fd-accent-foreground: var(--color-accent-foreground);
+  --color-fd-ring: var(--color-ring);
 }
 
 @layer base {
