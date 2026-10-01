@@ -10,6 +10,7 @@ export const { GET } = createFromSource(source, {
     en: { language: 'english' },
     fr: { language: 'french' },
     // Orama only splits Arabic; `arabic.ts` normalises marks and letter variants and drops the article.
-    ar: { language: 'arabic', tokenizer: createArabicTokenizer() },
+    // No `language` here: the tokenizer carries it, and Orama refuses both (NO_LANGUAGE_WITH_CUSTOM_TOKENIZER).
+    ar: { tokenizer: createArabicTokenizer() },
   },
 });
