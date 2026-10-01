@@ -1,3 +1,4 @@
+import '../../../common/testing/throwaway-db.guard'; // must stay first: refuses to load against the stack database
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { type Prisma, prisma } from '@open-gateway/database';

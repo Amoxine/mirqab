@@ -1,3 +1,4 @@
+import '../../../common/testing/throwaway-db.guard'; // must stay first: refuses to load against the stack database
 import { prisma } from '@open-gateway/database';
 import type { AnalyticsService } from '../../analytics/services/analytics.service';
 import { AuditService } from './audit.service';

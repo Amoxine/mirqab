@@ -1,3 +1,4 @@
+import '../../../common/testing/throwaway-db.guard'; // must stay first: refuses to load against the stack database
 import { Logger } from '@nestjs/common';
 import { prisma } from '@open-gateway/database';
 import { TRAFFIC_SEARCH_DDL, partitionDdl } from '../search/traffic-search.ddl';

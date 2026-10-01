@@ -1,3 +1,4 @@
+import '../../../common/testing/throwaway-db.guard'; // must stay first: refuses to load against the stack database
 import { NotFoundException } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';

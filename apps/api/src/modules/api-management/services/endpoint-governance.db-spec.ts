@@ -1,3 +1,4 @@
+import '../../../common/testing/throwaway-db.guard'; // must stay first: refuses to load against the stack database
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
