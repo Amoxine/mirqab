@@ -1,5 +1,4 @@
-import type { Prisma} from '@prisma/client';
-import { type PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 /** A statement that ran past its budget. Mapped by the service to `422 SEARCH_TOO_BROAD`. */
 export class SearchTimeoutError extends Error {}
@@ -17,11 +16,13 @@ function isTimeout(err: unknown): boolean {
  */
 export async function queryWithTimeout<T>(prisma: PrismaClient, query: Prisma.Sql, timeoutMs: number): Promise<T> {
   try {
+    // Prisma's own defaults (2 s to get a connection, 5 s for the transaction) would cut a budget over 5 s short,
+    // and let a search queue for a busy pool longer than the search itself may run.
     return await prisma.$transaction(async (tx) => {
       // `timeoutMs` is an integer the service clamped; it is bound nowhere else because SET cannot take a parameter.
       await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${String(Math.trunc(timeoutMs))}`);
       return tx.$queryRaw<T>(query);
-    });
+    }, { maxWait: 1000, timeout: timeoutMs + 1000 });
   } catch (err) {
     if (isTimeout(err)) throw new SearchTimeoutError('The search ran past its time budget.');
     throw err;

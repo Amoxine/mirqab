@@ -4,7 +4,7 @@ import { queryKeys } from '@/lib/query-keys';
 import type { SearchClause } from '@/lib/traffic-search';
 import type { AnalyticsRange } from '@/types';
 
-export const SEARCH_PAGE_SIZE = 50;
+const SEARCH_PAGE_SIZE = 50;
 
 /** Mirrors `TrafficSearchItem` in `apps/api/src/modules/analytics/search/traffic-search.service.ts`. */
 export interface TrafficSearchItem {

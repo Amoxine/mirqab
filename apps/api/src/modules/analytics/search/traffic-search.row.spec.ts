@@ -28,6 +28,11 @@ describe('buildSearchRow', () => {
     expect(buildSearchRow(base, null)).toMatchObject({ status: 402, latencyMs: 340, keyAlias: 'qbus-web', ip: '10.0.0.7' });
   });
 
+  it('hides a JWT in the path column, which never goes through the dump parser', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJQTEFOVEVEIn0.c2lnbmF0dXJlLXZhbHVl';
+    expect(buildSearchRow({ ...base, path: `/verify/${jwt}/done` }, null).path).toBe('/verify/[REDACTED]/done');
+  });
+
   it('keeps the microseconds of the timestamp, as text', () => {
     expect(buildSearchRow(base, null).ts).toBe('2026-09-29T10:06:17.159317Z');
   });

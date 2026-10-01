@@ -250,6 +250,7 @@
     },
     "apiErrors": {
       "tooBroad": "That search is too broad to finish in time. Add a status, an API or a shorter window, or use a more specific word.",
+      "busy": "Another search is still running. Wait a moment and try again.",
       "invalid": "The server did not understand one of the filters.",
       "forbidden": "You do not have access to search captured requests.",
       "generic": "The search failed. Try again."

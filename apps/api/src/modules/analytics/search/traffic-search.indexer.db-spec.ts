@@ -5,6 +5,7 @@ import type { RedisService } from '../../../common/redis/redis.service';
 import { AnalyticsService } from '../services/analytics.service';
 import type { PumpHealthService } from '../services/pump-health.service';
 import { REDACTION_TRIGGER } from '../services/pump-query.builder';
+import * as searchRow from './traffic-search.row';
 import { MULTIPART_PLACEHOLDER } from './traffic-search.row';
 import { TrafficSearchIndexerService } from './traffic-search.indexer.service';
 import { trafficSearchQuery } from './traffic-search.query.builder';
@@ -197,5 +198,36 @@ describe('traffic search indexer on a real Postgres', () => {
 
     await prisma.$executeRawUnsafe(`ALTER TABLE public.tyk_analytics ENABLE ALWAYS TRIGGER ${REDACTION_TRIGGER}`);
     expect(await indexer.scan(new Date('2026-09-29T11:00:00Z'), NOW, false)).toBeGreaterThan(0);
+  });
+
+  it('parses only rows it has not indexed yet, and yields to the event loop while it parses', async () => {
+    const parse = jest.spyOn(searchRow, 'buildSearchRow');
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.tyk_analytics ("timestamp", apiid, apikey, alias, method, path, responsecode, latency_total, requesttime, rawrequest, rawresponse)
+       SELECT '2026-09-29T11:59:00Z', 'tyk-a', 'fresh' || g, 'qbus-web', 'GET', '/fresh', 200, 1, g, $1, $2 FROM generate_series(1, 120) g`,
+      b64('GET /fresh HTTP/1.1\r\n\r\n'),
+      b64('HTTP/1.1 200 OK\r\n\r\nfresh'),
+    );
+    // A probe that re-arms itself on every event-loop turn and records how many rows had been parsed when it ran.
+    const seen: number[] = [];
+    let scanning = true;
+    const probe = (): void => {
+      seen.push(parse.mock.calls.length);
+      if (scanning) setImmediate(probe);
+    };
+    setImmediate(probe);
+
+    // The window holds every row indexed so far today (1,200 ties, the late one, ...): none is read back or parsed.
+    const inserted = await indexer.scan(new Date('2026-09-29T00:00:00Z'), NOW, false);
+    scanning = false;
+    expect(inserted).toBe(120);
+    expect(parse).toHaveBeenCalledTimes(120);
+    // The probe ran between two rows of the same page: parsing gave the event loop back mid-page.
+    expect(seen.some((n) => n > 0 && n < 120)).toBe(true);
+
+    parse.mockClear();
+    expect(await indexer.scan(new Date('2026-09-29T00:00:00Z'), NOW, false)).toBe(0);
+    expect(parse).not.toHaveBeenCalled();
+    parse.mockRestore();
   });
 });

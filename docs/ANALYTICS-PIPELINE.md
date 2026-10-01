@@ -347,7 +347,9 @@ a partition is a metadata operation: no row deletes, no bloat.
 **Indexer.** `TrafficSearchIndexerService`:
 - `tyk_analytics` has no id column, and the pump writes batches that can arrive out of order, so there is no cursor
   to resume from. Each tick re-reads from `scanned_until` minus 15 minutes; an hourly pass reaches back 6 hours.
-  Inserting `ON CONFLICT (ts, dedupe_key) DO NOTHING` makes re-reading free and a late row still lands.
+  The read leaves out, in SQL, every row the projection already holds (`NOT EXISTS` on its unique
+  `(ts, dedupe_key)`), so only new rows are decoded and parsed, and a late row still lands. The insert keeps
+  `ON CONFLICT (ts, dedupe_key) DO NOTHING` as a safety net. Parsing yields to the event loop every 50 rows.
   `dedupe_key = sha256(apiid | timestamp (µs) | apikey | method | path | responsecode | latency_total | requesttime)`.
   **Ceiling:** a record the pump delivers later than 6 hours is never indexed; two requests identical in all of
   those columns and in the microsecond collapse into one row.
@@ -365,18 +367,34 @@ multipart body is stored as a fixed placeholder, because the parser does not und
 matches no secret pattern and is not the API's configured auth header is **not** redacted (a test shows the
 difference). A spec plants eight secrets (bearer token, cookie, password, a nested `cookies` object, a custom auth
 header, query-string and response tokens, a multipart secret) and asserts none is in any column and none is found
-by any body or header clause. Known gaps, inherited from the inspector: a stray `"` in a non-JSON body, a token in a
-URL path segment, a JWT in a field whose name is not secret-looking.
+by any body or header clause. Known gaps, inherited from the inspector: a stray `"` in a non-JSON body, an opaque
+(non-JWT) token in a URL path segment. A JWT is found by its shape wherever it sits, the `path` column included.
+
+**Known limits of the projection.**
+- **Redaction is applied once, at index time.** A row keeps the redaction rules that were in force when it was
+  indexed. Changing an API's `authHeaderName`, or changing the parser's rules (`http-dump-parser.ts`) in a release,
+  does not re-redact rows already in `og_traffic_search`: the old auth header's value and anything only the new rules
+  catch stay searchable until the projection is rebuilt (empty `og_traffic_search` and `og_traffic_search_state`;
+  the next tick re-indexes the last `TRAFFIC_SEARCH_BACKFILL_DAYS` under the current rules). The inspector does not
+  have this gap: it parses at read time.
+- **The indexing gate is "trigger enabled".** The indexer checks only that the redaction trigger exists on
+  `tyk_analytics` and is enabled. It does not check which fields the trigger was configured with, or that it was
+  enabled when a given row was written: a row the pump wrote while the trigger was off, still inside the lookback
+  when it is back on, is indexed with only the parser's redaction.
 
 **Freshness.** `indexedUntil` in every response is `scanned_until`; the UI shows it. An empty result before that
 instant is real; after it, the row may not be indexed yet. A request is searchable about 10 seconds after the pump
 has written it, plus the pump's own purge delay (`purge_delay: 10`).
 
-**Limits the API enforces** (`SEARCH_LIMITS`): at most 8 clauses and 3 body clauses; body and path terms of at least
-3 letters or digits; the words `id, data, name, value, true, false, null, type, status, message` are refused as body
-terms (measured: `id` alone ran to the 3 s timeout over 30 days); values up to 200 characters; pages of up to 100
+**Limits the API enforces** (`SEARCH_LIMITS`): at most 8 clauses and 3 body clauses; a path prefix of at least 3
+letters or digits; a body term needs at least one word of 3 or more letters or digits that is not one of
+`id, data, name, value, true, false, null, type, status, message` (measured: `id` alone ran to the 3 s timeout over
+30 days; `a b c` is refused even though it has three letters); values up to 200 characters; pages of up to 100
 with a keyset cursor and no total (`count(*)` over 30 days measured 192 ms); a window is always applied; a 3 s
-statement budget per request (`TRAFFIC_SEARCH_TIMEOUT_MS`).
+statement budget per request (`TRAFFIC_SEARCH_TIMEOUT_MS`), with the transaction given that budget plus 1 s and at
+most 1 s to get a connection. At most 2 searches per tenant run at once (a third gets `429 SEARCH_BUSY`; the count
+is per API process), and both search routes are limited per client IP (20 searches and 120 detail reads a minute) on top of the app-wide
+throttle.
 
 **What search cannot do.** Substring, regular-expression, JSON-field and path-glob search were measured and left
 out. Word search does not stem (`fund` does not find `funds`). It covers only the first 16 KiB of each body (the

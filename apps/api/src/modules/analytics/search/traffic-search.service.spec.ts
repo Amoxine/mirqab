@@ -12,7 +12,9 @@ interface Captured {
   values: unknown[];
 }
 
-function setup(options: { apis?: { id: string; name: string; slug: string; tykApiId: string | null }[]; rows?: unknown[]; fail?: Error; timeout?: string } = {}) {
+function setup(
+  options: { apis?: { id: string; name: string; slug: string; tykApiId: string | null }[]; rows?: unknown[]; fail?: Error; timeout?: string; query?: () => Promise<unknown> } = {},
+) {
   const apis = options.apis ?? [
     { id: 'def-1', name: 'Orders API', slug: 'orders', tykApiId: 'tyk-a' },
     { id: 'def-2', name: 'Payments', slug: 'payments', tykApiId: 'tyk-b' },
@@ -27,17 +29,22 @@ function setup(options: { apis?: { id: string; name: string; slug: string; tykAp
     },
     $queryRaw: (q: Captured) => {
       captured.push(q);
+      if (options.query) return options.query();
       return options.fail ? Promise.reject(options.fail) : Promise.resolve(options.rows ?? []);
     },
   };
   const findMany = jest.fn().mockResolvedValue(apis.filter((a) => a.tykApiId !== null));
+  const txOptions: unknown[] = [];
   const prisma = {
     apiDefinition: { findMany },
-    $transaction: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    $transaction: (fn: (t: typeof tx) => Promise<unknown>, opts: unknown) => {
+      txOptions.push(opts);
+      return fn(tx);
+    },
   } as unknown as PrismaClient;
   const config = { get: (k: string) => (k === 'TRAFFIC_SEARCH_TIMEOUT_MS' ? options.timeout : undefined) } as unknown as ConfigService;
   const indexer = { indexedUntil: () => Promise.resolve(new Date('2026-09-29T11:59:50.000Z')) } as unknown as TrafficSearchIndexerService;
-  return { service: new TrafficSearchService(prisma, config, indexer), captured, executed, findMany };
+  return { service: new TrafficSearchService(prisma, config, indexer), captured, executed, findMany, txOptions };
 }
 
 const listRow = (id: number, tsIso = '2026-09-29T10:00:00.123456Z', apiid = 'tyk-a') => ({
@@ -135,6 +142,46 @@ describe('TrafficSearchService.search', () => {
     }
   });
 
+  it('gives the transaction room for the whole budget, and waits at most 1 s for a connection', async () => {
+    // Prisma's default 5 s transaction timeout would cut a 10 s budget short.
+    const s = setup({ timeout: '10000' });
+    await s.service.search('t1', {});
+    expect(s.txOptions).toEqual([{ maxWait: 1000, timeout: 11_000 }]);
+  });
+
+  it('runs at most 2 searches per tenant at once: a third is 429 SEARCH_BUSY, and the slot frees when one ends', async () => {
+    const pending: (() => void)[] = [];
+    const { service } = setup({
+      query: () =>
+        new Promise((resolve) => {
+          pending.push(() => {
+            resolve([]);
+          });
+        }),
+    });
+    const first = service.search('t1', {});
+    const second = service.search('t1', {});
+    await new Promise(setImmediate); // both reach the query
+    expect(pending).toHaveLength(2);
+
+    await expect(service.search('t1', {})).rejects.toMatchObject({ status: 429, response: { error: 'SEARCH_BUSY' } });
+    const other = service.search('t2', {}); // another tenant is not held up
+    await new Promise(setImmediate);
+    expect(pending).toHaveLength(3);
+
+    for (const release of pending.splice(0)) release();
+    await Promise.all([first, second, other]);
+    const third = service.search('t1', {});
+    await new Promise(setImmediate);
+    for (const release of pending.splice(0)) release();
+    await expect(third).resolves.toMatchObject({ items: [] });
+  });
+
+  it('frees the slot when a search fails', async () => {
+    const { service } = setup({ fail: new Error('connection refused') });
+    for (let i = 0; i < 3; i++) await expect(service.search('t1', {})).rejects.toThrow('connection refused');
+  });
+
   it.each([
     ['a Postgres statement timeout', new Error('canceling statement due to statement timeout')],
     ['SQLSTATE 57014 in the text', new Error('Raw query failed. Code: `57014`. Message: `canceling statement`')],
@@ -171,6 +218,8 @@ describe('TrafficSearchService.detail', () => {
     ['a non-numeric id', '5; DROP TABLE x', '2026-09-29T10:00:00Z'],
     ['a missing ts', '5', undefined as unknown as string],
     ['a ts that is not ISO', '5', 'yesterday'],
+    ['an id past the bigint max', '9223372036854775808', '2026-09-29T10:00:00Z'],
+    ['a ts on a day that does not exist', '5', '2026-02-30T10:00:00Z'],
   ])('rejects %s before any query', async (_label, id, ts) => {
     const { service, captured } = setup({ rows: [detailRow] });
     await expect(service.detail('t1', id, ts)).rejects.toBeInstanceOf(BadRequestException);
@@ -186,6 +235,13 @@ describe('AnalyticsController permissions for search', () => {
   it('needs analytics:read AND api:update, the same bar as the per-API captured-traffic inspector', () => {
     expect(required('searchTraffic')).toEqual(['analytics:read', 'api:update']);
     expect(required('searchTrafficDetail')).toEqual(['analytics:read', 'api:update']);
+  });
+
+  it('limits searches to 20 a minute and row reads to 120 a minute, on top of the app-wide default', () => {
+    for (const [handler, limit] of [['searchTraffic', 20], ['searchTrafficDetail', 120]] as const) {
+      expect(Reflect.getMetadata('THROTTLER:LIMITdefault', fn(handler))).toBe(limit);
+      expect(Reflect.getMetadata('THROTTLER:TTLdefault', fn(handler))).toBe(60_000);
+    }
   });
 
   it('the controller default is still analytics:read, so the existing routes are unchanged', () => {

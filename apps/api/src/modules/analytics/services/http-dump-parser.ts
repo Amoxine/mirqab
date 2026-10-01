@@ -27,7 +27,7 @@ import { TRUNCATED_DUMP_MARKER } from './pump-query.builder';
 /** Longest body returned, in characters. Anything past it is cut and `truncated` is set. */
 export const MAX_BODY_CHARS = 16 * 1024;
 
-const REDACTED = '[REDACTED]';
+export const REDACTED = '[REDACTED]';
 
 /**
  * A header, parameter or JSON key whose value is a secret: contains one of these, case-insensitive,
@@ -52,10 +52,13 @@ const CAMEL_KEY_SUFFIX = /[a-z0-9]Key$/;
  * (`"payload":"eyJ..."`, a `Referer`, a path) is hidden too: the name-based passes cannot see it. Segment
  * lengths are bounded so a body of `eyJeyJeyJ…` cannot make the scan quadratic.
  */
-const JWT_VALUE = /eyJ[\w-]{4,200}\.[\w-]{4,4096}\.[\w-]{0,1024}/g;
+export const JWT_VALUE = /eyJ[\w-]{4,200}\.[\w-]{4,4096}\.[\w-]{0,1024}/g;
 
-/** `name=value` at the start or after `?`/`&`/`;`. Values stop at whitespace and `"`, so ` HTTP/1.1` and JSON quotes survive. */
-const PAIR = /(^|[?&;])([^=&;#\s?"]+)=([^&;#\s"]*)/g;
+/**
+ * `name=value` at the start or after `?`/`&`/`;`/`#` (`#` for an OAuth implicit-flow fragment in a
+ * `Location` or `Referer`: `#access_token=…`). Values stop at whitespace and `"`, so ` HTTP/1.1` and JSON quotes survive.
+ */
+const PAIR = /(^|[?&;#])([^=&;#\s?"]+)=([^&;#\s"]*)/g;
 
 /**
  * Every JSON string token in ONE pass, each consumed WHOLE (closed, or cut off at the end by the

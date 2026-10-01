@@ -214,6 +214,11 @@ describe('parseHttpDump', () => {
       for (const leaked of ['XAT-1', 'XAK-1', 'XOK-1', 'CK-1', 'SC-1', 'SIG-1']) expect(out).not.toContain(leaked);
     });
 
+    it('redacts a token in a URL fragment (an OAuth implicit-flow redirect), keeping what is not secret', () => {
+      const parsed = parseHttpDump(b64('HTTP/1.1 302 Found\r\nLocation: https://app/cb#access_token=OPAQUE-FRAG&state=s1\r\n\r\n'));
+      expect(parsed?.headers.Location).toBe('https://app/cb#access_token=[REDACTED]&state=s1');
+    });
+
     it('redacts authorization=, private_key= and key= query parameters', () => {
       const parsed = parseHttpDump(b64('GET /x?authorization=Q1&private_key=Q2&key=Q3&page=2 HTTP/1.1\r\n\r\n'));
       expect(parsed?.startLine).toBe(

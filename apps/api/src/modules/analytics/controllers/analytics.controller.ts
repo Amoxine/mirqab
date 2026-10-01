@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AnalyticsService } from '../services/analytics.service';
 import { TrafficSearchService, type TrafficSearchDetail, type TrafficSearchPage } from '../search/traffic-search.service';
@@ -111,15 +112,19 @@ export class AnalyticsController {
   // people's captured request and response bodies across every API, and the per-API inspector that shows the
   // same data is gated by `api:update` (api.controller.ts `:id/traffic`). `@Permissions` here REPLACES the
   // class-level list (Reflector#getAllAndOverride, see permissions.guard.ts), so `analytics:read` is repeated.
+  // Search is the expensive read here (a full-text probe per body clause, up to the statement budget each), so it
+  // gets its own per-route limit on top of the app default, and the service caps searches in flight per tenant.
   @Post('traffic/search')
   @Permissions('analytics:read', 'api:update')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Search captured request/response detail',
     description:
       'Typed clauses over the redacted search projection: status, latency, method, path prefix, API, key, headers and ' +
       'body words. The tenant scope and a time window are always applied. 400 SEARCH_INVALID for a bad clause, 422 ' +
-      'SEARCH_TOO_BROAD when the 3 s budget is exceeded. Bodies are searchable only up to 16 KiB each.',
+      'SEARCH_TOO_BROAD when the 3 s budget is exceeded, 429 SEARCH_BUSY while the tenant already has 2 searches ' +
+      'running. Bodies are searchable only up to 16 KiB each.',
   })
   async searchTraffic(@CurrentTenant() tenantId: string, @Body() body: unknown): Promise<TrafficSearchPage> {
     return this.searchService.search(tenantId, body);
@@ -127,6 +132,7 @@ export class AnalyticsController {
 
   @Get('traffic/search/:id')
   @Permissions('analytics:read', 'api:update')
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   @ApiOperation({ summary: 'One search result with its headers and bodies', description: '`ts` must be the value the search returned: it selects the day partition.' })
   async searchTrafficDetail(
     @CurrentTenant() tenantId: string,

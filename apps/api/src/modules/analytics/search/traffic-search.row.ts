@@ -1,4 +1,4 @@
-import { parseHttpDump, type HttpDump } from '../services/http-dump-parser';
+import { JWT_VALUE, parseHttpDump, REDACTED, type HttpDump } from '../services/http-dump-parser';
 
 /** What `tyk_analytics` gives for one captured request (the pump table, before any redaction by this module). */
 export interface CapturedRow {
@@ -75,7 +75,8 @@ export function buildSearchRow(row: CapturedRow, authHeaderName: string | null):
     ts: row.ts_iso,
     apiid: row.apiid,
     method: row.method ?? '',
-    path: row.path ?? '',
+    // The pump's own `path` column, not a dump: the parser never sees it, so a JWT in a path segment is hidden here.
+    path: (row.path ?? '').replace(JWT_VALUE, REDACTED),
     status: num(row.responsecode),
     latencyMs: num(row.latency_total),
     keyAlias: row.alias ?? '',

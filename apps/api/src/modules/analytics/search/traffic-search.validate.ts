@@ -18,6 +18,19 @@ const HEADER_NAME = /^[a-z0-9-]{1,64}$/;
 const METHOD = /^[A-Z]{3,7}$/;
 const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 const CURSOR_ID = /^\d{1,19}$/;
+const BIGINT_MAX = 9_223_372_036_854_775_807n;
+
+/** A row id Postgres can cast to `bigint`: 19 digits can still overflow it, and that would be a 500, not a 400. */
+export function isRowId(v: unknown): v is string {
+  return typeof v === 'string' && CURSOR_ID.test(v) && BigInt(v) <= BIGINT_MAX;
+}
+
+/** A UTC timestamp that exists: `2026-02-30` passes the shape but reads back as March, and Postgres has no year 0. */
+export function isRowTs(v: unknown): v is string {
+  if (typeof v !== 'string' || !ISO_TS.test(v)) return false;
+  const d = new Date(v);
+  return !Number.isNaN(d.getTime()) && d.getUTCFullYear() > 0 && d.toISOString().slice(0, 19) === v.slice(0, 19);
+}
 
 function fail(message: string): never {
   throw new SearchValidationError(message);
@@ -122,9 +135,10 @@ function clause(raw: unknown): SearchClause {
       const side = raw.side;
       if (side !== 'req' && side !== 'res' && side !== 'any') return fail('body side must be req, res or any.');
       const value = str(raw, 'value', 'body');
-      const words = value.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-      if (alnumLength(value) < SEARCH_LIMITS.minTerm) {
-        return fail(`Use at least ${String(SEARCH_LIMITS.minTerm)} letters or digits: a shorter term matches too much.`);
+      // Per word, not per phrase: `a b c` has three letters but no word the full-text index can narrow on.
+      const words = (value.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []).filter((w) => alnumLength(w) >= SEARCH_LIMITS.minTerm);
+      if (words.length === 0) {
+        return fail(`Use a word of at least ${String(SEARCH_LIMITS.minTerm)} letters or digits: a shorter term matches too much.`);
       }
       if (words.every((w) => SEARCH_STOP_WORDS.has(w))) {
         return fail(`"${value}" appears in almost every request; search for something more specific.`);
@@ -139,7 +153,7 @@ function clause(raw: unknown): SearchClause {
 function cursor(raw: unknown): SearchCursor | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (!isRecord(raw) || typeof raw.ts !== 'string' || typeof raw.id !== 'string') return fail('cursor is malformed.');
-  if (!ISO_TS.test(raw.ts) || !CURSOR_ID.test(raw.id)) return fail('cursor is malformed.');
+  if (!isRowTs(raw.ts) || !isRowId(raw.id)) return fail('cursor is malformed.');
   return { ts: raw.ts, id: raw.id };
 }
 

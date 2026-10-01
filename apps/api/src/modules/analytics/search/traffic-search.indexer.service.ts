@@ -1,3 +1,4 @@
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -9,19 +10,21 @@ import { buildSearchRow, type CapturedRow, type SearchRow } from './traffic-sear
 import { TrafficSearchStoreService } from './traffic-search.store.service';
 
 const BATCH_SIZE = 500;
+/** Parsing is synchronous; a page of large dumps would otherwise hold the event loop, and every request, for its whole length. */
+const YIELD_EVERY = 50;
 /** Each tick re-reads this far back: the pump can deliver a record late, and `tyk_analytics` has no id to resume from. */
 const LOOKBACK_MS = 15 * 60_000;
 /** The hourly pass reaches further back, for the records that arrive later still. */
 const DEEP_LOOKBACK_MS = 6 * 3_600_000;
 const DEFAULT_BACKFILL_DAYS = 7;
-const DEFAULT_RETENTION_DAYS = 30;
 
 /**
  * Copies captured requests from the pump's `tyk_analytics` into the search projection, redacted.
  *
  * Why polling with a lookback and not an id cursor: the pump table has no id, and the pump writes
- * batches that can land out of order. Each tick re-reads the last 15 minutes and inserts with
- * `ON CONFLICT (ts, dedupe_key) DO NOTHING`, so re-reading is free and a late row is still picked up.
+ * batches that can land out of order. Each tick re-reads the last 15 minutes, skipping in SQL every row the
+ * projection already holds (so only new rows are decoded and parsed), and inserts with
+ * `ON CONFLICT (ts, dedupe_key) DO NOTHING` as a safety net, so a late row is still picked up.
  * The ceiling is a record delivered later than the hourly 6 h pass: it is never indexed. Dumps go
  * through `parseHttpDump` with each API's own auth header, the same pass the inspector displays with.
  *
@@ -58,7 +61,7 @@ export class TrafficSearchIndexerService {
 
   /** One incremental pass: from the watermark minus the lookback (or the backfill window on first run) to now. */
   async tick(now: Date = new Date()): Promise<number> {
-    const watermark = await this.safe(() => this.indexedUntil(), null);
+    const watermark = await this.indexedUntil().catch(() => null);
     const from = watermark
       ? new Date(watermark.getTime() - LOOKBACK_MS)
       : addDays(now, -this.backfillDays());
@@ -77,16 +80,19 @@ export class TrafficSearchIndexerService {
       if (!((await this.prisma.$queryRaw<{ present: boolean }[]>`SELECT to_regclass('public.og_traffic_search') IS NOT NULL AS present`)[0]?.present)) return 0;
 
       const authHeaders = await this.authHeaderNames();
-      const retentionFloor = addDays(utcDay(to), -this.retentionDays());
+      const retentionFloor = addDays(utcDay(to), -this.store.retentionDays());
       let inserted = 0;
       let after: { ts: string; key: string } | null = null;
 
       for (;;) {
         const page: CapturedRow[] = await this.readPage(from, to, after);
         if (page.length === 0) break;
-        const rows = page
-          .map((r) => buildSearchRow(r, authHeaders.get(r.apiid) ?? null))
-          .filter((r) => new Date(r.ts).getTime() >= retentionFloor.getTime());
+        const rows: SearchRow[] = [];
+        for (const [i, captured] of page.entries()) {
+          if (i > 0 && i % YIELD_EVERY === 0) await yieldToEventLoop();
+          const row = buildSearchRow(captured, authHeaders.get(captured.apiid) ?? null);
+          if (new Date(row.ts).getTime() >= retentionFloor.getTime()) rows.push(row);
+        }
         inserted += await this.insert(rows);
         const last = page[page.length - 1];
         after = { ts: last.ts_iso, key: last.dedupe_key };
@@ -103,7 +109,12 @@ export class TrafficSearchIndexerService {
     }
   }
 
-  /** Keyset page over `(timestamp, dedupe_key)`: ties on the timestamp are ordered by the hash, so no row is skipped or repeated. */
+  /**
+   * Keyset page over `(timestamp, dedupe_key)`: ties on the timestamp are ordered by the hash, so no row is skipped or
+   * repeated. Rows already in the projection are left out (anti-join on its unique `(ts, dedupe_key)`), so a re-read
+   * of the lookback costs an index probe per row, not a decode and parse. The keyset still holds: a page is inserted
+   * before the next is read, and the cursor only moves past rows this page returned.
+   */
   private readPage(from: Date, to: Date, after: { ts: string; key: string } | null): Promise<CapturedRow[]> {
     const cursor = after
       ? Prisma.sql`AND ("timestamp", dedupe_key) > (${after.ts}::timestamptz, ${after.key})`
@@ -120,7 +131,8 @@ export class TrafficSearchIndexerService {
          WHERE (rawrequest <> '' OR rawresponse <> '')
            AND "timestamp" >= ${from} AND "timestamp" < ${to}
       ) captured
-      WHERE true ${cursor}
+      WHERE NOT EXISTS (SELECT 1 FROM public.og_traffic_search s WHERE s.ts = captured."timestamp" AND s.dedupe_key = captured.dedupe_key)
+        ${cursor}
       ORDER BY "timestamp", dedupe_key
       LIMIT ${BATCH_SIZE}
     `);
@@ -172,25 +184,9 @@ export class TrafficSearchIndexerService {
     return rows[0]?.present;
   }
 
-  private async safe<T>(run: () => Promise<T>, fallback: T): Promise<T> {
-    try {
-      return await run();
-    } catch {
-      return fallback;
-    }
-  }
-
-  private positive(key: string, fallback: number): number {
-    const v = Number(this.configService.get<string>(key));
-    return Number.isInteger(v) && v > 0 ? v : fallback;
-  }
-
-  private retentionDays(): number {
-    return this.positive('ANALYTICS_RETENTION_DAYS', DEFAULT_RETENTION_DAYS);
-  }
-
   /** How far back the very first scan reaches; never further than retention. */
   private backfillDays(): number {
-    return Math.min(this.positive('TRAFFIC_SEARCH_BACKFILL_DAYS', DEFAULT_BACKFILL_DAYS), this.retentionDays());
+    const v = Number(this.configService.get<string>('TRAFFIC_SEARCH_BACKFILL_DAYS'));
+    return Math.min(Number.isInteger(v) && v > 0 ? v : DEFAULT_BACKFILL_DAYS, this.store.retentionDays());
   }
 }

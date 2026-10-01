@@ -42,6 +42,8 @@ describe('validateSearchRequest', () => {
   it('accepts the largest page and a well-formed cursor', () => {
     const request = validateSearchRequest({ range: '7d', limit: 100, cursor: { ts: '2026-09-29T10:06:17.159317Z', id: '123' } });
     expect(request).toMatchObject({ range: '7d', limit: 100, cursor: { ts: '2026-09-29T10:06:17.159317Z', id: '123' } });
+    const edge = { ts: '2028-02-29T23:59:59.999999Z', id: '9223372036854775807' }; // a leap day, the bigint max
+    expect(validateSearchRequest({ cursor: edge }).cursor).toEqual(edge);
   });
 
   it('drops keys it does not know, so nothing extra reaches the builder', () => {
@@ -91,6 +93,11 @@ describe('validateSearchRequest', () => {
     ['a value over 200 characters', { clauses: [{ kind: 'key', value: 'k'.repeat(201) }] }, /longer than 200/],
     ['a cursor with a bad id', { cursor: { ts: '2026-09-29T10:06:17Z', id: '1; DROP' } }, /cursor is malformed/],
     ['a cursor with a bad timestamp', { cursor: { ts: 'yesterday', id: '1' } }, /cursor is malformed/],
+    // Each of these passed the old shape check and reached Postgres, which answered with a 500.
+    ['a cursor id past the bigint max', { cursor: { ts: '2026-09-29T10:06:17Z', id: '9223372036854775808' } }, /cursor is malformed/],
+    ['a cursor on a day that does not exist', { cursor: { ts: '2026-02-30T10:00:00Z', id: '1' } }, /cursor is malformed/],
+    ['a cursor at hour 25', { cursor: { ts: '2026-09-29T25:00:00Z', id: '1' } }, /cursor is malformed/],
+    ['a cursor in year 0', { cursor: { ts: '0000-01-01T00:00:00Z', id: '1' } }, /cursor is malformed/],
   ])('rejects %s', (_label, input, message) => {
     rejects(input, message);
   });
@@ -105,6 +112,18 @@ describe('validateSearchRequest', () => {
 
     it('allows a common word inside a more specific phrase', () => {
       expect(clause(body('insufficient funds status'))).toMatchObject({ kind: 'body', value: 'insufficient funds status' });
+    });
+
+    it.each([
+      ['short words that add up to 3 letters', 'a b c', /at least 3/],
+      ['a stop word padded with short words', 'id x y', /at least 3/],
+      ['a long stop word padded with short words', 'data x y', /almost every request/],
+    ])('needs one word of 3+ letters that is not a stop word, not just 3 letters in the phrase: refuses %s', (_label, value, message) => {
+      rejects({ clauses: [body(value)] }, message);
+    });
+
+    it('accepts short words beside one specific word', () => {
+      expect(clause(body('ab cd refund'))).toMatchObject({ kind: 'body', value: 'ab cd refund' });
     });
 
     it('allows at most 3 body clauses', () => {

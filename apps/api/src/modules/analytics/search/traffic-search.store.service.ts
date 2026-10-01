@@ -71,7 +71,7 @@ export class TrafficSearchStoreService implements OnModuleInit {
     return expired.length;
   }
 
-  private retentionDays(): number {
+  retentionDays(): number {
     const configured = Number(this.configService.get<string>('ANALYTICS_RETENTION_DAYS'));
     return Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_RETENTION_DAYS;
   }

@@ -54,7 +54,6 @@ export function useSearchQuery() {
     range,
     tokens,
     clauses,
-    hasError,
     tooMany,
     /** Searching is allowed: every chip is understood and the caps hold. */
     ready: !hasError && tooMany === null,

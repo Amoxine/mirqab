@@ -250,6 +250,7 @@
     },
     "apiErrors": {
       "tooBroad": "Cette recherche est trop large pour aboutir à temps. Ajoutez un statut, une API ou une période plus courte, ou utilisez un mot plus précis.",
+      "busy": "Une autre recherche est encore en cours. Patientez un instant puis réessayez.",
       "invalid": "Le serveur n’a pas compris l’un des filtres.",
       "forbidden": "Vous n’avez pas accès à la recherche de requêtes capturées.",
       "generic": "La recherche a échoué. Réessayez."

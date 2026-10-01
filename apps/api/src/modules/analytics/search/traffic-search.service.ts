@@ -1,11 +1,19 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { TrafficSearchIndexerService } from './traffic-search.indexer.service';
 import { queryWithTimeout, SearchTimeoutError } from './traffic-search.query';
 import { trafficSearchQuery } from './traffic-search.query.builder';
-import type { SearchCursor, SearchRange } from './traffic-search.types';
-import { SearchValidationError, validateSearchRequest } from './traffic-search.validate';
+import type { SearchCursor, SearchRange, TrafficSearchRequest } from './traffic-search.types';
+import { isRowId, isRowTs, SearchValidationError, validateSearchRequest } from './traffic-search.validate';
 
 export interface TrafficSearchItem {
   id: string;
@@ -65,8 +73,8 @@ interface DetailRow extends ListRow {
 const DEFAULT_TIMEOUT_MS = 3000;
 const MIN_TIMEOUT_MS = 100;
 const MAX_TIMEOUT_MS = 10_000;
-const CURSOR_ID = /^\d{1,19}$/;
-const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
+/** Searches one tenant may have running at once; each can hold a connection for the whole statement budget. */
+const MAX_IN_FLIGHT_PER_TENANT = 2;
 
 interface TenantApi {
   id: string;
@@ -82,6 +90,9 @@ interface TenantApi {
  */
 @Injectable()
 export class TrafficSearchService {
+  // ponytail: per-process count; move it to Redis if the API runs as more than one replica.
+  private readonly inFlight = new Map<string, number>();
+
   constructor(
     @Inject('PRISMA_CLIENT') private readonly prisma: PrismaClient,
     private readonly configService: ConfigService,
@@ -97,6 +108,24 @@ export class TrafficSearchService {
       throw err;
     }
 
+    const running = this.inFlight.get(tenantId) ?? 0;
+    if (running >= MAX_IN_FLIGHT_PER_TENANT) {
+      throw new HttpException(
+        { error: 'SEARCH_BUSY', message: 'Too many searches are running for this tenant. Wait for one to finish and try again.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    this.inFlight.set(tenantId, running + 1);
+    try {
+      return await this.page(tenantId, request);
+    } finally {
+      const left = (this.inFlight.get(tenantId) ?? 1) - 1;
+      if (left > 0) this.inFlight.set(tenantId, left);
+      else this.inFlight.delete(tenantId);
+    }
+  }
+
+  private async page(tenantId: string, request: TrafficSearchRequest): Promise<TrafficSearchPage> {
     const apis = await this.tenantApis(tenantId);
     const indexedUntil = (await this.indexer.indexedUntil().catch(() => null))?.toISOString() ?? null;
     if (apis.length === 0) return { range: request.range, items: [], hasMore: false, nextCursor: null, indexedUntil };
@@ -124,7 +153,7 @@ export class TrafficSearchService {
 
   /** One row with its headers and bodies. `ts` is required: it is what lets Postgres open one partition. */
   async detail(tenantId: string, id: string, ts: string): Promise<TrafficSearchDetail> {
-    if (!CURSOR_ID.test(id) || !ISO_TS.test(ts)) {
+    if (!isRowId(id) || !isRowTs(ts)) {
       throw new BadRequestException({ error: 'SEARCH_INVALID', message: 'id and ts must come from a search result.' });
     }
     const apis = await this.tenantApis(tenantId);

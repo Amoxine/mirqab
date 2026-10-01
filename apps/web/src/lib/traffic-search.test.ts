@@ -72,6 +72,8 @@ describe('parseToken', () => {
     ['body:"true false"', 'commonWord'],
     ['body:ab', 'termTooShort'],
     ['body:"--- ---"', 'termTooShort'],
+    ['body:"a b c"', 'termTooShort'],
+    ['body:"data x y"', 'commonWord'],
     ['path:/a', 'termTooShort'],
     [`key:${'k'.repeat(201)}`, 'tooLong'],
   ])('%s is refused as %s', (raw, code) => {

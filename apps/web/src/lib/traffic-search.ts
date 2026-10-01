@@ -8,7 +8,7 @@
  * A shared table of examples pins both sides together (`traffic-search.test.ts` here,
  * `traffic-search.validate.spec.ts` there).
  *
- * Errors are codes, not sentences: the search bar translates them (`analytics.traffic.search.errors`).
+ * Errors are codes, not sentences: the search bar translates them (`analytics.search.errors`).
  */
 
 export const SEARCH_LIMITS = { maxClauses: 8, maxBodyClauses: 3, minTerm: 3, maxValueLength: 200 } as const;
@@ -54,8 +54,8 @@ export interface SearchError {
 
 export type ParsedToken = { ok: true; clause: SearchClause } | { ok: false; error: SearchError };
 
-/** Field names the bar understands, in the order suggestions list them. */
-export const SEARCH_FIELDS = [
+/** Field names the bar understands. */
+const SEARCH_FIELDS = [
   'status',
   'method',
   'latency',
@@ -166,9 +166,10 @@ export function parseToken(raw: string): ParsedToken {
     case 'body':
     case 'req':
     case 'res': {
-      if (alnumLength(value) < SEARCH_LIMITS.minTerm) return err('termTooShort', { min: SEARCH_LIMITS.minTerm });
       const words = value.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-      if (words.every((w) => STOP_WORDS.has(w))) return err('commonWord', { term: value });
+      // Mirrors the API: at least one real word of minTerm+ letters or digits that is not a stop word.
+      if (!words.some((w) => alnumLength(w) >= SEARCH_LIMITS.minTerm)) return err('termTooShort', { min: SEARCH_LIMITS.minTerm });
+      if (words.every((w) => STOP_WORDS.has(w) || alnumLength(w) < SEARCH_LIMITS.minTerm)) return err('commonWord', { term: value });
       const side = field === 'body' ? 'any' : field;
       return { ok: true, clause: { kind: 'body', neg, side, value } };
     }

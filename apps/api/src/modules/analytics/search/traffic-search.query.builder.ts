@@ -37,8 +37,7 @@ function compare(column: Prisma.Sql, op: string, value: number): Prisma.Sql {
 }
 
 function status(match: StatusMatch): Prisma.Sql {
-  const column = Prisma.raw('status');
-  if (match.type === 'cmp') return compare(column, match.op, match.value);
+  if (match.type === 'cmp') return compare(Prisma.raw('status'), match.op, match.value);
   if (match.type === 'range') return Prisma.sql`status BETWEEN ${match.from} AND ${match.to}`;
   return Prisma.sql`status = ANY(${match.values}::int[])`;
 }

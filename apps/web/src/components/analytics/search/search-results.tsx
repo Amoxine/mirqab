@@ -20,16 +20,15 @@ import { statusVariant } from '@/lib/http-status';
 import type { Locale } from '@/i18n/locales';
 
 /** What the server said was wrong, in words a person can act on; the API's own text is English only. */
-function useErrorMessage(error: Error): string {
-  const t = useTranslations('analytics.search.apiErrors');
-  if (error instanceof ApiRequestError && error.code === 'SEARCH_TOO_BROAD') return t('tooBroad');
-  if (error instanceof ApiRequestError && (error.code === 'SEARCH_INVALID' || error.status === 400)) return t('invalid');
-  if (error instanceof ApiRequestError && error.status === 403) return t('forbidden');
-  return t('generic');
-}
-
 function ErrorView({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  const message = useErrorMessage(error);
+  const t = useTranslations('analytics.search.apiErrors');
+  let message = t('generic');
+  if (error instanceof ApiRequestError) {
+    if (error.code === 'SEARCH_TOO_BROAD') message = t('tooBroad');
+    else if (error.code === 'SEARCH_INVALID' || error.status === 400) message = t('invalid');
+    else if (error.code === 'SEARCH_BUSY' || error.status === 429) message = t('busy');
+    else if (error.status === 403) message = t('forbidden');
+  }
   return <AnalyticsErrorState message={message} onRetry={onRetry} />;
 }
 
