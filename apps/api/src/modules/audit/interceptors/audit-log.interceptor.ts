@@ -10,6 +10,24 @@ import { AUDIT_KEY } from '../../../common/decorators/audit.decorator';
 
 const SENSITIVE_KEY = /pass(word)?|secret|token|authorization|api[-_]?key|credential/i;
 
+/**
+ * Header names that carry a credential even when they match no key pattern above (`Cookie`, an
+ * `X-…-Key` / `-Token` / `-Secret` convention). Used only for the NAME of a `{ name, value }` pair.
+ */
+const SENSITIVE_HEADER_NAME = /^(authorization|proxy-authorization|cookie|set-cookie|x-.*(key|token|secret))$/i;
+
+/**
+ * A `{ name, value }` pair is how headers travel in a body (`config.transformRequestHeaders.add[]`),
+ * so the secret sits under the key `value`, which no key pattern catches: its sensitivity is in the
+ * sibling `name`. True when this object is such a pair with a sensitive name.
+ */
+function isSensitivePair(value: object): boolean {
+  const { name } = value as { name?: unknown };
+  return (
+    typeof name === 'string' && 'value' in value && (SENSITIVE_KEY.test(name) || SENSITIVE_HEADER_NAME.test(name))
+  );
+}
+
 /** A header can arrive repeated, in which case express hands back an array. */
 const firstHeader = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
@@ -96,8 +114,12 @@ function redact(value: unknown, mode: UrlMode, depth = 0): unknown {
   if (depth >= REDACT_MAX_DEPTH && value !== null && typeof value === 'object') return '[TRUNCATED]';
   if (Array.isArray(value)) return value.map((item) => redact(item, mode, depth + 1));
   if (value && typeof value === 'object') {
+    const sensitivePair = isSensitivePair(value);
     return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, SENSITIVE_KEY.test(k) ? '[REDACTED]' : redact(v, mode, depth + 1)]),
+      Object.entries(value).map(([k, v]) => [
+        k,
+        SENSITIVE_KEY.test(k) || (sensitivePair && k === 'value') ? '[REDACTED]' : redact(v, mode, depth + 1),
+      ]),
     );
   }
   return value;

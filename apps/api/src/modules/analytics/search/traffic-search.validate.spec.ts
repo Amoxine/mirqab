@@ -34,9 +34,32 @@ describe('validateSearchRequest', () => {
         { kind: 'header', side: 'req', name: 'x-request-id', value: 'abc' },
         { kind: 'header', side: 'res', name: 'x-cache' },
         body('insufficient funds'),
+        { kind: 'route', value: '/orders' },
       ],
     });
-    expect(more.clauses).toHaveLength(3);
+    expect(more.clauses).toHaveLength(4);
+  });
+
+  describe('route: the exact path', () => {
+    it.each(['/', '/me', '/orders', '/orders/{id}', 'r'.repeat(SEARCH_LIMITS.maxValueLength)])(
+      'accepts %s, however short: unlike a prefix it needs no minimum length',
+      (value) => {
+        expect(clause({ kind: 'route', value })).toEqual({ kind: 'route', neg: false, value });
+      },
+    );
+
+    it('can be negated, and drops keys it does not know', () => {
+      expect(clause({ kind: 'route', neg: true, value: '/orders', mode: 'prefix' })).toEqual({ kind: 'route', neg: true, value: '/orders' });
+    });
+
+    it.each([
+      ['an empty value', { kind: 'route', value: '' }, /route needs a value/],
+      ['a missing value', { kind: 'route' }, /route needs a value/],
+      ['a non-string value', { kind: 'route', value: 5 }, /route needs a value/],
+      ['a value over 200 characters', { kind: 'route', value: 'r'.repeat(201) }, /longer than 200/],
+    ])('refuses %s', (_label, c, message) => {
+      rejects({ clauses: [c] }, message);
+    });
   });
 
   it('accepts the largest page and a well-formed cursor', () => {
@@ -150,6 +173,8 @@ describe('validateSearchRequest', () => {
     { kind: 'latency', neg: false, op: '>', value: 800 },
     { kind: 'method', neg: false, values: ['POST', 'PUT'] },
     { kind: 'path', neg: false, value: '/orders' },
+    { kind: 'route', neg: false, value: '/orders' },
+    { kind: 'route', neg: true, value: '/' },
     { kind: 'api', neg: false, value: 'orders-api' },
     { kind: 'key', neg: false, value: 'qbus-web' },
     { kind: 'header', neg: false, side: 'req', name: 'x-request-id', value: 'abc' },

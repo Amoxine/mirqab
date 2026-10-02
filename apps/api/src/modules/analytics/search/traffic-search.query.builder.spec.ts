@@ -45,6 +45,7 @@ describe('trafficSearchQuery', () => {
         { kind: 'key', value: evil },
         { kind: 'body', side: 'res', value: 'weird timeout' },
         { kind: 'path', value: evil },
+        { kind: 'route', value: evil },
         { kind: 'header', side: 'req', name: 'x-a', value: evil },
       ],
     });
@@ -60,6 +61,7 @@ describe('trafficSearchQuery', () => {
       [{ kind: 'latency', op: '>', value: 800 }, /latency_ms > \$3/],
       [{ kind: 'method', values: ['GET', 'POST'] }, /method = ANY\(\$3::text\[\]\)/],
       [{ kind: 'path', value: '/orders' }, /path LIKE \$3 ESCAPE/],
+      [{ kind: 'route', value: '/orders' }, /path = \$3(?! ESCAPE)/],
       [{ kind: 'key', value: 'qbus-web' }, /key_alias = \$3/],
       [{ kind: 'header', side: 'req', name: 'x-request-id', value: 'abc' }, /req_headers @> \$3::jsonb/],
       [{ kind: 'header', side: 'res', name: 'x-cache' }, /res_headers @\? \$3::jsonpath/],
@@ -88,6 +90,25 @@ describe('trafficSearchQuery', () => {
 
   it('escapes LIKE wildcards in a typed path prefix', () => {
     expect(build({ clauses: [{ kind: 'path', value: '/ab_c%' }] }).values[2]).toBe('/ab\\_c\\%%');
+  });
+
+  it('route: is exact equality on the path, with the text bound as typed (no LIKE, no wildcards)', () => {
+    const { sql, values } = build({ clauses: [{ kind: 'route', value: '/ab_c%' }] });
+    expect(sql).toContain('AND path = $3 ORDER BY');
+    expect(sql).not.toContain('LIKE');
+    expect(values[2]).toBe('/ab_c%');
+  });
+
+  it('route: can be negated, and sits beside a method clause as one endpoint', () => {
+    const { sql, values } = build({
+      clauses: [
+        { kind: 'route', value: '/orders' },
+        { kind: 'method', values: ['GET'] },
+        { kind: 'route', neg: true, value: '/' },
+      ],
+    });
+    expect(sql).toContain('AND path = $3 AND method = ANY($4::text[]) AND NOT COALESCE((path = $5), false) ORDER BY');
+    expect(values.slice(2, 5)).toEqual(['/orders', ['GET'], '/']);
   });
 
   it('a negated clause keeps rows where the column is NULL', () => {

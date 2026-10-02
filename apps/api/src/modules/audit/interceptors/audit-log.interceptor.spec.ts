@@ -154,6 +154,57 @@ describe('AuditLogInterceptor', () => {
       expect(requestBody.preview).not.toContain('"k"');
     });
 
+    // `redact()` matched object KEYS only, so a header pair `{ name: 'Authorization', value: 'Bearer …' }`
+    // (the shape of `config.transformRequestHeaders.add[]`) kept its secret: the key is `value`.
+    describe('header pairs: a sensitive header name redacts the value beside it', () => {
+      const pair = (name: string, value: unknown = 'Bearer s3cr3t-credential') => ({ name, value });
+      const stored = async (body: unknown) => {
+        await run(interceptor, contextFor('PATCH', { id: 'api-1' }, '/api/apis', body), of({}));
+        return recorded(record).details as { requestBody: unknown };
+      };
+
+      it.each([
+        ['Authorization'],
+        ['authorization'],
+        ['Proxy-Authorization'],
+        ['Cookie'],
+        ['Set-Cookie'],
+        ['X-Api-Key'],
+        ['X-Internal-Token'],
+        ['X-Signing-Secret'],
+        ['x-session-key'],
+        ['password'],
+      ])('%s', async (name) => {
+        const body = { config: { transformRequestHeaders: { add: [pair(name)] } } };
+        const { requestBody } = await stored(body);
+        expect(requestBody).toEqual({
+          config: { transformRequestHeaders: { add: [{ name, value: '[REDACTED]' }] } },
+        });
+        expect(JSON.stringify(requestBody)).not.toContain('s3cr3t');
+      });
+
+      it.each([['Accept'], ['Content-Type'], ['X-Request-Id'], ['X-Forwarded-For']])('keeps %s as it is', async (name) => {
+        const { requestBody } = await stored({ add: [pair(name, 'application/json')] });
+        expect(requestBody).toEqual({ add: [{ name, value: 'application/json' }] });
+      });
+
+      it('redacts a value that is not a string too (nothing sensitive survives in any shape)', async () => {
+        const { requestBody } = await stored({ add: [pair('Authorization', { scheme: 'Bearer', token: 'abc' })] });
+        expect(JSON.stringify(requestBody)).not.toContain('abc');
+        expect(requestBody).toEqual({ add: [{ name: 'Authorization', value: '[REDACTED]' }] });
+      });
+
+      it('leaves an object whose name is not a string, or that has no value, alone', async () => {
+        const { requestBody } = await stored({ items: [{ name: 42, value: 'x' }, { name: 'Authorization' }] });
+        expect(requestBody).toEqual({ items: [{ name: 42, value: 'x' }, { name: 'Authorization' }] });
+      });
+
+      it('still redacts at any depth, including inside a pair that sits in an array in an array', async () => {
+        const { requestBody } = await stored({ a: [[{ name: 'Cookie', value: 'sid=1' }]] });
+        expect(requestBody).toEqual({ a: [[{ name: 'Cookie', value: '[REDACTED]' }]] });
+      });
+    });
+
     // OAS-08 C1: `redact()` matched key names only, so a spec URL's secret was stored in clear.
     it('strips userinfo, query and fragment from any http(s) URL value in a PUT body', async () => {
       const body = {

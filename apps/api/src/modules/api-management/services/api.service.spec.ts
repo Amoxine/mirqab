@@ -919,17 +919,17 @@ describe('ApiService', () => {
     it('resolves (never rejects) on a gateway failure and records FAILED with a sanitised syncError', async () => {
       const { service, tyk } = setup();
       db.findFirst.mockResolvedValue(row());
-      tyk.updateApi.mockRejectedValue(new BadRequestException('Tyk integration error: Api ID must be unique'));
-      db.update.mockResolvedValue(row({ syncStatus: 'FAILED', syncError: 'Tyk integration error: Api ID must be unique' }));
+      tyk.updateApi.mockRejectedValue(new BadRequestException('Gateway error: Api ID must be unique'));
+      db.update.mockResolvedValue(row({ syncStatus: 'FAILED', syncError: 'Gateway error: Api ID must be unique' }));
 
       const detail = await service.syncNow(ID, TENANT);
 
       const data = firstArg(db.update).data;
-      expect(data).toEqual({ syncStatus: 'FAILED', syncError: 'Tyk integration error: Api ID must be unique' });
+      expect(data).toEqual({ syncStatus: 'FAILED', syncError: 'Gateway error: Api ID must be unique' });
       // lastSyncedAt is left alone: it keeps meaning "last time the gateway really had this definition".
       expect(data).not.toHaveProperty('lastSyncedAt');
       expect(detail.syncStatus).toBe('FAILED');
-      expect(detail.syncError).toBe('Tyk integration error: Api ID must be unique');
+      expect(detail.syncError).toBe('Gateway error: Api ID must be unique');
     });
 
     it('hides network details when the gateway is unreachable', async () => {
@@ -978,7 +978,7 @@ describe('ApiService', () => {
 
 describe('toSyncError', () => {
   it('passes a sanitised HttpException message through', () => {
-    expect(toSyncError(new BadRequestException('Tyk integration error: boom'))).toBe('Tyk integration error: boom');
+    expect(toSyncError(new BadRequestException('Gateway error: boom'))).toBe('Gateway error: boom');
   });
 
   it('describes an open circuit without leaking its name', () => {

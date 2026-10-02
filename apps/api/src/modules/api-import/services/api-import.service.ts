@@ -125,7 +125,7 @@ export class ApiImportService {
   private async analyse(source: string): Promise<Analysis> {
     if (Buffer.byteLength(source, 'utf8') > MAX_SPEC_BYTES) {
       throw new PayloadTooLargeException(
-        `OAS document exceeds the ${String(MAX_SPEC_BYTES / (1024 * 1024))} MB limit`,
+        `The OpenAPI document exceeds the ${String(MAX_SPEC_BYTES / (1024 * 1024))} MB limit`,
       );
     }
 
@@ -173,7 +173,7 @@ export class ApiImportService {
 
     if (analysis.hasErrors) {
       throw new UnprocessableEntityException({
-        message: 'OAS document failed the lint gate',
+        message: 'The OpenAPI document failed validation',
         error: 'OAS_LINT_FAILED',
         // Warnings ride along too: a caller fixing the errors wants to see the rest in one pass.
         details: toDetails(analysis.findings),
@@ -190,7 +190,7 @@ export class ApiImportService {
     const { dto, errors } = await this.derive(analysis, options);
     if (Object.keys(errors).length > 0) {
       throw new UnprocessableEntityException({
-        message: 'The document is valid OAS but does not yield a usable API definition',
+        message: 'The document is valid OpenAPI but does not yield a usable API definition',
         error: 'OAS_IMPORT_UNUSABLE',
         details: { ...toDetails(analysis.findings), ...errors },
       });

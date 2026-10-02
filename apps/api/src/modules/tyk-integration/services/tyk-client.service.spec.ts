@@ -78,7 +78,11 @@ describe('TykClientService', () => {
     it('rejects a response without key_hash instead of persisting the raw key as an id', async () => {
       fetchSpy.mockResolvedValueOnce(jsonResponse({ key: 'raw-secret', status: 'ok', action: 'added' }));
 
-      await expect(makeClient().createKey({ alias: 'k' })).rejects.toThrow(BadRequestException);
+      await expect(makeClient().createKey({ alias: 'k' })).rejects.toMatchObject({
+        name: 'BadRequestException',
+        status: 400,
+        message: 'The gateway returned an incomplete key creation response',
+      });
     });
   });
 
@@ -118,7 +122,38 @@ describe('TykClientService', () => {
     it('maps a Tyk error body (lowercase `message`) to a BadRequestException', async () => {
       fetchSpy.mockResolvedValueOnce(jsonResponse({ status: 'error', message: 'Key not found' }, 404));
 
-      await expect(makeClient().deleteKey('missing')).rejects.toThrow('Tyk integration error: Key not found');
+      await expect(makeClient().deleteKey('missing')).rejects.toThrow('Gateway error: Key not found');
+    });
+
+    it("neutralises the infrastructure names and addresses in the gateway's own text, keeping class and status", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        jsonResponse({ Status: 'Error', Message: 'Tyk Pump: redis timeout at http://tyk-gateway:8081/tyk/apis' }, 500),
+      );
+
+      await expect(makeClient().deleteKey('abc123')).rejects.toMatchObject({
+        name: 'TykResponseError',
+        status: 400,
+        upstreamStatus: 500,
+        message: 'Gateway error: Analytics collector: data store timeout at an internal address',
+      });
+    });
+
+    it('forwards a plain validation hint as it came', async () => {
+      fetchSpy.mockResolvedValueOnce(jsonResponse({ Status: 'Error', Message: 'Api ID must be unique' }, 400));
+
+      await expect(makeClient().deleteKey('abc123')).rejects.toMatchObject({
+        message: 'Gateway error: Api ID must be unique',
+      });
+    });
+
+    it('falls back to a neutral message when the error body carries none', async () => {
+      fetchSpy.mockResolvedValueOnce(jsonResponse({ status: 'error' }, 500));
+
+      await expect(makeClient().deleteKey('abc123')).rejects.toMatchObject({
+        name: 'TykResponseError',
+        status: 400,
+        message: 'Gateway error: request failed',
+      });
     });
   });
 
@@ -286,6 +321,7 @@ describe('TykClientService', () => {
       const health = await makeClient({ TYK_GATEWAY_URL: '' }).gatewayHealth();
 
       expect(health.reachable).toBe(false);
+      expect(health.error).toBe('Gateway URL is not configured');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
   });

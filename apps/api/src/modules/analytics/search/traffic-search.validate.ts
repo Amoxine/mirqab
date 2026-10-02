@@ -119,6 +119,9 @@ function clause(raw: unknown): SearchClause {
       }
       return { kind: 'path', neg, value };
     }
+    case 'route':
+      // Equality, not a prefix: it cannot match more than the endpoint it names, so it needs no minimum length.
+      return { kind: 'route', neg, value: str(raw, 'value', 'route') };
     case 'api':
       return { kind: 'api', neg, value: str(raw, 'value', 'api') };
     case 'key':

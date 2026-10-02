@@ -183,7 +183,7 @@ describe('KeyService', () => {
       db.apiDefinition.findUnique.mockResolvedValue(apiDef);
       tyk.createKey.mockResolvedValue({ keyHash: HASH, key: RAW_KEY });
       db.apiKey.create.mockRejectedValue(new Error('database is in recovery'));
-      tyk.deleteKey.mockRejectedValue(new BadRequestException('Tyk integration error: boom'));
+      tyk.deleteKey.mockRejectedValue(new BadRequestException('Gateway error: boom'));
 
       await expect(service.create(dto, TENANT, 'user-1')).rejects.toThrow('database is in recovery');
     });
@@ -239,11 +239,28 @@ describe('KeyService', () => {
         tyk.createKey.mockRejectedValue(new Error('gateway down'));
         tyk.deletePolicy.mockResolvedValue([]);
 
-        await expect(service.create(planDto, TENANT, 'user-1')).rejects.toThrow(BadRequestException);
+        await expect(service.create(planDto, TENANT, 'user-1')).rejects.toMatchObject({
+          name: 'BadRequestException',
+          status: 400,
+          message: 'Failed to create API key',
+        });
 
         const aclPolicy = (tyk.upsertPolicy.mock.calls[0] as [Record<string, unknown>])[0];
         expect(tyk.deletePolicy).toHaveBeenCalledWith(aclPolicy.id);
         expect(db.apiKey.create).not.toHaveBeenCalled();
+      });
+
+      it('fails with the same neutral message when the ACL policy cannot be pushed', async () => {
+        db.apiDefinition.findUnique.mockResolvedValue(apiDef);
+        db.plan.findFirst.mockResolvedValue({ id: PLAN_ID });
+        tyk.upsertPolicy.mockRejectedValue(new Error('gateway down'));
+
+        await expect(service.create(planDto, TENANT, 'user-1')).rejects.toMatchObject({
+          name: 'BadRequestException',
+          status: 400,
+          message: 'Failed to create API key',
+        });
+        expect(tyk.createKey).not.toHaveBeenCalled();
       });
 
       it('deletes both the gateway key and its ACL policy when the database row cannot be written', async () => {
@@ -461,7 +478,7 @@ describe('KeyService', () => {
       expect(tyk.updateKey).not.toHaveBeenCalled();
 
       tyk.getKey.mockResolvedValueOnce(tykState);
-      tyk.updateKey.mockRejectedValueOnce(new BadRequestException('Tyk integration error: boom'));
+      tyk.updateKey.mockRejectedValueOnce(new BadRequestException('Gateway error: boom'));
       await expect(service.update(KEY_ID, { name: 'x' }, TENANT)).rejects.toThrow(BadGatewayException);
 
       expect(db.apiKey.update).not.toHaveBeenCalled();
@@ -490,7 +507,7 @@ describe('KeyService', () => {
       expect(revoked.status).toBe(ApiKeyStatus.REVOKED);
     });
 
-    it.each(['Tyk integration error: Key not found', 'Tyk integration error: There is no such key found'])(
+    it.each(['Gateway error: Key not found', 'Gateway error: There is no such key found'])(
       'still marks the row REVOKED when Tyk does not know the key (%s)',
       async (message) => {
         db.apiKey.findUnique.mockResolvedValue(keyRow());
@@ -504,7 +521,7 @@ describe('KeyService', () => {
 
     it.each([
       ['gateway unreachable', new TypeError('fetch failed')],
-      ['gateway rejected the call', new BadRequestException('Tyk integration error: Access to this API has been disallowed')],
+      ['gateway rejected the call', new BadRequestException('Gateway error: Access to this API has been disallowed')],
     ])('does NOT mark the key revoked when it may still be live in Tyk (%s)', async (_label, error) => {
       db.apiKey.findUnique.mockResolvedValue(keyRow());
       tyk.deleteKey.mockRejectedValue(error);
@@ -589,7 +606,7 @@ describe('KeyService', () => {
     });
 
     // B7b: an expired key the gateway already dropped used to throw, stay ACTIVE and be retried nightly.
-    it.each(['Tyk integration error: Key not found', 'Tyk integration error: There is no such key found'])(
+    it.each(['Gateway error: Key not found', 'Gateway error: There is no such key found'])(
       'marks the row EXPIRED when Tyk does not know the key (%s)',
       async (message) => {
         db.apiKey.findMany.mockResolvedValue([expiredRow()]);

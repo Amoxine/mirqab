@@ -10,6 +10,7 @@ import { CircuitBreakerService } from '../../../common/circuit-breaker/circuit-b
 import { CircuitBreakerOpenError } from '../../../common/circuit-breaker/circuit-breaker.types';
 import { tykFanoutTotal, tykNodeLabel, type TykFanoutOperation } from '../../../common/metrics/ops-metrics';
 import { RedisService } from '../../../common/redis/redis.service';
+import { neutraliseUpstreamMessage } from './upstream-message';
 
 /**
  * A non-2xx answer from Tyk, carrying the status so a caller can tell a genuine 404 ("the gateway
@@ -364,7 +365,7 @@ export class TykClientService {
     if (results.length > 0 && results.every((r) => !r.outcome.ok)) {
       // Rethrow the FIRST node's original error rather than a new one: on a single-node stack this
       // path is the only path, and callers still expect the exact exception type Tyk produced.
-      throw results[0].raw ?? new BadGatewayException('Tyk gateway unreachable');
+      throw results[0].raw ?? new BadGatewayException('The gateway is unreachable');
     }
     return results.map(({ outcome }) => outcome);
   }
@@ -610,7 +611,7 @@ export class TykClientService {
     });
 
     if (!response.key_hash || !response.key) {
-      throw new BadRequestException('Tyk integration error: key creation response was incomplete');
+      throw new BadRequestException('The gateway returned an incomplete key creation response');
     }
 
     return { keyHash: response.key_hash, key: response.key };
@@ -892,7 +893,7 @@ export class TykClientService {
    */
   async gatewayHealth(): Promise<TykGatewayHealth> {
     if (!this.gatewayUrl) {
-      return unreachableHealth('Tyk gateway URL is not configured');
+      return unreachableHealth('Gateway URL is not configured');
     }
     return this.probeHello(this.gatewayUrl);
   }
@@ -1074,7 +1075,7 @@ export class TykClientService {
     if (!response.ok) {
       // Map Tyk error to domain error — NEVER expose Tyk internals
       const tykMessage = data.Message ?? data.message;
-      const message = typeof tykMessage === 'string' ? tykMessage : 'Tyk API request failed';
+      const message = typeof tykMessage === 'string' ? tykMessage : 'request failed';
 
       // A 404 is an expected answer on several paths — polling for a definition that has not loaded
       // yet, and confirming that a deleted policy is really gone — so it is not an error. Logging it
@@ -1082,7 +1083,9 @@ export class TykClientService {
       const log = response.status === 404 ? this.logger.debug.bind(this.logger) : this.logger.error.bind(this.logger);
       log(`Tyk API ${String(response.status)}: ${message}`);
 
-      throw new TykResponseError(`Tyk integration error: ${message}`, response.status);
+      // `message` is logged above as the gateway sent it; what a client reads has the names and
+      // addresses of the infrastructure taken out.
+      throw new TykResponseError(`Gateway error: ${neutraliseUpstreamMessage(message)}`, response.status);
     }
 
     return this.sanitizeResponse(data as Record<string, unknown>) as T;

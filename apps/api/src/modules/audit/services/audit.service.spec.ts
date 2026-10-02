@@ -43,12 +43,14 @@ function makeService(rows: AuditRow[] = [], analyticsService: Partial<AnalyticsS
     .mockResolvedValue(null);
   const service = new AuditService(analyticsService as AnalyticsService);
 
+  const findUnique = jest.fn((_args: { where: Record<string, unknown>; include?: unknown }) => Promise.resolve(null));
+
   (service as unknown as { prisma: PrismaClient }).prisma = {
-    auditLog: { findMany, count, findUnique: jest.fn().mockResolvedValue(null), groupBy: jest.fn() },
+    auditLog: { findMany, count, findUnique, groupBy: jest.fn() },
     apiDefinition: { findFirst },
   } as unknown as PrismaClient;
 
-  return { service, findMany, count, findFirst };
+  return { service, findMany, count, findFirst, findUnique };
 }
 
 // A1: `where = { tenantId }` with an undefined tenantId is a where clause Prisma DROPS, so a
@@ -78,6 +80,33 @@ describe('AuditService tenant scoping', () => {
     await service.findAll('t1');
 
     expect(findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1' });
+  });
+});
+
+// The cross-tenant guard of GET /audit-logs/:id: ids are sequential, so the lookup must be bound to the
+// caller's tenant or any signed-in user could read any tenant's entries by counting.
+describe('AuditService.findOne', () => {
+  it('looks the entry up by id AND the caller’s tenant, never by id alone', async () => {
+    const { service, findUnique } = makeService();
+
+    await service.findOne(17n, 'tenant-1');
+
+    expect(findUnique).toHaveBeenCalledTimes(1);
+    expect(findUnique.mock.calls[0][0].where).toEqual({ id: 17n, tenantId: 'tenant-1' });
+  });
+
+  it('asks for the user’s name and email only, not the whole user row', async () => {
+    const { service, findUnique } = makeService();
+
+    await service.findOne(17n, 'tenant-1');
+
+    expect(findUnique.mock.calls[0][0].include).toEqual({ user: { select: { name: true, email: true } } });
+  });
+
+  it('gives back nothing for another tenant’s entry (the scoped lookup finds none)', async () => {
+    const { service } = makeService();
+
+    await expect(service.findOne(17n, 'tenant-2')).resolves.toBeNull();
   });
 });
 

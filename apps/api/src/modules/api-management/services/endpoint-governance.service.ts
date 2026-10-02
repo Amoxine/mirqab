@@ -88,7 +88,7 @@ export class EndpointGovernanceService {
   async update(tenantId: string, apiDefId: string, change: EndpointGovernanceUpdate): Promise<EndpointGovernanceView> {
     const { api, spec } = await this.load(tenantId, apiDefId);
     if (api.defFormat !== ApiDefFormat.OAS || api.protocol !== ApiProtocol.HTTP) {
-      throw new BadRequestException('Endpoint governance needs an HTTP API in the OAS format');
+      throw new BadRequestException('Endpoint governance needs an HTTP API defined from an OpenAPI document');
     }
     if (!spec) throw new BadRequestException('Endpoint governance needs a stored OpenAPI specification');
 

@@ -413,7 +413,9 @@ export class ApiService {
       throw new BadRequestException('Cannot create a version of a version; create it on the default API.');
     }
     if (parent.defFormat !== ApiDefFormat.OAS) {
-      throw new BadRequestException('API versioning requires the OAS format; this API is CLASSIC.');
+      throw new BadRequestException(
+        'API versioning requires an API defined from an OpenAPI document; this API uses a classic definition.',
+      );
     }
     // O3, same guard as `create`/`update`.
     if (dto.authType === 'JWT' && !dto.config?.jwt) {

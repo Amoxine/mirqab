@@ -139,7 +139,7 @@ export class KeyService {
         this.logger.error(
           `Failed to create the access policy for a new key: ${err instanceof Error ? err.message : String(err)}`,
         );
-        throw new BadRequestException('Failed to create API key — Tyk integration error');
+        throw new BadRequestException('Failed to create API key');
       }
     }
     const aclPolicyId = aclPolicy ? (aclPolicy.id as string) : undefined;
@@ -163,9 +163,7 @@ export class KeyService {
       this.logger.error(
         `Failed to create key in Tyk: ${err instanceof Error ? err.message : String(err)}`,
       );
-      throw new BadRequestException(
-        'Failed to create API key — Tyk integration error',
-      );
+      throw new BadRequestException('Failed to create API key');
     }
 
     // Step 4: Hash the raw key value

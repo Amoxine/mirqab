@@ -54,6 +54,8 @@ export type SearchClause = { neg: boolean } & (
   | { kind: 'method'; values: string[] }
   /** The request path starts with `value`. */
   | { kind: 'path'; value: string }
+  /** The request path IS `value`: one endpoint of an API, however short its path. */
+  | { kind: 'route'; value: string }
   /** An API of the caller's tenant, by name, slug or id. */
   | { kind: 'api'; value: string }
   | { kind: 'key'; value: string }

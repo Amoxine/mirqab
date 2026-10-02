@@ -269,8 +269,8 @@ export class McpService {
     // the cause instead of a 502 carrying "REST-as-MCP sources must be Tyk OAS APIs".
     if (api.defFormat !== ApiDefFormat.OAS) {
       throw new BadRequestException(
-        'An MCP server can only be paired to an OAS-format API — Tyk builds the tool catalogue from ' +
-          'its OpenAPI document, and a CLASSIC definition has none.',
+        'An MCP server can only be paired to an API defined from an OpenAPI document — the tool ' +
+          'catalogue is built from it, and a classic definition has none.',
       );
     }
     if (!api.tykApiId) {

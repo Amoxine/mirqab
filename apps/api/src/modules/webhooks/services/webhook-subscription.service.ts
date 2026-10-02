@@ -61,7 +61,9 @@ export class WebhookSubscriptionService {
     // `event_handlers.events` map is a different, unverified shape; refusing here rather than
     // guessing at it (see WP27's report to team-lead).
     if (apiDef.defFormat !== ApiDefFormat.OAS) {
-      throw new BadRequestException('Webhooks require an OAS-format API; this API is CLASSIC');
+      throw new BadRequestException(
+        'Webhooks require an API defined from an OpenAPI document; this API uses a classic definition',
+      );
     }
     // A TCP api has no HTTP-layer middleware at all (confirmed against the v5.15.0 source) — none of
     // QuotaExceeded/AuthFailure/BreakerTripped can ever fire for one.

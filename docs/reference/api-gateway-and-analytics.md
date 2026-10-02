@@ -659,6 +659,7 @@ audit row (a decision, asserted by a test; revisit if reading captured bodies ne
 | `latency` | `op`, `value` (ms) | `>`, `>=`, `<`, `<=` |
 | `method` | `values` | upper-case, up to 7 |
 | `path` | `value` | prefix match (`LIKE 'value%'`, wildcards in the typed text escaped); at least 3 letters or digits |
+| `route` | `value` | exact match (`path = value`, bound as typed); any length up to 200, so `/` is valid. This is what an endpoint row's link sends: the endpoint tables group by the whole `(method, path)`, which a prefix would over-count. Like `path`, it filters the rows the `(apiid, ts)` index returns: no index on `path` exists, by design (see the DDL header in `traffic-search.ddl.ts`). The stored path has JWT-shaped segments replaced by `[REDACTED]`, so a route that carries a JWT cannot match. |
 | `api` | `value` | an API of the caller's tenant by id, name or slug; anything else matches nothing |
 | `key` | `value` | key alias |
 | `header` | `side` (`req`/`res`), `name` (lower-case), optional `value` | no `value` = the header exists. A redacted header keeps its name, so `authorization` exists but its value matches nothing. |

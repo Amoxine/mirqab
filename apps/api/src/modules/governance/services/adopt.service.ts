@@ -110,7 +110,7 @@ export class GovernanceAdoptService {
       adoptedFields,
       adoptedAt,
       message:
-        `Adopted ${String(adoptedFields.length)} field(s) from ${nodeUrl}, overriding Postgres as ` +
+        `Adopted ${String(adoptedFields.length)} field(s) from ${nodeUrl}, overriding the stored definition as ` +
         'config of record for this API. This is an operator escape hatch, not a routine sync — the ' +
         'structured fields (proxy URL, listen path, config) are unchanged and the next edit or ' +
         'POST /apis/:id/sync will regenerate from them, not from what was just adopted.',

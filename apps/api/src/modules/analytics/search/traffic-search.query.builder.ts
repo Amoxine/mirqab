@@ -52,6 +52,9 @@ function predicate(clause: SearchClause, resolveApi: (value: string) => string[]
       return Prisma.sql`method = ANY(${clause.values}::text[])`;
     case 'path':
       return Prisma.sql`path LIKE ${`${escapeLike(clause.value)}%`} ESCAPE '\\'`;
+    case 'route':
+      // Bound as typed: `=` has no wildcards to escape. Like `path LIKE`, it filters the rows the (apiid, ts) index returns.
+      return Prisma.sql`path = ${clause.value}`;
     case 'api':
       return Prisma.sql`apiid = ANY(${resolveApi(clause.value)}::text[])`;
     case 'key':

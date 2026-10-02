@@ -30,7 +30,7 @@ export function specBodyMiddleware(req: Request, res: Response, next: NextFuncti
     if (err && (err as BodyParserError).type === 'entity.too.large') {
       next(
         new PayloadTooLargeException(
-          `OAS document exceeds the ${String(MAX_SPEC_BYTES / (1024 * 1024))} MB limit`,
+          `The OpenAPI document exceeds the ${String(MAX_SPEC_BYTES / (1024 * 1024))} MB limit`,
         ),
       );
       return;

@@ -1,4 +1,14 @@
-import { Controller, Get, Param, Query, UseGuards, ParseIntPipe, ParseUUIDPipe, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Res,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { AuditService, CSV_MAX_ROWS } from '../services/audit.service';
@@ -87,10 +97,15 @@ export class AuditController {
   @Get(':id')
   @Permissions('audit:read')
   @ApiOperation({ summary: 'Get single audit log entry' })
+  @ApiResponse({ status: 404, description: 'No such entry for the caller (missing, or another tenant’s)' })
   async findOne(
     @CurrentTenant() tenantId: string | undefined,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.auditService.findOne(BigInt(id), tenantId);
+    const entry = await this.auditService.findOne(BigInt(id), tenantId);
+    // The lookup is scoped to the caller's tenant, so another tenant's entry is "not found" too: one
+    // answer for both, which says nothing about other tenants' ids.
+    if (!entry) throw new NotFoundException('Audit entry not found');
+    return entry;
   }
 }

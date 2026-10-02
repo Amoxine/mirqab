@@ -110,7 +110,7 @@ export class SpecUpdateService {
 
     if (analysis.findings.some((finding) => finding.severity === 'error')) {
       throw new UnprocessableEntityException({
-        message: 'OAS document failed the lint gate',
+        message: 'The OpenAPI document failed validation',
         error: 'OAS_LINT_FAILED',
         details: toDetails(analysis.findings),
       });
