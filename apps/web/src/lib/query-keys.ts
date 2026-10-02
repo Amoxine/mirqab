@@ -126,6 +126,7 @@ export const queryKeys = {
     get recent() {
       return scoped('audit-logs', 'recent');
     },
+    detail: (id: string) => [...queryKeys.audit.all, 'detail', id] as const,
   },
   auth: {
     get me() {

@@ -43,7 +43,7 @@ function RegisterPageContent() {
   if (!flow) return <Skeleton className="h-96 w-full max-w-md" aria-busy="true" />;
 
   return (
-    <Card className="w-full max-w-md border-border/50 shadow-lg">
+    <Card className="w-full max-w-md border-border/50">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl font-bold">{t('register.title')}</CardTitle>
         <CardDescription>{t('register.description', { brand: tNav('brand') })}</CardDescription>

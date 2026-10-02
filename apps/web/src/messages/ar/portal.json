@@ -1,5 +1,6 @@
 {
   "brand": "بوابة المطورين",
+  "authBrandName": "بوابة المطورين {brand}",
   "nav": {
     "catalog": "الكتالوج",
     "applications": "تطبيقاتي",

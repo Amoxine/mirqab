@@ -5,6 +5,7 @@ import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-
 import { MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
+import { formatRate, rateLabels } from '@/components/keys/key-utils';
 import { DeletePlanDialog } from '@/components/plans/delete-plan-dialog';
 import { PlanFormSheet } from '@/components/plans/plan-form-sheet';
 import { Badge } from '@/components/ui/badge';
@@ -23,11 +24,6 @@ import { FormattedNumber } from '@/components/shared/formatted';
 const NO_ROWS: Plan[] = [];
 
 type Translate = ReturnType<typeof useTranslations>;
-
-function formatRate(rate: number, per: number, unlimitedLabel: string): string {
-  if (rate <= 0) return unlimitedLabel;
-  return per === 1 ? `${String(rate)}/s` : `${String(rate)} / ${String(per)}s`;
-}
 
 function PlanRowActions({
   plan,
@@ -98,7 +94,7 @@ function getColumns(
     {
       id: 'rate',
       header: t('list.columns.rate'),
-      cell: ({ row }) => formatRate(row.original.rate, row.original.per, t('list.unlimited')),
+      cell: ({ row }) => formatRate(row.original.rate, row.original.per, t('list.unlimited'), rateLabels(tCommon)),
     },
     {
       id: 'quota',

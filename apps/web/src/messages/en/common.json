@@ -35,5 +35,9 @@
     }
   },
   "filters": "Filters",
-  "activeFilters": "{count, plural, one {# filter} other {# filters}} active"
+  "activeFilters": "{count, plural, one {# filter} other {# filters}} active",
+  "rate": {
+    "perSecond": "{rate} req/s",
+    "every": "{rate} req / {seconds} s"
+  }
 }

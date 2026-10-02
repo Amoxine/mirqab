@@ -75,7 +75,8 @@ function invalidateApis(qc: QueryClient) {
   ]);
 }
 
-export function useApis(page = 1, pageSize = 20, status?: string, syncStatus?: string) {
+/** `enabled` is for a caller that may not hold `api:read`: the list is then not requested (it would be a 403). */
+export function useApis(page = 1, pageSize = 20, status?: string, syncStatus?: string, enabled = true) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (status) params.set('status', status);
   if (syncStatus) params.set('syncStatus', syncStatus);
@@ -84,6 +85,7 @@ export function useApis(page = 1, pageSize = 20, status?: string, syncStatus?: s
     queryKey: queryKeys.apis.list(Object.fromEntries(params)),
     queryFn: () =>
       api.get<PaginatedResponse<ApiDefinition>>(`/apis?${params.toString()}`).then((res) => res.data),
+    enabled,
     refetchInterval: (query) =>
       query.state.data?.data.some((item) => item.syncStatus === 'PENDING') ? SYNC_POLL_MS : false,
   });

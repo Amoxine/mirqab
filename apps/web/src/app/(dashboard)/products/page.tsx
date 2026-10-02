@@ -96,8 +96,9 @@ function getColumns(
         ) : (
           <div className="flex flex-wrap gap-1">
             {row.original.apis.slice(0, 3).map((api) => (
-              <Badge key={api.id} variant="outline">
-                {api.name}
+              // One long unbroken API name is cut with an ellipsis (whole in its tooltip) instead of widening the row or card.
+              <Badge key={api.id} variant="outline" className="max-w-full" title={api.name}>
+                <span className="truncate">{api.name}</span>
               </Badge>
             ))}
             {row.original.apis.length > 3 && (

@@ -242,7 +242,7 @@
     },
     "endpoints": {
       "title": "Endpoints",
-      "description": "Derived from the API's generated OAS document — not hand-entered.",
+      "description": "Derived from the API's generated spec — not hand-entered.",
       "empty": "No endpoints yet. They appear once a per-request middleware (URL rewrite, circuit breaker, mock response, body transform or schema validation) is configured.",
       "method": "Method",
       "path": "Path",

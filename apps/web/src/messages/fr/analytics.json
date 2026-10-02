@@ -28,7 +28,9 @@
       "errors": "Erreurs",
       "errorRate": "Taux d'erreur",
       "avgLatency": "Latence moyenne"
-    }
+    },
+    "viewTraffic": "Voir le trafic de {name}",
+    "viewFailed": "Voir les requêtes en échec de {name}"
   },
   "charts": {
     "requests": {
@@ -50,14 +52,17 @@
       "empty": "Aucune réponse n'a été enregistrée sur la période sélectionnée.",
       "success": "Succès",
       "clientError": "Erreur client (4xx)",
-      "serverError": "Erreur serveur (5xx)"
+      "serverError": "Erreur serveur (5xx)",
+      "browse": "Ouvrir les requêtes selon leur statut",
+      "breakdown": "Réponses par code de statut",
+      "breakdownItem": "{code} : {count, number}"
     }
   },
   "emptyState": {
     "pipelineNotReady": "Le pipeline analytique ne reçoit pas de données",
     "noDataTitle": "Aucune donnée",
     "defaultDescription": "Rien n'a été enregistré sur la période sélectionnée.",
-    "pump": "Tyk Pump",
+    "pump": "Service de collecte",
     "pumpRunning": "En cours d'exécution",
     "pumpNotRunning": "Arrêté",
     "rawTable": "Table brute",
@@ -67,13 +72,13 @@
     "rowsRecorded": "Lignes enregistrées",
     "lastRecord": "Dernier enregistrement",
     "never": "Jamais",
-    "hintPumpDown": "Tyk Pump est arrêté ou inaccessible : les nouvelles requêtes ne sont plus enregistrées. Démarrez le service tyk-pump.",
-    "hintTablesMissing": "Tyk Pump n'a pas encore créé ses tables analytiques. Vérifiez que le service tyk-pump est bien en cours d'exécution.",
+    "hintPumpDown": "Le service de collecte analytique est arrêté ou inaccessible : les nouvelles requêtes ne sont plus enregistrées. Contactez les personnes qui exploitent la plateforme.",
+    "hintTablesMissing": "Le stockage analytique n'est pas encore en place. Contactez les personnes qui exploitent la plateforme pour vérifier que la collecte fonctionne.",
     "hintNoTraffic": "Les tables analytiques existent mais aucune requête n'a encore été enregistrée. Envoyez du trafic via la passerelle pour les alimenter."
   },
   "staleNotice": {
-    "title": "Tyk Pump est arrêté",
-    "description": "Les nouvelles requêtes ne sont plus enregistrées : les chiffres ci-dessous sont donc obsolètes. Dernier enregistrement : {lastRecord}. Démarrez le service tyk-pump pour reprendre."
+    "title": "La collecte analytique est suspendue",
+    "description": "Les nouvelles requêtes ne sont plus enregistrées : les chiffres ci-dessous sont donc obsolètes. Dernier enregistrement : {lastRecord}. Contactez les personnes qui exploitent la plateforme."
   },
   "errorState": {
     "title": "Échec du chargement des données"
@@ -121,6 +126,15 @@
       "SYNC_SUCCEEDED": "Synchronisation réussie",
       "SYNC_FAILED": "Synchronisation échouée",
       "SPEC_UPDATE_DETECTED": "Mise à jour de spécification détectée"
+    },
+    "detail": {
+      "title": "Entrée du journal",
+      "description": "Ce qui s’est passé, qui l’a fait et quand.",
+      "correlationId": "Identifiant de corrélation",
+      "details": "Détails",
+      "noDetails": "Aucun autre détail n’a été enregistré.",
+      "loadError": "L’entrée n’a pas pu être chargée.",
+      "open": "Ouvrir l’entrée du journal : {action} {resource}"
     }
   },
   "traffic": {
@@ -148,7 +162,13 @@
       "anyLatency": "Toute latence",
       "slowerThan": "Plus lent que {ms} ms",
       "reset": "Réinitialiser les filtres",
-      "active": "{count, plural, one {# filtre actif} other {# filtres actifs}}"
+      "active": "{count, plural, one {# filtre actif} other {# filtres actifs}}",
+      "viewRequests": "Voir ces requêtes",
+      "selectedApi": "API sélectionnée",
+      "selectedKey": "Clé sélectionnée",
+      "apisUnavailable": "La liste des API n'a pas pu être chargée.",
+      "keysUnavailable": "La liste des clés API n'a pas pu être chargée.",
+      "listTruncated": "Les listes n'affichent que les {count} API et clés les plus actives."
     },
     "statusClasses": {
       "2xx": "Succès (2xx)",
@@ -158,7 +178,7 @@
     },
     "kpis": {
       "requests": "Requêtes",
-      "lastRequest": "Dernière {when}",
+      "lastRequest": "Dernière requête {when}",
       "noRequests": "Aucune requête ne correspond",
       "throughput": "Débit",
       "perSecond": "requêtes / seconde",
@@ -204,7 +224,8 @@
       "errorRate": "Erreurs",
       "avg": "Moy.",
       "p95": "P95"
-    }
+    },
+    "announce": "{requests, plural, =0 {Aucune requête} one {# requête} other {# requêtes}} · {filters, plural, =0 {aucun filtre} one {# filtre} other {# filtres}}"
   },
   "search": {
     "title": "Recherche de requêtes",
@@ -214,7 +235,52 @@
     "removeChip": "Supprimer le filtre {text}",
     "editChip": "Modifier le filtre {text}",
     "presetsLabel": "Exemples de recherche",
-    "syntaxHint": "Saisissez un filtre puis Entrée : status:>=500, method:POST, latency:>800, path:/orders, api:nom, key:nom, reqh:nom=valeur, resh:nom, body:\"deux mots\", req:mot, res:mot. Un - au début exclut.",
+    "syntaxHint": "Tapez pour voir les filtres, choisissez avec les flèches, Entrée pour ajouter. Commencez par - pour exclure.",
+    "suggest": {
+      "listLabel": "Suggestions de filtres",
+      "count": "{count, plural, =0 {Aucune suggestion disponible} one {# suggestion disponible} other {# suggestions disponibles}}",
+      "termHint": "Utilisez un mot d’au moins {min} lettres ou chiffres, ou mettez une expression entre guillemets : <code>body:\"deux mots\"</code>.",
+      "latencyOver": "Plus lent que {ms} ms",
+      "fields": {
+        "status": "Code de statut HTTP, comme 404 ou 5xx",
+        "method": "Méthode HTTP, comme GET ou POST",
+        "latency": "Temps de réponse en millisecondes",
+        "path": "Début du chemin de la requête",
+        "route": "Chemin exact de la requête, comme /orders",
+        "api": "API, par slug, nom ou identifiant",
+        "key": "Clé d’API, par nom",
+        "reqh": "En-tête de requête, avec ou sans valeur",
+        "resh": "En-tête de réponse, avec ou sans valeur",
+        "body": "Mot ou expression du corps de la requête ou de la réponse",
+        "req": "Mot ou expression du corps de la requête",
+        "res": "Mot ou expression du corps de la réponse"
+      },
+      "status": {
+        "2xx": "Succès",
+        "3xx": "Redirection",
+        "4xx": "Erreur client",
+        "5xx": "Erreur serveur",
+        "gte400": "Toute erreur (400 et plus)",
+        "gte500": "Erreur serveur (500 et plus)",
+        "200": "OK",
+        "201": "Créé",
+        "204": "Aucun contenu",
+        "301": "Déplacé définitivement",
+        "302": "Redirection temporaire",
+        "304": "Non modifié",
+        "400": "Requête incorrecte",
+        "401": "Non authentifié",
+        "403": "Accès interdit",
+        "404": "Introuvable",
+        "409": "Conflit",
+        "422": "Contenu non traitable",
+        "429": "Trop de requêtes",
+        "500": "Erreur interne du serveur",
+        "502": "Mauvaise passerelle",
+        "503": "Service indisponible",
+        "504": "Délai de la passerelle dépassé"
+      }
+    },
     "loading": "Chargement des résultats",
     "loadMore": "Charger plus",
     "loadingMore": "Chargement…",
@@ -257,7 +323,24 @@
     },
     "detail": {
       "redactionNote": "Les secrets sont masqués par leur nom avant tout stockage ou toute recherche. Les corps sont coupés à 16 Kio.",
-      "loadError": "La requête n’a pas pu être chargée."
-    }
+      "loadError": "La requête n’a pas pu être chargée.",
+      "title": "Détail de la requête",
+      "similarTitle": "Trouver des requêtes similaires",
+      "similar": {
+        "path": "Même chemin",
+        "status": "Même statut",
+        "api": "Même API",
+        "key": "Même clé"
+      },
+      "similarBlocked": {
+        "unsupported": "{action} : cette requête n’a aucune valeur utilisable comme filtre.",
+        "present": "{action} : déjà dans les filtres.",
+        "full": "Une recherche accepte au plus {max} filtres."
+      },
+      "previous": "Requête précédente",
+      "next": "Requête suivante",
+      "position": "{index} sur {count} : <bdi>{request}</bdi>"
+    },
+    "resultCount": "{count, plural, =0 {Aucun résultat} one {# résultat chargé} other {# résultats chargés}} · {filters, plural, =0 {aucun filtre} one {# filtre} other {# filtres}}"
   }
 }

@@ -11,7 +11,7 @@ import { KeyCreatedDialog } from '@/components/keys/key-created-dialog';
 import { KeyFormSheet } from '@/components/keys/key-form-sheet';
 import { KeyUsageCard } from '@/components/keys/key-usage-card';
 import { KeyStatusBadge } from '@/components/keys/key-status-badge';
-import { QUOTA_PERIODS, formatQuotaPeriod, formatRate, toDate } from '@/components/keys/key-utils';
+import { QUOTA_PERIODS, formatQuotaPeriod, formatRate, rateLabels, toDate } from '@/components/keys/key-utils';
 import { RevokeKeyDialog } from '@/components/keys/revoke-key-dialog';
 import { RotateKeyDialog } from '@/components/keys/rotate-key-dialog';
 import { Button } from '@/components/ui/button';
@@ -187,7 +187,7 @@ function KeyDetailPage() {
             {tyk ? (
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label={t('detail.limitsCard.rateLimit')}>
-                  {formatRate(tyk.rate, tyk.per, t('form.rateLimitPlaceholder'))}
+                  {formatRate(tyk.rate, tyk.per, t('form.rateLimitPlaceholder'), rateLabels(tCommon))}
                 </Field>
                 <Field label={t('detail.limitsCard.quota')}>
                   {tyk.quotaMax > 0 ? <FormattedNumber value={tyk.quotaMax} /> : t('detail.limitsCard.noQuota')}
@@ -198,7 +198,9 @@ function KeyDetailPage() {
                       <FormattedNumber value={tyk.quotaRemaining} />
                     </Field>
                     <Field label={t('detail.limitsCard.quotaPeriod')}>
-                      {formatQuotaPeriod(tyk.quotaRenewalRate, periodLabels, t('form.everyNSeconds'))}
+                      {formatQuotaPeriod(tyk.quotaRenewalRate, periodLabels, (seconds) =>
+                        t('form.everyNSeconds', { seconds }),
+                      )}
                     </Field>
                     <Field label={t('detail.limitsCard.quotaRenews')}>
                       {renewsAt ? <FormattedDateTime value={renewsAt} /> : '—'}

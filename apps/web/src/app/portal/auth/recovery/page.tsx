@@ -39,7 +39,7 @@ function PortalRecoveryPageContent() {
   if (!flow) return <Skeleton className="h-72 w-full" aria-busy="true" />;
 
   return (
-    <Card className="border-border/50 shadow-lg">
+    <Card className="border-border/50">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl font-bold">{t('auth.recovery.title')}</CardTitle>
         <CardDescription>{t('auth.recovery.description')}</CardDescription>

@@ -14,7 +14,6 @@
     "nodes": "عقد البوابة"
   },
   "general": {
-    "tykOrgId": "معرّف مؤسسة Tyk",
     "analyticsRetentionDays": "مدة الاحتفاظ بالتحليلات (الخام)",
     "analyticsAggregateRetentionDays": "مدة الاحتفاظ بالتحليلات (المجمّعة)",
     "daysValue": "{count} يومًا"
@@ -27,6 +26,7 @@
       "version": "الإصدار",
       "latency": "زمن الاستجابة"
     },
+    "nodeLabel": "العقدة {index}",
     "reachable": "متاحة",
     "unreachable": "غير متاحة",
     "empty": "لا توجد عقد بوابة مهيّأة.",

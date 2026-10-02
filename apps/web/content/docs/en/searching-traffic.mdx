@@ -35,6 +35,7 @@ a time, and **Load more** fetches the next 50.
 | `method:` | `method:POST` | Requests with that method. Give several with commas, as in `method:PUT,PATCH`. |
 | `latency:` | `latency:>800` | Requests slower than 800 milliseconds. You can use `>`, `>=`, `<` and `<=`. A bare number such as `latency:800` means 800 or more. |
 | `path:` | `path:/orders` | Requests whose path **starts with** the text. It needs at least 3 letters or digits. |
+| `route:` | `route:/orders` | Requests to exactly that path, nothing under it: `route:/orders` does not find `/orders/42`. It has no minimum length, so `route:/` finds the root. The endpoint rows in **Traffic** and on the dashboard open the search with it. |
 | `api:` | `api:payments` | Requests to one API, given by its name, slug or id. |
 | `key:` | `key:mobile-app` | Requests made with the key whose alias you give, as shown in the **Key** column of the results. |
 | `reqh:` | `reqh:content-type=application/json` | Requests with that header and exactly that value. Without `=` and a value, as in `reqh:x-tenant`, any request that has the header. |

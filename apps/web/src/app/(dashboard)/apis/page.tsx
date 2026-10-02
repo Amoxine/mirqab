@@ -271,6 +271,7 @@ function ApisPage() {
         isError={isError}
         error={error}
         onRetry={() => void refetch()}
+        getRowHref={(api) => `/apis/${api.id}`}
         emptyMessage={filtered ? t('empty.filtered') : t('empty.all')}
         emptyAction={
           filtered ? (

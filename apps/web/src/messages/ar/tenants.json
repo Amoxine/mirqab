@@ -115,7 +115,7 @@
     "sheetTitle": "حصة المؤسسة — {name}",
     "sheetDescription": "السقف الذي يعلو كل المفاتيح التي تصدرها هذه المؤسسة.",
     "quotaMaxLabel": "سقف الحصة",
-    "quotaMaxHint": "-1 تعني غير محدود (اصطلاح Tyk) ؛ 0 ترفض كل طلب.",
+    "quotaMaxHint": "-1 تعني غير محدود ؛ 0 ترفض كل طلب.",
     "periodLabel": "فترة التجديد",
     "periods": {
       "HOURLY": "ساعي",

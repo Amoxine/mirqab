@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
   DataTable as BaseDataTable,
@@ -35,12 +36,17 @@ export function ViewModeToggle({
   );
 }
 
-/** Shared table chrome for the dashboard's list pages: header + loading/error/empty/data body. */
+/**
+ * Shared table chrome for the dashboard's list pages: header + loading/error/empty/data body.
+ * A `getRowHref` row opens through the app's own `Link`, so it is a client-side navigation; a page can
+ * pass its own `linkComponent` (a `Link` that replaces the history entry, say) to change how.
+ */
 export function DataTable<TData>(props: Omit<DataTableProps<TData>, 'labels'>) {
   const t = useTranslations('dashboard.dataTable');
   const tCommon = useTranslations('common');
   return (
     <BaseDataTable
+      linkComponent={Link}
       {...props}
       labels={{ retry: tCommon('retry'), unexpectedError: t('unexpectedError') }}
     />

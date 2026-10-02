@@ -21,6 +21,11 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(search),
 }));
 
+let granted: string[] = [];
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => ({ can: (p: string) => granted.includes(p), isLoading: false }),
+}));
+
 const WAIT = { timeout: 8000 };
 const api = (id: string, name: string) => ({ id, name, slug: name.toLowerCase(), status: 'ACTIVE', syncStatus: 'SYNCED' });
 const list = (...items: ReturnType<typeof api>[]) => ({
@@ -61,6 +66,7 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   search = '';
+  granted = ['analytics:read', 'api:read'];
 });
 
 describe('useDashboardScope', () => {
@@ -84,6 +90,20 @@ describe('useDashboardScope', () => {
     await waitFor(() => {
       expect(result.current.api?.id).toBe('a2');
     }, WAIT);
+    expect(result.current.auto).toBe(false);
+  });
+
+  it('asks for no API list and has no scope without api:read, even for an ?api= in the URL: the request would only be refused', async () => {
+    granted = ['analytics:read'];
+    search = 'api=a1';
+    const calls = mockFetch(() => ok(list(api('a1', 'Orders'))));
+    const { result } = renderHook(() => useDashboardScope(), { wrapper });
+    // One turn of the event loop inside `act`: whatever the hook was going to ask for on mount has been asked.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(calls).toHaveLength(0);
+    expect(result.current.api).toBeNull();
     expect(result.current.auto).toBe(false);
   });
 
@@ -119,10 +139,12 @@ describe('scoped cards', () => {
   });
 
   it('the endpoint table lists each endpoint with its method, error rate and P95', async () => {
-    mockFetch(() => ok(TRAFFIC));
+    // The table reads the user's permissions (its failed-request links need search), so /auth/me gets its own shape.
+    mockFetch((call) => ok(call.path.startsWith('/auth/me') ? { roles: [], permissions: [] } : TRAFFIC));
     render(<EndpointTrafficTable range="24h" scope={{ id: 'a1', name: 'Orders' }} />, { wrapper });
     expect(await screen.findByText('Traffic by endpoint', undefined, WAIT)).toBeDefined();
-    expect(await screen.findByText('POST', undefined, WAIT)).toBeDefined();
+    // The method is a badge and, for a screen reader, the start of the path link's name: two of them.
+    expect((await screen.findAllByText('POST', undefined, WAIT)).length).toBeGreaterThan(0);
     expect(screen.getByText('14.3%')).toBeDefined();
     expect(screen.getByText(/high error rate/)).toBeDefined();
   });

@@ -39,7 +39,7 @@ function VerificationPageContent() {
 
   if (verified) {
     return (
-      <Card className="w-full max-w-md border-border/50 shadow-lg">
+      <Card className="w-full max-w-md border-border/50">
         <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
           <CheckCircle2 className="h-10 w-10 text-primary" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">{t('verification.verified')}</p>
@@ -54,7 +54,7 @@ function VerificationPageContent() {
   if (!flow) return <Skeleton className="h-64 w-full max-w-md" aria-busy="true" />;
 
   return (
-    <Card className="w-full max-w-md border-border/50 shadow-lg">
+    <Card className="w-full max-w-md border-border/50">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl font-bold">{t('verification.title')}</CardTitle>
         <CardDescription>{t('verification.description')}</CardDescription>

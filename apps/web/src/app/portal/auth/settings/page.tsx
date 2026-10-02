@@ -35,7 +35,7 @@ function PortalSettingsPageContent() {
   if (!flow) return <Skeleton className="h-96 w-full" aria-busy="true" />;
 
   return (
-    <Card className="border-border/50 shadow-lg">
+    <Card className="border-border/50">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl font-bold">{t('auth.settings.title')}</CardTitle>
         <CardDescription>{t('auth.settings.description')}</CardDescription>

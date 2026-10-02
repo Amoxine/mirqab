@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { cn } from '../lib/utils';
 import { Card } from './card';
 import { Eyebrow } from './eyebrow';
+import { StretchedLink, type LinkComponent } from './row-link';
 import { Skeleton } from './skeleton';
 
 export interface KpiTileProps {
@@ -13,6 +14,13 @@ export interface KpiTileProps {
   icon?: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
   /** Colours the figure when the metric is in a good, warning or bad state. */
   tone?: 'default' | 'good' | 'warn' | 'bad';
+  /**
+   * Where the figure leads: the list that produced it. The whole tile becomes one real link, named by
+   * `label`. A link inside `hint` is fine (lift it with `relative z-10`); it is never nested in this one.
+   */
+  href?: string;
+  /** Renders the link; the app passes its router's `Link`. Default: a plain `<a>`. */
+  linkComponent?: LinkComponent;
   className?: string;
 }
 
@@ -33,12 +41,28 @@ export function KpiTile({
   hint,
   icon: Icon,
   tone = 'default',
+  href,
+  linkComponent,
   className,
 }: KpiTileProps) {
   return (
-    <Card className={cn('flex min-w-0 flex-col justify-between gap-2 p-3.5', className)}>
+    <Card
+      className={cn(
+        'relative flex min-w-0 flex-col justify-between gap-2 p-3.5',
+        href && 'transition-colors hover:bg-muted/50',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
-        <Eyebrow className="truncate">{label}</Eyebrow>
+        <Eyebrow className="truncate">
+          {href ? (
+            <StretchedLink href={href} linkComponent={linkComponent} className="after:rounded-[1.25rem]">
+              {label}
+            </StretchedLink>
+          ) : (
+            label
+          )}
+        </Eyebrow>
         {Icon && <Icon className="text-muted-foreground h-3.5 w-3.5 shrink-0" aria-hidden />}
       </div>
       {/* tabular-nums: digits keep their width, so a refetch doesn't make the tile jitter. */}

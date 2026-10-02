@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NextIntlClientProvider } from 'next-intl';
 import analytics from '@/messages/en/analytics.json';
@@ -28,6 +28,15 @@ const T = analytics.search;
 /** The error text sits beside the chip's <code>, so match it as a fragment of its paragraph. */
 const fragment = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 const WAIT = { timeout: 8000 };
+/**
+ * One turn of the event loop inside `act`: everything already queued (effects, query starts, the mocked
+ * fetch's microtasks) has run when it returns. A negative assertion made after it is about what the
+ * page DID, not about how long we waited; the mutation that makes the page fetch anyway fails it.
+ */
+const settled = () =>
+  act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
 
 function renderPage(node: ReactNode = <TrafficSearchPage />) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -115,7 +124,7 @@ describe('traffic search page', () => {
     await screen.findByText(fragment(T.errors.status));
     expect(screen.getByText(fragment(T.errors.termTooShort.replace('{min}', '3')))).toBeDefined();
     expect(screen.getByRole('button', { name: 'Edit filter status:99' })).toBeDefined();
-    await new Promise((r) => setTimeout(r, 100));
+    await settled();
     expect(searchBodies(calls)).toHaveLength(0);
   });
 
@@ -196,11 +205,24 @@ describe('traffic search page', () => {
       reqBody: '{"note":"refund declined"}',
       resBody: '{"error":"insufficient funds"}',
     };
-    const calls = mockFetch((c) => (c.path.startsWith('/analytics/traffic/search/1') ? ok(detail) : ok(page([item(1)]))));
+    const calls = mockFetch((c) => {
+      if (c.path.startsWith('/analytics/traffic/search/1')) return ok(detail);
+      if (c.path.startsWith('/analytics/keys')) return ok([]); // the sheet looks the key up by name
+      return ok(page([item(1)]));
+    });
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Open POST /orders/1' }, WAIT));
-    const dialog = await screen.findByRole('dialog');
+    // The open request lives in the URL (the mocked router does not apply it, so the test does).
+    fireEvent.click(await screen.findByRole('button', { name: /Open POST \/orders\/1/ }, WAIT), { detail: 1 });
+    // A plain click waits out a possible double click before it opens the request.
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledTimes(1);
+    }, WAIT);
+    expect(replace).toHaveBeenCalledWith('/analytics/search?req=1&ts=2026-09-29T10%3A00%3A01.123456Z', { scroll: false });
+    cleanup();
+    search = 'req=1&ts=2026-09-29T10%3A00%3A01.123456Z';
+    renderPage();
+    const dialog = await screen.findByRole('dialog', undefined, WAIT);
     expect(await within(dialog).findByText('authorization', undefined, WAIT)).toBeDefined();
     expect(within(dialog).getByText('[REDACTED]')).toBeDefined();
     expect(within(dialog).getByText('{"error":"insufficient funds"}')).toBeDefined();
@@ -217,7 +239,7 @@ describe('traffic search page', () => {
     renderPage();
     expect(await screen.findByText(auth.permissionGate.noAccessTitle)).toBeDefined();
     expect(document.body.textContent).toContain(missing);
-    await new Promise((r) => setTimeout(r, 100));
+    await settled();
     expect(searchBodies(calls)).toHaveLength(0);
   });
 });

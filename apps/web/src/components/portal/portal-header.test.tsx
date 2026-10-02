@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
+import commonMessages from '@/messages/en/common.json';
 import portalMessages from '@/messages/en/portal.json';
 import localeSwitcherMessages from '@/messages/en/locale-switcher.json';
 import { PortalHeader } from './portal-header';
@@ -21,7 +22,10 @@ vi.mock('@/lib/kratos-client', () => ({ kratos: {} }));
 
 const renderHeader = () =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ portal: portalMessages, localeSwitcher: localeSwitcherMessages }}>
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ common: commonMessages, portal: portalMessages, localeSwitcher: localeSwitcherMessages }}
+    >
       <PortalHeader />
     </NextIntlClientProvider>,
   );
@@ -53,5 +57,29 @@ describe('PortalHeader navigation', () => {
     pathname = '/portal/auth/login';
     renderHeader();
     expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it.each(['/portal/auth', '/portal/auth/login'])('treats %s as an auth page: no nav', (path) => {
+    pathname = path;
+    renderHeader();
+    expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it('matches whole path segments: a /portal/auth-prefixed sibling route is not an auth page', () => {
+    pathname = '/portal/authors';
+    renderHeader();
+    expect(screen.getByRole('navigation', { name: M.nav.ariaLabel })).toBeDefined();
+    expect(screen.getByRole('link', { name: M.brand })).toBeDefined();
+  });
+
+  it('names the portal in the header, except on the auth pages where the logo stands in for it', () => {
+    pathname = '/portal';
+    renderHeader();
+    expect(screen.getByRole('link', { name: M.brand })).toBeDefined();
+
+    cleanup();
+    pathname = '/portal/auth/login';
+    renderHeader();
+    expect(screen.queryByText(M.brand)).toBeNull();
   });
 });

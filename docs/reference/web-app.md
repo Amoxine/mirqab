@@ -486,8 +486,8 @@ Overlays are opened programmatically with `useOverlays().openSearch()` (dashboar
 | Variable | Read in | Default | Purpose |
 |---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | `lib/api-client.ts`, `lib/portal-api-client.ts` | `http://localhost:33001/api` (dashboard client), `https://localhost:33001/api` (portal client); empty counts as unset | NestJS API base incl. `/api` |
-| `NEXT_PUBLIC_APP_URL` | `lib/hydra-admin.ts` (fallback for `APP_URL`) | `http://localhost:33000` | Browser-facing origin; redirect URIs, `metadataBase`, return_to validation |
-| `APP_URL` (runtime, not public) | `lib/hydra-admin.ts`, `lib/return-to.ts` | falls back to the above | Preferred because Next freezes `NEXT_PUBLIC_*` at build |
+| `NEXT_PUBLIC_APP_URL` | `lib/hydra-admin.ts` (fallback for `APP_URL`) | `http://localhost:33000` | Browser-facing origin; redirect URIs, `metadataBase`, return_to validation. Must be an absolute `http(s)` URL (see `APP_URL` below) |
+| `APP_URL` (runtime, not public) | `lib/hydra-admin.ts`, `lib/return-to.ts` | falls back to the above | Preferred because Next freezes `NEXT_PUBLIC_*` at build. Validated where it is defined (`requireAbsoluteHttpUrl` in `lib/hydra-admin.ts`): the value in use (`APP_URL`, else `NEXT_PUBLIC_APP_URL`) must be an absolute `http(s)` URL such as `https://app.example.com`; empty keeps the `localhost` default, and anything else (`app.example.com`, `localhost:33000`, `ftp://...`) throws at start-up with an error naming the variable and the value, with no fallback |
 | `NEXT_PUBLIC_KRATOS_URL` | `lib/kratos-client.ts` | `http://localhost:33012` | Browser-facing Kratos public URL |
 | `NEXT_PUBLIC_HYDRA_URL` | `lib/hydra-admin.ts` | `http://localhost:33010` | Where `/oauth2/authorize` redirects the browser |
 | `NEXT_PUBLIC_GATEWAY_URL` | `lib/gateway-url.ts` | `https://localhost:33005` | Data plane origin for the portal try-it console |

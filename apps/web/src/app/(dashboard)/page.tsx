@@ -42,6 +42,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsHealth } from '@/hooks/use-analytics';
 import { useDashboardScope, type DashboardScope } from '@/hooks/use-dashboard-scope';
 import { usePermissions } from '@/hooks/use-permissions';
+import { useScopeFocus } from '@/hooks/use-scope-focus';
 import { queryKeys } from '@/lib/query-keys';
 import { cn } from '@/lib/utils';
 import type { AnalyticsRange } from '@/types';
@@ -145,7 +146,7 @@ function AnalyticsDashboard({
   canSettings: boolean;
   /** The API the API cards are narrowed to (the only managed API, or the one picked); null for the gateway-wide view. */
   scope: DashboardScope['api'];
-  onSelectApi: (apiId: string) => void;
+  onSelectApi?: (apiId: string) => void;
   /** API sync status and pending spec updates: stacked under the traffic table. */
   syncSpec: ReactNode;
   /** Recent activity: stacked under the request-volume chart. */
@@ -270,6 +271,9 @@ export default function DashboardPage() {
   const canAnalytics = can('analytics:read');
   const canSettings = can('settings:read');
   const scope = useDashboardScope();
+  // Picking an API in the traffic table changes the whole page in place: focus goes to the chip that
+  // clears it, and the new scope is announced.
+  const scopeFocus = useScopeFocus(scope);
 
   // Cards that do not depend on analytics; where they sit is decided by the layout that wraps them.
   const syncSpec = (
@@ -296,6 +300,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-3">
+      <p role="status" className="sr-only">
+        {scopeFocus.announcement}
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-0 pt-1">
         <div className="flex min-w-0 items-center gap-4 sm:gap-[1.125rem]">
           <Button
@@ -319,7 +326,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canAnalytics && !scope.auto && scope.api && (
-            <ScopeChip name={scope.api.name} onClear={scope.clear} />
+            <ScopeChip name={scope.api.name} onClear={scopeFocus.clear} clearRef={scopeFocus.chipRef} />
           )}
           {canAnalytics && <RangeControl value={range} onChange={setRange} />}
           {canAnalytics && <RefreshButton />}
@@ -343,7 +350,9 @@ export default function DashboardPage() {
           range={range}
           canSettings={canSettings}
           scope={scope.api}
-          onSelectApi={scope.select}
+          // The scope is resolved from the API list, which needs `api:read`: without it a pick would change
+          // nothing, so the table does not offer one.
+          onSelectApi={can('api:read') ? scopeFocus.select : undefined}
           syncSpec={syncSpec}
           activity={activity}
         />
@@ -358,19 +367,22 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* One slim row instead of a tall card: the shortcuts are a convenience, not a section. */}
-      <Card className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2 ps-4">
-        <h2 className="text-muted-foreground me-2 text-sm font-normal">{t('quickActions')}</h2>
-        <PermissionGate permission="api:read">
-          <QuickLink href="/apis" icon={ShieldCheck} label={t('manageApis')} />
-        </PermissionGate>
-        <PermissionGate permission="key:read">
-          <QuickLink href="/keys" icon={KeyRound} label={t('manageKeys')} />
-        </PermissionGate>
-        <PermissionGate permission="tenant:read">
-          <QuickLink href="/tenants" icon={Users} label={t('manageTenants')} />
-        </PermissionGate>
-      </Card>
+      {/* One slim row instead of a tall card: the shortcuts are a convenience, not a section. Only when
+          there is at least one to show: otherwise it would be a card holding just its own heading. */}
+      {(can('api:read') || can('key:read') || can('tenant:read')) && (
+        <Card className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2 ps-4">
+          <h2 className="text-muted-foreground me-2 text-sm font-normal">{t('quickActions')}</h2>
+          <PermissionGate permission="api:read">
+            <QuickLink href="/apis" icon={ShieldCheck} label={t('manageApis')} />
+          </PermissionGate>
+          <PermissionGate permission="key:read">
+            <QuickLink href="/keys" icon={KeyRound} label={t('manageKeys')} />
+          </PermissionGate>
+          <PermissionGate permission="tenant:read">
+            <QuickLink href="/tenants" icon={Users} label={t('manageTenants')} />
+          </PermissionGate>
+        </Card>
+      )}
       <PermissionGate permission="api:create">
         <ApiFormSheet mode="create" open={createOpen} onOpenChange={setCreateOpen} />
       </PermissionGate>

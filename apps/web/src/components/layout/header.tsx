@@ -23,8 +23,10 @@ export function Header() {
         <Breadcrumb />
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 md:gap-2.5">
-        <Button asChild variant="ghost" size="icon" className="bg-foreground/[0.06] hover:bg-foreground/[0.1] size-11 rounded-full">
+      {/* The controls are 238px wide without the docs link and need `gap-1.5` to sit inside a 320px
+          phone; the docs link itself moves into the mobile nav sheet below `sm`. */}
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2 md:gap-2.5">
+        <Button asChild variant="ghost" size="icon" className="bg-foreground/[0.06] hover:bg-foreground/[0.1] size-11 rounded-full max-sm:hidden">
           <Link href="/docs" aria-label={t('docs')} title={t('docs')}>
             <BookOpen className="h-4 w-4" aria-hidden="true" />
           </Link>

@@ -5,8 +5,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
 import { History } from 'lucide-react';
 import { AnalyticsErrorState } from '@/components/analytics/analytics-empty-state';
+import { StretchedLink } from '@/components/shared/row-link';
 import { StateMessage } from '@/components/shared/state-card';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRecentAudit } from '@/hooks/use-audit';
 import { auditActionLabel } from '@/lib/audit-actions';
@@ -29,13 +30,15 @@ export function RecentActivityCard({ scope }: { scope?: { id: string; name: stri
   return (
     <Card variant="ink">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base">
+        {/* A real heading, outside the log below: the card is a section of the page, the log its content. */}
+        <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-normal leading-tight tracking-tight">
           {t('title')}
           <ScopeTag name={scope?.name} />
-        </CardTitle>
+        </h2>
+        {/* Foreground, not the brand colour: the brand's lighter shades fall below 4.5:1 on the dark theme's ink. */}
         <Link
           href="/audit-logs"
-          className="text-primary rounded-sm text-sm font-medium hover:underline"
+          className="text-secondary-foreground rounded-sm text-sm font-medium underline underline-offset-4 hover:no-underline"
         >
           {t('viewAll')}
         </Link>
@@ -61,41 +64,45 @@ export function RecentActivityCard({ scope }: { scope?: { id: string; name: stri
             aria-label={t('logLabel')}
             className="border-border text-secondary-foreground overflow-hidden rounded-[0.875rem] border pb-3 font-mono text-xs"
           >
-            <div className="text-secondary-foreground/55 flex justify-between gap-3 border-b border-white/10 px-3.5 py-2 text-[0.68rem]">
+            <div className="text-secondary-foreground/70 flex justify-between gap-3 border-b border-white/10 px-3.5 py-2 text-[0.68rem]">
               <span>{t('logName')}</span>
               <span>{t('events', { count: data.length })}</span>
             </div>
             <ul>
               {data.map((entry) => (
-                <li key={entry.id} className="flex gap-2.5 px-3.5 pt-2.5 leading-relaxed">
+                <li key={entry.id} className="relative flex gap-2.5 px-3.5 pt-2.5 leading-relaxed">
                   <time
                     dateTime={entry.createdAt}
                     dir="ltr"
-                    className="text-secondary-foreground/45 shrink-0"
+                    className="text-secondary-foreground/70 shrink-0"
                     title={fmt.dateTime(entry.createdAt)}
                   >
                     {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale })}
                   </time>
-                  <span aria-hidden="true" className="shrink-0 text-primary">
+                  <span aria-hidden="true" className="text-primary shrink-0">
                     {'›'}
                   </span>
-                  <span className="min-w-0 break-words">
-                    <b
-                      className={
-                        DESTRUCTIVE_ACTIONS.has(entry.action)
-                          ? 'font-medium text-[#f87171]'
-                          : 'font-medium text-primary'
-                      }
-                    >
-                      {auditActionLabel(tAnalytics, entry.action)}
-                    </b>{' '}
-                    <span dir="auto" className="capitalize">
-                      {entry.resource}
-                    </span>{' '}
-                    <span className="text-secondary-foreground/60">
-                      {entry.user ? (entry.user.name ?? entry.user.email) : t('system')}
+                  {/* The entry's text is one link to its detail in the audit log; its pseudo-element covers the whole row. */}
+                  <StretchedLink href={`/audit-logs?open=${entry.id}`} className="after:rounded-none">
+                    <span className="min-w-0 break-words">
+                      <b
+                        // Lighter red and plain foreground: each reaches 4.5:1 on both themes' ink (a test checks).
+                        className={
+                          DESTRUCTIVE_ACTIONS.has(entry.action)
+                            ? 'font-medium text-[#fca5a5]'
+                            : 'text-secondary-foreground font-semibold'
+                        }
+                      >
+                        {auditActionLabel(tAnalytics, entry.action)}
+                      </b>{' '}
+                      <span dir="auto" className="capitalize">
+                        {entry.resource}
+                      </span>{' '}
+                      <span className="text-secondary-foreground/75">
+                        {entry.user ? (entry.user.name ?? entry.user.email) : t('system')}
+                      </span>
                     </span>
-                  </span>
+                  </StretchedLink>
                 </li>
               ))}
             </ul>

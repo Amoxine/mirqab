@@ -115,7 +115,7 @@
     "sheetTitle": "Quota d'organisation — {name}",
     "sheetDescription": "Le plafond au-dessus de toutes les clés émises par cette organisation.",
     "quotaMaxLabel": "Plafond du quota",
-    "quotaMaxHint": "-1 est illimité (convention Tyk) ; 0 refuse toute requête.",
+    "quotaMaxHint": "-1 est illimité ; 0 refuse toute requête.",
     "periodLabel": "Période de renouvellement",
     "periods": {
       "HOURLY": "Horaire",

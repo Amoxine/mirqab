@@ -225,6 +225,19 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
+  /* The header is sticky (4.5rem tall); a focused control scrolled into view must land below it. */
+  html {
+    scroll-padding-top: 5.5rem;
+  }
+
+  /* Forced-colours mode (Windows High Contrast) drops box-shadows, which is how a stretched link
+     draws its focus ring (on its ::after, over the whole tile): give it a real outline there. */
+  @media (forced-colors: active) {
+    a:focus-visible::after {
+      outline: 2px solid Highlight;
+    }
+  }
+
   /* One visible focus indicator for everything that does not draw its own ring (links, linked cards,
      native controls). Components that use `focus-visible:ring-*` also set `outline-none`, which,
      being a utility, wins over this base rule. */

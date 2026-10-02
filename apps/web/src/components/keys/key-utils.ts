@@ -100,20 +100,36 @@ export function toUpdatePayload(v: KeyFormValues): UpdateKeyPayload {
   };
 }
 
-/** `unlimitedLabel` is the caller's already-translated `t('form.rateLimitPlaceholder')` — same word,
- * one key, rather than a second "unlimited" string to keep in sync across locales. */
-export function formatRate(rate: number, per: number, unlimitedLabel: string): string {
-  if (rate <= 0) return unlimitedLabel;
-  return per === 1 ? `${String(rate)} req/s` : `${String(rate)} req / ${String(per)} s`;
+export interface RateLabels {
+  perSecond: (rate: number) => string;
+  every: (rate: number, seconds: number) => string;
 }
 
+/** The rate wording in the UI language. `t` is `useTranslations('common')`; the units live in its
+ * `rate.*` messages, so no locale's "req/s" is written in code. */
+export const rateLabels = (t: (key: 'rate.perSecond' | 'rate.every', values: Record<string, number>) => string): RateLabels => ({
+  perSecond: (rate) => t('rate.perSecond', { rate }),
+  every: (rate, seconds) => t('rate.every', { rate, seconds }),
+});
+
+/** `unlimitedLabel` is the caller's already-translated `t('form.rateLimitPlaceholder')` — same word,
+ * one key, rather than a second "unlimited" string to keep in sync across locales. `labels` is
+ * `rateLabels(t)` and is only asked when there is a rate to spell out. */
+export function formatRate(rate: number, per: number, unlimitedLabel: string, labels: RateLabels): string {
+  if (rate <= 0) return unlimitedLabel;
+  return per === 1 ? labels.perSecond(rate) : labels.every(rate, per);
+}
+
+/** `everyNSeconds` is the caller's `(seconds) => t('form.everyNSeconds', { seconds })`: a callback, not a
+ * template string, because the message cannot be formatted without its value, and it is only needed
+ * off the four standard periods. */
 export function formatQuotaPeriod(
   seconds: number,
   periodLabels: Record<QuotaPeriod, string>,
-  everyNSecondsTemplate: string,
+  everyNSeconds: (seconds: number) => string,
 ): string {
   const period = QUOTA_PERIODS.find((p) => PERIOD_SECONDS[p] === seconds);
-  return period ? periodLabels[period] : everyNSecondsTemplate.replace('{seconds}', String(seconds));
+  return period ? periodLabels[period] : everyNSeconds(seconds);
 }
 
 /** Percentage of quota consumed (0-100), or `null` when there is no quota to measure against. */

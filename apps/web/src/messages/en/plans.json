@@ -32,7 +32,7 @@
     "rateHint": "Requests allowed per the window below. Leave blank for unlimited.",
     "perHint": "The rate limit window, in seconds.",
     "quotaUnlimited": "Unlimited",
-    "quotaMaxHint": "-1 is unlimited (Tyk convention); 0 refuses everything.",
+    "quotaMaxHint": "-1 is unlimited; 0 refuses everything.",
     "activeHint": "Inactive plans cannot be assigned to new keys.",
     "submitCreate": "Create plan",
     "submitCreating": "Creating...",

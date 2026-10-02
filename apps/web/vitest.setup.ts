@@ -1,5 +1,5 @@
 import { afterEach } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 
 /** Every component test opts into jsdom per-file (`// @vitest-environment jsdom`); this file
  * runs for all of them regardless. `cleanup()` unmounts and clears the document after each test —
@@ -9,6 +9,13 @@ import { cleanup } from '@testing-library/react';
 afterEach(() => {
   cleanup();
 });
+
+/** `waitFor` and every `findBy*` give up after 1 s by default. That is tight for the first render of a
+ * Radix Sheet or Select in jsdom, and for any test in a 15-worker run on a busy machine: several suites
+ * passed 8000 ms to each call, and the ones that did not were the ones that flaked under load. It only
+ * ever lengthens a wait for something that is going to appear; a test that waits for something that
+ * never does still fails, 8 s later. */
+configure({ asyncUtilTimeout: 8000 });
 
 // Libraries inject runtime <style> tags into <head>: `sonner` a ~15 KB / 97-rule sheet the moment it
 // is IMPORTED (every Sheet/Dialog test imports it — each form toasts on save), and

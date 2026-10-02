@@ -120,6 +120,51 @@ describe('APP_URL resolution', () => {
   });
 });
 
+/**
+ * A malformed origin used to surface as an opaque `Invalid URL` thrown from `DASHBOARD_REDIRECT_URI`
+ * (or `metadataBase`) at import, with no hint which variable to fix. It now fails at the definition,
+ * naming the variable that was actually read and the value it held. An EMPTY value is not malformed:
+ * it keeps the local default (covered above).
+ */
+describe('APP_URL validation', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  const load = (env: Record<string, string | undefined>) => {
+    vi.resetModules();
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    return import('./hydra-admin');
+  };
+
+  it.each(['example.com', 'localhost:33000', '/just/a/path', 'ftp://files.example.com'])(
+    'rejects APP_URL=%s, naming the variable and the value',
+    async (value) => {
+      await expect(load({ APP_URL: value })).rejects.toThrow(
+        `APP_URL must be an absolute http(s) URL such as https://app.example.com, got "${value}"`,
+      );
+    },
+  );
+
+  it('names NEXT_PUBLIC_APP_URL when that is the value in use', async () => {
+    await expect(load({ APP_URL: '', NEXT_PUBLIC_APP_URL: 'example.com' })).rejects.toThrow(
+      'NEXT_PUBLIC_APP_URL must be an absolute http(s) URL such as https://app.example.com, got "example.com"',
+    );
+  });
+
+  it('does not fall back to the default for a malformed value', async () => {
+    await expect(load({ APP_URL: 'example.com', NEXT_PUBLIC_APP_URL: 'https://ok.example.com' })).rejects.toThrow(
+      'APP_URL must be',
+    );
+  });
+
+  it('accepts a plain https origin and a local http one', async () => {
+    expect((await load({ APP_URL: 'https://app.example.com' })).APP_URL).toBe('https://app.example.com');
+    expect((await load({ APP_URL: 'http://localhost:33000' })).APP_URL).toBe('http://localhost:33000');
+  });
+});
+
 describe('readOAuthFlowCookie', () => {
   const flow = (returnTo: string) => JSON.stringify({ state: 's', codeVerifier: 'v', returnTo });
 

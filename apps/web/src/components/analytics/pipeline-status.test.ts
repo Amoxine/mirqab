@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalyticsHealth } from '../../types';
-import { isPipelineStale, pipelineHint } from './pipeline-status';
+import { isPipelineStale } from './pipeline-status';
 
 const healthy: AnalyticsHealth = {
   pipelineReady: true,
@@ -25,22 +25,5 @@ describe('isPipelineStale', () => {
     expect(isPipelineStale({ ...down, rowCount: 0 })).toBe(false);
     expect(isPipelineStale({ ...down, rawTablePresent: false })).toBe(false);
     expect(isPipelineStale({ ...down, aggregateTablePresent: false })).toBe(false);
-  });
-});
-
-describe('pipelineHint', () => {
-  it('names the pump first when it is not running, whatever the tables look like', () => {
-    const down = { ...healthy, pipelineReady: false, pumpReachable: false };
-    expect(pipelineHint(down)).toMatch(/pump is not running/i);
-    expect(pipelineHint({ ...down, rawTablePresent: false, aggregateTablePresent: false, rowCount: 0 })).toMatch(
-      /pump is not running/i,
-    );
-  });
-
-  it('explains missing tables and an empty pipeline when the pump is alive', () => {
-    const alive = { ...healthy, pipelineReady: false };
-    expect(pipelineHint({ ...alive, rawTablePresent: false, aggregateTablePresent: false })).toMatch(/not created/i);
-    expect(pipelineHint({ ...alive, aggregateTablePresent: false })).toMatch(/not created/i);
-    expect(pipelineHint({ ...alive, rowCount: 0 })).toMatch(/no requests have been recorded/i);
   });
 });

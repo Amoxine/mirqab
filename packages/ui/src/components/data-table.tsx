@@ -6,6 +6,7 @@ import { AlertTriangle, Inbox, LayoutGrid, Table2 } from 'lucide-react';
 import { useMediaQuery } from '../lib/use-media-query';
 import { Button } from './button';
 import { Card, CardContent } from './card';
+import { RowLink, rowLinkProps, type LinkComponent } from './row-link';
 import { Skeleton } from './skeleton';
 import { StateMessage } from './state-card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
@@ -139,6 +140,17 @@ export interface DataTableProps<TData> {
   viewMode?: ViewMode;
   /** Card renderer for one row. Required to use `viewMode: 'card'`; without it the table renders. */
   renderCard?: (row: TData) => ReactNode;
+  /**
+   * Where a row leads. A click on the row (and, in card view, on the card) then follows it, through a
+   * real link, in both views: a plain click after a short wait for a possible second click, Ctrl, Cmd,
+   * Shift or middle click as a new tab or window. Controls inside the row keep their own action, and
+   * the row's text stays selectable (a double click, a triple click or a drag selects, it does not
+   * navigate). The row's own named link, usually its name, is the keyboard target for the same
+   * destination (see `RowLink`), so a row that uses this must carry one.
+   */
+  getRowHref?: (row: TData) => string | undefined;
+  /** Renders the row link; the app passes its router's `Link` for client-side navigation. Default: a plain `<a>`. */
+  linkComponent?: LinkComponent;
 }
 
 /**
@@ -208,6 +220,8 @@ export function DataTable<TData>({
   skeletonRows = 5,
   viewMode = 'table',
   renderCard,
+  getRowHref,
+  linkComponent,
 }: DataTableProps<TData>) {
   const columnCount = table.getAllColumns().length;
   const rows = table.getRowModel().rows;
@@ -244,15 +258,20 @@ export function DataTable<TData>({
       </TableRow>
     );
   } else if (rows.length) {
-    body = rows.map((row) => (
-      <TableRow key={row.id}>
-        {row.getVisibleCells().map((cell) => (
-          <TableCell key={cell.id}>
-            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-          </TableCell>
-        ))}
-      </TableRow>
-    ));
+    body = rows.map((row) => {
+      const href = getRowHref?.(row.original);
+      return (
+        <TableRow key={row.id} {...(href ? rowLinkProps() : undefined)}>
+          {row.getVisibleCells().map((cell, index) => (
+            <TableCell key={cell.id}>
+              {/* Any cell would do: the link is hidden, the row's click handler follows it. */}
+              {href && index === 0 ? <RowLink href={href} linkComponent={linkComponent} /> : null}
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </TableCell>
+          ))}
+        </TableRow>
+      );
+    });
   } else {
     body = (
       <TableRow className="hover:bg-transparent">
@@ -280,12 +299,23 @@ export function DataTable<TData>({
   }
   if (hasRows && ((viewMode === 'card' && renderCard) || isNarrow)) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((row) => (
-          <div key={row.id}>
-            {renderCard ? renderCard(row.original) : <AutoCard table={table} row={row} />}
-          </div>
-        ))}
+      // `grid-cols-1` is `minmax(0, 1fr)`: the bare grid's one column is `auto`, which is as wide as its widest card's
+      // longest unbroken word, so one long name would widen the column (and the page) past the screen.
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row) => {
+          const href = getRowHref?.(row.original);
+          return (
+            <div
+              key={row.id}
+              {...(href
+                ? rowLinkProps('rounded-[1.25rem] transition-shadow hover:shadow-md')
+                : undefined)}
+            >
+              {href ? <RowLink href={href} linkComponent={linkComponent} /> : null}
+              {renderCard ? renderCard(row.original) : <AutoCard table={table} row={row} />}
+            </div>
+          );
+        })}
       </div>
     );
   }

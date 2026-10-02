@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { useTranslations } from 'next-intl';
 import { PagePermissionGate } from '@/components/auth/permission-gate';
 import { SearchBar } from '@/components/analytics/search/search-bar';
@@ -10,18 +10,20 @@ import { RangeControl } from '@/components/dashboard/range-control';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useOpenRequest } from '@/hooks/use-open-request';
 import { useSearchQuery } from '@/hooks/use-search-query';
-import { useTrafficSearch, type TrafficSearchItem } from '@/hooks/use-traffic-search';
+import { useTrafficSearch } from '@/hooks/use-traffic-search';
 
 function SearchView() {
   const t = useTranslations('analytics.search');
   const search = useSearchQuery();
-  const [open, setOpen] = useState<TrafficSearchItem | null>(null);
   const result = useTrafficSearch(search.range, search.clauses, search.ready);
 
   const pages = result.data?.pages ?? [];
   const items = pages.flatMap((p) => p.items);
   const indexedUntil = pages.at(-1)?.indexedUntil ?? null;
+  // The open request lives in the URL (`?req=&ts=`), so a link to it opens it, loaded or not.
+  const request = useOpenRequest(items, search);
 
   return (
     <div className="space-y-3">
@@ -30,6 +32,7 @@ function SearchView() {
         <SearchBar
           tokens={search.tokens}
           tooMany={search.tooMany}
+          range={search.range}
           onAdd={search.add}
           onRemove={search.remove}
           onPreset={search.replaceAll}
@@ -43,18 +46,29 @@ function SearchView() {
             hasMore={result.hasNextPage}
             isFetchingMore={result.isFetchingNextPage}
             hasFilters={search.clauses.length > 0}
+            filterCount={search.clauses.length}
             indexedUntil={indexedUntil}
             onLoadMore={() => void result.fetchNextPage()}
             onRetry={() => void result.refetch()}
-            onOpen={setOpen}
+            onOpen={request.open}
+            getHref={request.hrefTo}
           />
         ) : null}
       </Card>
       <SearchDetailSheet
-        item={open}
-        onClose={() => {
-          setOpen(null);
+        target={request.target}
+        listItem={request.listItem}
+        range={search.range}
+        previous={request.previous}
+        next={request.next}
+        position={request.position}
+        similar={{
+          tokens: search.tokens.map((token) => token.text),
+          // The filter changes the search under the sheet, so the sheet closes once it has.
+          onAdd: request.addFilter,
         }}
+        onNavigate={request.open}
+        onClose={request.close}
       />
     </div>
   );

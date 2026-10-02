@@ -23,7 +23,7 @@ export const ANALYTICS_RANGES: { value: AnalyticsRange; label: string }[] = [
 ];
 
 /** `/analytics/traffic` for one filter set; the scoped dashboard cards all read (and share) this one request. */
-function trafficQuery(filters: TrafficFilters) {
+export function trafficQuery(filters: TrafficFilters) {
   return {
     queryKey: queryKeys.analytics.traffic(filters),
     queryFn: () => {

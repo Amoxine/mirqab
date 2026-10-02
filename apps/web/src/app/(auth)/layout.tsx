@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { AuthBrand } from '@/components/auth/auth-brand';
 import { LocaleSwitcher } from '@/components/layout/locale-switcher';
 import { ThemeSwitcher } from '@/components/layout/theme-switcher';
 
@@ -18,8 +19,8 @@ export default async function AuthLayout({
         <ThemeSwitcher />
         <LocaleSwitcher />
       </div>
-      <div className="w-full max-w-md space-y-8">
-        <h1 className="text-center text-2xl font-bold text-foreground">{t('brand')}</h1>
+      <div className="w-full max-w-md space-y-6">
+        <AuthBrand name={t('brand')} />
         {children}
       </div>
     </main>

@@ -5,36 +5,41 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ChevronRight, Home } from 'lucide-react';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 interface BreadcrumbItem {
   label: string;
   href: string;
 }
+
+/**
+ * URL segment -> `dashboard.breadcrumb` message key. Every static route under `app/(dashboard)` needs
+ * an entry (breadcrumb.test.tsx walks the file tree and checks all three locales); a segment that is
+ * not here is an id, and reads as "Details", never as the raw URL text.
+ */
+export const SEGMENT_KEYS: Record<string, string> = {
+  apis: 'apis',
+  keys: 'keys',
+  tenants: 'tenants',
+  analytics: 'analytics',
+  traffic: 'traffic',
+  search: 'search',
+  'audit-logs': 'auditLogs',
+  plans: 'plans',
+  products: 'products',
+  settings: 'settings',
+  roles: 'roles',
+  certificates: 'certificates',
+  login: 'login',
+};
 
 export function Breadcrumb() {
   const pathname = usePathname();
   const t = useTranslations('dashboard.breadcrumb');
   const segments = pathname.split('/').filter(Boolean);
 
-  const labelMap: Partial<Record<string, string>> = {
-    apis: t('apis'),
-    keys: t('keys'),
-    tenants: t('tenants'),
-    analytics: t('analytics'),
-    'audit-logs': t('auditLogs'),
-    plans: t('plans'),
-    products: t('products'),
-    settings: t('settings'),
-    roles: t('roles'),
-    certificates: t('certificates'),
-    login: t('login'),
-  };
-
   const breadcrumbs: BreadcrumbItem[] = segments.map((segment, index) => {
     const href = `/${segments.slice(0, index + 1).join('/')}`;
-    const label = labelMap[segment] ?? (UUID_RE.test(segment) ? t('details') : segment).replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    return { label, href };
+    const key = Object.hasOwn(SEGMENT_KEYS, segment) ? SEGMENT_KEYS[segment] : undefined;
+    return { label: key ? t(key) : t('details'), href };
   });
 
   if (breadcrumbs.length === 0) {

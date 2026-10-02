@@ -40,7 +40,7 @@
     "reachable": "Reachable",
     "unreachable": "Unreachable",
     "version": "Version",
-    "redis": "Redis",
+    "redis": "Data store",
     "latency": "Latency",
     "redisStatus": {
       "pass": "Healthy",
@@ -88,7 +88,9 @@
     "products": "Products",
     "settings": "Settings",
     "roles": "Roles",
-    "certificates": "Certificates"
+    "certificates": "Certificates",
+    "traffic": "Traffic",
+    "search": "Request search"
   },
   "header": {
     "logoutError": "Failed to log out",
@@ -144,7 +146,8 @@
     "statusMixLabel": "Responses by status class: {breakdown}",
     "statusMixEmpty": "No responses were recorded in this range.",
     "statusMixUnavailable": "Status codes are unavailable.",
-    "topError": "Most frequent error: {code} ({count})"
+    "topError": "Most frequent error: {code} ({count})",
+    "viewStatus": "View requests with status"
   },
   "latency": {
     "title": "Latency",
@@ -157,7 +160,8 @@
     "ofRequests": "of requests",
     "empty": "No errors without traffic in this range.",
     "summary": "{count} errors · peak {peak}",
-    "none": "No errors in this range."
+    "none": "No errors in this range.",
+    "openFailed": "Open the failed requests"
   },
   "topology": {
     "title": "Gateway nodes",
@@ -168,9 +172,11 @@
     "controlPlane": "control plane",
     "reachable": "Reachable",
     "unreachable": "Unreachable",
+    "nodeLabel": "Node {index}",
     "noResponse": "No response",
+    "timedOut": "Timed out",
     "probeLatency": "Round-trip of the control plane’s health probe",
-    "redisShort": "Redis",
+    "redisShort": "Data store",
     "redis": {
       "pass": "healthy",
       "fail": "failing",
@@ -184,14 +190,17 @@
     "others": "Others",
     "empty": "No API traffic in this range.",
     "total": "<b>{count}</b> requests in this range",
-    "titleEndpoints": "Top endpoints"
+    "titleEndpoints": "Top endpoints",
+    "viewTraffic": "View traffic for {name}"
   },
   "apiTraffic": {
     "title": "Traffic by API",
     "description": "Volume, error rate and latency for the busiest APIs",
     "status": "Status",
     "highErrorRate": "high error rate",
-    "focus": "Show only {name}"
+    "focus": "Show only {name}",
+    "viewTraffic": "View traffic for {name}",
+    "viewFailed": "View failed requests for {name}"
   },
   "trafficChart": {
     "title": "Request volume",
@@ -260,11 +269,13 @@
     "errorRate": "Error rate",
     "avgLatency": "Avg latency",
     "p95": "P95",
-    "highErrorRate": "high error rate"
+    "highErrorRate": "high error rate",
+    "viewFailed": "View failed requests for {name}"
   },
   "scope": {
     "chip": "Showing",
-    "clear": "Show all APIs"
+    "clear": "Show all APIs",
+    "announce": "Showing only {name}"
   },
   "notifications": {
     "label": "Notifications",
@@ -276,11 +287,11 @@
     "emptyHint": "Gateway, sync and analytics problems, and new versions of watched API specs, show up here.",
     "gatewayDown": {
       "title": "The gateway is unreachable",
-      "body": "Changes cannot reach Tyk until it answers again."
+      "body": "Changes cannot reach the gateway until it answers again."
     },
     "pipelineDown": {
       "title": "Analytics is not recording",
-      "body": "Tyk Pump or its tables are missing, so new requests are not counted."
+      "body": "Analytics collection is not running or its storage is missing, so new requests are not counted."
     },
     "syncFailed": {
       "title": "{name} failed to sync",

@@ -28,7 +28,9 @@
       "errors": "Errors",
       "errorRate": "Error rate",
       "avgLatency": "Avg latency"
-    }
+    },
+    "viewTraffic": "View traffic for {name}",
+    "viewFailed": "View failed requests for {name}"
   },
   "charts": {
     "requests": {
@@ -50,14 +52,17 @@
       "empty": "No responses were recorded in the selected range.",
       "success": "Success",
       "clientError": "Client error (4xx)",
-      "serverError": "Server error (5xx)"
+      "serverError": "Server error (5xx)",
+      "browse": "Open the requests with a status",
+      "breakdown": "Responses by status code",
+      "breakdownItem": "{code}: {count, number}"
     }
   },
   "emptyState": {
     "pipelineNotReady": "Analytics pipeline not receiving data",
     "noDataTitle": "No data",
     "defaultDescription": "Nothing was recorded in the selected range.",
-    "pump": "Tyk Pump",
+    "pump": "Collection service",
     "pumpRunning": "Running",
     "pumpNotRunning": "Not running",
     "rawTable": "Raw table",
@@ -67,13 +72,13 @@
     "rowsRecorded": "Rows recorded",
     "lastRecord": "Last record",
     "never": "Never",
-    "hintPumpDown": "Tyk Pump is not running or cannot be reached, so new requests are not being recorded. Start the tyk-pump service.",
-    "hintTablesMissing": "Tyk Pump has not created its analytics tables yet. Make sure the tyk-pump service is running.",
+    "hintPumpDown": "The analytics collection service is not running or cannot be reached, so new requests are not being recorded. Contact the people who run the platform.",
+    "hintTablesMissing": "Analytics storage has not been set up yet. Contact the people who run the platform to check that collection is running.",
     "hintNoTraffic": "The analytics tables exist but no requests have been recorded yet. Send traffic through the gateway to populate them."
   },
   "staleNotice": {
-    "title": "Tyk Pump is not running",
-    "description": "New requests are not being recorded, so the figures below are stale. Last record: {lastRecord}. Start the tyk-pump service to resume."
+    "title": "Analytics collection is paused",
+    "description": "New requests are not being recorded, so the figures below are stale. Last record: {lastRecord}. Contact the people who run the platform."
   },
   "errorState": {
     "title": "Failed to load data"
@@ -121,6 +126,15 @@
       "SYNC_SUCCEEDED": "Sync Succeeded",
       "SYNC_FAILED": "Sync Failed",
       "SPEC_UPDATE_DETECTED": "Spec Update Detected"
+    },
+    "detail": {
+      "title": "Audit entry",
+      "description": "What happened, who did it and when.",
+      "correlationId": "Correlation ID",
+      "details": "Details",
+      "noDetails": "No further details were recorded.",
+      "loadError": "The entry could not be loaded.",
+      "open": "Open audit entry: {action} {resource}"
     }
   },
   "traffic": {
@@ -148,7 +162,13 @@
       "anyLatency": "Any latency",
       "slowerThan": "Slower than {ms} ms",
       "reset": "Reset filters",
-      "active": "{count, plural, one {# filter} other {# filters}} active"
+      "active": "{count, plural, one {# filter} other {# filters}} active",
+      "viewRequests": "View these requests",
+      "selectedApi": "Selected API",
+      "selectedKey": "Selected key",
+      "apisUnavailable": "The list of APIs could not be loaded.",
+      "keysUnavailable": "The list of API keys could not be loaded.",
+      "listTruncated": "The lists show only the {count} busiest APIs and keys."
     },
     "statusClasses": {
       "2xx": "Success (2xx)",
@@ -158,7 +178,7 @@
     },
     "kpis": {
       "requests": "Requests",
-      "lastRequest": "Last {when}",
+      "lastRequest": "Last request {when}",
       "noRequests": "No requests match",
       "throughput": "Throughput",
       "perSecond": "requests / second",
@@ -204,7 +224,8 @@
       "errorRate": "Errors",
       "avg": "Avg",
       "p95": "P95"
-    }
+    },
+    "announce": "{requests, plural, =0 {No requests} one {# request} other {# requests}} · {filters, plural, =0 {no filters} one {# filter} other {# filters}}"
   },
   "search": {
     "title": "Request search",
@@ -214,7 +235,52 @@
     "removeChip": "Remove filter {text}",
     "editChip": "Edit filter {text}",
     "presetsLabel": "Example searches",
-    "syntaxHint": "Type a filter and press Enter: status:>=500, method:POST, latency:>800, path:/orders, api:name, key:name, reqh:name=value, resh:name, body:\"two words\", req:word, res:word. A leading - excludes.",
+    "syntaxHint": "Type to see filters, use the arrow keys to choose, Enter to add. Start with - to exclude.",
+    "suggest": {
+      "listLabel": "Filter suggestions",
+      "count": "{count, plural, =0 {No suggestions available} one {# suggestion available} other {# suggestions available}}",
+      "termHint": "Use a word of at least {min} letters or digits, or put a phrase in quotes: <code>body:\"two words\"</code>.",
+      "latencyOver": "Slower than {ms} ms",
+      "fields": {
+        "status": "HTTP status code, like 404 or 5xx",
+        "method": "HTTP method, like GET or POST",
+        "latency": "Response time in milliseconds",
+        "path": "Start of the request path",
+        "route": "Exact request path, like /orders",
+        "api": "API, by slug, name or id",
+        "key": "API key, by name",
+        "reqh": "Request header, with or without a value",
+        "resh": "Response header, with or without a value",
+        "body": "Word or phrase in the request or response body",
+        "req": "Word or phrase in the request body",
+        "res": "Word or phrase in the response body"
+      },
+      "status": {
+        "2xx": "Success",
+        "3xx": "Redirection",
+        "4xx": "Client error",
+        "5xx": "Server error",
+        "gte400": "Any error (400 and above)",
+        "gte500": "Server error (500 and above)",
+        "200": "OK",
+        "201": "Created",
+        "204": "No content",
+        "301": "Moved permanently",
+        "302": "Temporary redirect",
+        "304": "Not modified",
+        "400": "Bad request",
+        "401": "Unauthorized",
+        "403": "Forbidden",
+        "404": "Not found",
+        "409": "Conflict",
+        "422": "Unprocessable content",
+        "429": "Too many requests",
+        "500": "Internal server error",
+        "502": "Bad gateway",
+        "503": "Service unavailable",
+        "504": "Gateway timeout"
+      }
+    },
     "loading": "Loading results",
     "loadMore": "Load more",
     "loadingMore": "Loading…",
@@ -257,7 +323,24 @@
     },
     "detail": {
       "redactionNote": "Secrets are hidden by name before anything is stored or searched. Bodies are cut at 16 KiB.",
-      "loadError": "The request could not be loaded."
-    }
+      "loadError": "The request could not be loaded.",
+      "title": "Request detail",
+      "similarTitle": "Find similar requests",
+      "similar": {
+        "path": "Same path",
+        "status": "Same status",
+        "api": "Same API",
+        "key": "Same key"
+      },
+      "similarBlocked": {
+        "unsupported": "{action}: this request has no value that can be used as a filter.",
+        "present": "{action}: already in the filters.",
+        "full": "A search holds at most {max} filters."
+      },
+      "previous": "Previous request",
+      "next": "Next request",
+      "position": "{index} of {count}: <bdi>{request}</bdi>"
+    },
+    "resultCount": "{count, plural, =0 {No results} one {# result loaded} other {# results loaded}} · {filters, plural, =0 {no filters} one {# filter} other {# filters}}"
   }
 }

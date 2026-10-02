@@ -27,6 +27,8 @@ export type SearchClause = { neg: boolean } & (
   | { kind: 'latency'; op: CompareOp; value: number }
   | { kind: 'method'; values: string[] }
   | { kind: 'path'; value: string }
+  /** The whole path, not a prefix of it: one endpoint, however short its path. */
+  | { kind: 'route'; value: string }
   | { kind: 'api'; value: string }
   | { kind: 'key'; value: string }
   | { kind: 'header'; side: 'req' | 'res'; name: string; value?: string }
@@ -54,12 +56,13 @@ export interface SearchError {
 
 export type ParsedToken = { ok: true; clause: SearchClause } | { ok: false; error: SearchError };
 
-/** Field names the bar understands. */
-const SEARCH_FIELDS = [
+/** Field names the bar understands, in the order the suggestions list them. */
+export const SEARCH_FIELDS = [
   'status',
   'method',
   'latency',
   'path',
+  'route',
   'api',
   'key',
   'reqh',
@@ -68,7 +71,7 @@ const SEARCH_FIELDS = [
   'req',
   'res',
 ] as const;
-type SearchField = (typeof SEARCH_FIELDS)[number];
+export type SearchField = (typeof SEARCH_FIELDS)[number];
 
 const isField = (name: string): name is SearchField => (SEARCH_FIELDS as readonly string[]).includes(name);
 
@@ -90,6 +93,18 @@ export function tokenize(text: string): string[] {
   }
   if (current) tokens.push(current);
   return tokens;
+}
+
+/**
+ * A value as it must be written after `field:` so `tokenize`/`parseToken` read it back unchanged: bare
+ * when it has no whitespace, double-quoted when it has. `null` when it cannot be written at all: the
+ * tokenizer has no escape for `"` or a line break, and an empty value is a `needsValue` error. Anything that is not a
+ * string (a name the API sent as `null`) cannot be written either, rather than throwing while rendering.
+ */
+export function quoteValue(value: unknown): string | null {
+  // A line break cannot be carried either: `parseToken` reads a quoted value with `.`, which does not match one.
+  if (typeof value !== 'string' || value === '' || value.includes('"') || /[\r\n\u2028\u2029]/.test(value)) return null;
+  return /\s/.test(value) ? `"${value}"` : value;
 }
 
 const err = (code: SearchErrorCode, params: SearchError['params'] = {}): ParsedToken => ({
@@ -146,6 +161,9 @@ export function parseToken(raw: string): ParsedToken {
       if (alnumLength(value) < SEARCH_LIMITS.minTerm) return err('termTooShort', { min: SEARCH_LIMITS.minTerm });
       return { ok: true, clause: { kind: 'path', neg, value } };
     }
+    // The whole path, so it needs no minimum length: it cannot match more than the endpoint it names.
+    case 'route':
+      return { ok: true, clause: { kind: 'route', neg, value } };
     case 'api':
       return { ok: true, clause: { kind: 'api', neg, value } };
     case 'key':

@@ -1,12 +1,16 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { AnalyticsErrorState, formatCount } from '@/components/analytics/analytics-empty-state';
+import { StretchedLink } from '@/components/shared/row-link';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsOverview, useAnalyticsStatusCodes } from '@/hooks/use-analytics';
+import { useCanSearchRequests } from '@/hooks/use-can-search-requests';
 import { useFormat } from '@/hooks/use-format';
+import { searchHref, searchToken, trafficHref } from '@/lib/traffic-filters-to-query';
 import { cn } from '@/lib/utils';
 import type { AnalyticsRange, AnalyticsStatusCode } from '@/types';
 import { Figure } from './figure';
@@ -39,7 +43,16 @@ function summarise(codes: AnalyticsStatusCode[]) {
   return { totals, sum, topError };
 }
 
-function StatusMix({ range, apiId }: { range: AnalyticsRange; apiId?: string }) {
+function StatusMix({
+  range,
+  apiId,
+  classHref,
+}: {
+  range: AnalyticsRange;
+  apiId?: string;
+  /** Where one class's share leads; omitted when the user cannot open it. */
+  classHref?: (cls: StatusClass) => string;
+}) {
   const t = useTranslations('dashboard.overview');
   const locale = useLocale();
   const fmt = useFormat();
@@ -81,16 +94,34 @@ function StatusMix({ range, apiId }: { range: AnalyticsRange; apiId?: string }) 
           />
         ))}
       </div>
+      {/* Hidden from assistive tech (the bar above says it all) unless the shares are links, which must stay reachable. */}
       <div
         className="text-muted-foreground mt-2.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[0.72rem]"
-        aria-hidden="true"
+        aria-hidden={classHref ? undefined : true}
       >
-        {classes.map((c) => (
-          <span key={c} className="inline-flex items-center gap-1.5">
-            <i className={cn('size-2 rounded-[2px]', CLASS_FILL[c])} />
-            {c} <b className="text-foreground font-medium">{pct.format(totals[c] / sum)}</b>
-          </span>
-        ))}
+        {classes.map((c) => {
+          const share = (
+            <>
+              <i className={cn('size-2 rounded-[2px]', CLASS_FILL[c])} />
+              {c} <b className="text-foreground font-medium">{pct.format(totals[c] / sum)}</b>
+            </>
+          );
+          return classHref ? (
+            <Link
+              key={c}
+              href={classHref(c)}
+              className="inline-flex items-center gap-1.5 rounded-sm hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {/* What the link is for, then the class and its share (the visible text). */}
+              <span className="sr-only">{t('viewStatus')}</span>{' '}
+              {share}
+            </Link>
+          ) : (
+            <span key={c} className="inline-flex items-center gap-1.5">
+              {share}
+            </span>
+          );
+        })}
       </div>
       {topError && (
         <p className="text-muted-foreground mt-2 text-xs">
@@ -105,9 +136,14 @@ function StatusMix({ range, apiId }: { range: AnalyticsRange; apiId?: string }) 
   );
 }
 
-function Stat({ value, label, hint }: { value: React.ReactNode; label: string; hint?: string }) {
+/** A text, made the name of a link that covers the whole stat when it leads somewhere. */
+function Linked({ href, children }: { href?: string; children: ReactNode }) {
+  return href ? <StretchedLink href={href}>{children}</StretchedLink> : <>{children}</>;
+}
+
+function Stat({ value, label, hint }: { value: ReactNode; label: ReactNode; hint?: ReactNode }) {
   return (
-    <div className="min-w-0">
+    <div className="relative min-w-0">
       {/* Proportional figures at display size; container units keep three across without overflow. */}
       <div className="text-[clamp(1.3rem,calc((100cqi-2rem)/10),2.2rem)] font-light leading-none tracking-[-0.045em]">
         {value}
@@ -131,6 +167,12 @@ export function OverviewPanel({
   const tRanges = useTranslations('analytics.ranges');
   const fmt = useFormat();
   const { data, isLoading, error, refetch } = useAnalyticsOverview(range, scope?.id);
+  const canSearch = useCanSearchRequests();
+  // Each figure opens the list behind it. Errors are counted as status 400 and up (the API's own
+  // definition), so that is the search; a status class's share is that class.
+  const traffic = trafficHref({ range, apiId: scope?.id });
+  const searchFor = (status: string) =>
+    searchHref([scope ? searchToken('api', scope.id) : null, `status:${status}`], range);
 
   return (
     <Card variant="ink" className="@container flex flex-1 flex-col p-4 sm:p-5">
@@ -162,7 +204,7 @@ export function OverviewPanel({
         <div className="grid grid-cols-3 gap-4">
           <Stat
             value={<Figure value={data.totalRequests} kind="compact" />}
-            label={t('totalRequests')}
+            label={<Linked href={traffic}>{t('totalRequests')}</Linked>}
             hint={fmt.number(data.totalRequests)}
           />
           {/* Rates and latency are undefined without traffic: a dash, never a made-up 0. */}
@@ -171,11 +213,16 @@ export function OverviewPanel({
               data.totalRequests > 0 ? <Figure value={100 - data.errorRate} kind="percent" /> : '—'
             }
             label={t('successRate')}
-            hint={t('errors', { count: fmt.number(data.errorCount) })}
+            // The error count is what links, so that is the link's name: "1,000 errors", not "Success rate".
+            hint={
+              <Linked href={canSearch && data.errorCount > 0 ? searchFor('>=400') : undefined}>
+                {t('errors', { count: fmt.number(data.errorCount) })}
+              </Linked>
+            }
           />
           <Stat
             value={data.totalRequests > 0 ? <Figure value={data.avgLatencyMs} kind="ms" /> : '—'}
-            label={t('avgLatency')}
+            label={<Linked href={traffic}>{t('avgLatency')}</Linked>}
             hint={t('activeApis', { count: fmt.number(data.activeApis) })}
           />
         </div>
@@ -183,7 +230,11 @@ export function OverviewPanel({
 
       <div className="mt-4 border-t pt-3">
         <div className="text-muted-foreground mb-2.5 text-[0.8rem]">{t('statusMix')}</div>
-        <StatusMix range={range} apiId={scope?.id} />
+        <StatusMix
+          range={range}
+          apiId={scope?.id}
+          classHref={canSearch ? searchFor : undefined}
+        />
       </div>
     </Card>
   );

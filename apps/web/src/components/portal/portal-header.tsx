@@ -28,7 +28,8 @@ async function signOut(): Promise<void> {
 export function PortalHeader() {
   const t = useTranslations('portal');
   const pathname = usePathname();
-  const isAuthPage = pathname.startsWith('/portal/auth');
+  // Whole segments, so a future `/portal/authors` is not mistaken for a sign-in page.
+  const isAuthPage = pathname === '/portal/auth' || pathname.startsWith('/portal/auth/');
   const { data: me } = usePortalMe(!isAuthPage);
 
   return (
@@ -36,9 +37,15 @@ export function PortalHeader() {
       {/* Wraps to two rows below `sm`: the nav used to be hidden there with no replacement, leaving
           phone users no way to reach My Applications. */}
       <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-x-4 px-4">
-        <Link href="/portal" className="rounded-sm py-4 text-lg font-bold tracking-tight">
-          {t('brand')}
-        </Link>
+        {/* On the signed-out auth pages the logo above the card is the brand, so no text here (an empty
+            span keeps the controls pinned to the end of the row). */}
+        {isAuthPage ? (
+          <span aria-hidden="true" />
+        ) : (
+          <Link href="/portal" className="rounded-sm py-4 text-lg font-bold tracking-tight">
+            {t('brand')}
+          </Link>
+        )}
         {!isAuthPage && (
           <nav
             aria-label={t('nav.ariaLabel')}

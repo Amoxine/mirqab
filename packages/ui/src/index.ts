@@ -56,6 +56,7 @@ export * from './components/copy-button';
 export * from './components/secret-field';
 export * from './components/reveal-dialog';
 export * from './components/data-table';
+export * from './components/row-link';
 export { useMediaQuery } from './lib/use-media-query';
 export * from './components/error-state';
 export * from './components/chart-card';

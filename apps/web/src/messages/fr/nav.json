@@ -13,6 +13,7 @@
   "brand": "MIRQAB",
   "brandShort": "OG",
   "brandCaption": "Plan de contrôle de la passerelle",
+  "brandDescription": "Définissez vos API, émettez des clés, fixez plans et quotas, et suivez le trafic depuis un seul tableau de bord.",
   "groups": {
     "workspace": "Espace de travail",
     "manage": "Gestion",

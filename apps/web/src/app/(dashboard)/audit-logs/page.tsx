@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   type ColumnDef,
   getCoreRowModel,
@@ -10,14 +12,17 @@ import {
 import { Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
+import { AuditDetailSheet } from '@/components/audit/audit-detail-sheet';
 import { AuditTrafficAction } from '@/components/audit/audit-traffic-action';
 import { PagePermissionGate, PermissionGate } from '@/components/auth/permission-gate';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PageFilter, type FilterField, type FilterValues } from '@open-gateway/ui';
+import { PageFilter, type FilterField, type FilterValues, type LinkComponent } from '@open-gateway/ui';
 import { toast } from '@/components/ui/sonner';
 import { DataTable, DataTablePagination } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
+import { FIGURE_LINK } from '@/components/shared/row-link';
+import { Skeleton } from '@/components/ui/skeleton';
 import { usePageFilterLabels } from '@/hooks/use-page-filter-labels';
 import { api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
@@ -62,6 +67,16 @@ function actionColor(action: string) {
 
 const NO_ROWS: AuditLog[] = [];
 
+/** `?open=<id>` opens that entry's detail; the id goes into an API path, so only digits are taken. */
+const ENTRY_ID = /^\d{1,15}$/;
+const entryHref = (id: string) => `/audit-logs?open=${id}`;
+
+/**
+ * Opening an entry replaces the history entry and keeps the scroll, like opening a search result does,
+ * so Back leaves the page rather than stepping through every entry looked at, and the page does not jump.
+ */
+const ReplaceLink: LinkComponent = (props) => <Link {...props} replace scroll={false} />;
+
 function useAuditLogColumns(): ColumnDef<AuditLog>[] {
   const t = useTranslations('analytics');
   const locale = dateFnsLocale(useLocale() as Locale);
@@ -70,8 +85,24 @@ function useAuditLogColumns(): ColumnDef<AuditLog>[] {
       {
         accessorKey: 'createdAt',
         header: t('auditLogs.columns.timestamp'),
-        cell: ({ row }) =>
-          format(new Date(row.original.createdAt), 'MMM dd, yyyy HH:mm', { locale }),
+        // The whole row opens the entry for a pointer; the time is the link a keyboard reaches.
+        cell: ({ row }) => (
+          // The date is the link's visible text; what it opens is added for a screen reader, which would
+          // otherwise hear a list of dates. `data-focus-return` is where focus comes back to when the sheet closes.
+          <ReplaceLink
+            href={entryHref(row.original.id)}
+            className={FIGURE_LINK}
+            data-focus-return={`audit:${row.original.id}`}
+          >
+            <span className="sr-only">
+              {t('auditLogs.detail.open', {
+                action: auditActionLabel(t, row.original.action),
+                resource: row.original.resource,
+              })}
+            </span>{' '}
+            {format(new Date(row.original.createdAt), 'MMM dd, yyyy HH:mm', { locale })}
+          </ReplaceLink>
+        ),
       },
       {
         id: 'user',
@@ -139,9 +170,21 @@ function useAuditLogs(
 
 function AuditLogsView() {
   const t = useTranslations('analytics');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [filters, setFilters] = useState<FilterValues>({});
+  // The open entry lives in the URL, so the back button closes it and a link opens it, listed or not.
+  const openParam = searchParams.get('open');
+  const openId = openParam !== null && ENTRY_ID.test(openParam) ? openParam : null;
+  const closeDetail = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('open');
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
   const str = (value: FilterValues[string]) => (typeof value === 'string' ? value : undefined);
   const dateFrom = str(filters.dateFrom);
   const dateTo = str(filters.dateTo);
@@ -260,6 +303,8 @@ function AuditLogsView() {
         isError={isError}
         error={error}
         onRetry={() => void refetch()}
+        getRowHref={(entry) => entryHref(entry.id)}
+        linkComponent={ReplaceLink}
         emptyMessage={t('auditLogs.empty')}
         emptyAction={
           hasActiveFilters ? (
@@ -281,6 +326,8 @@ function AuditLogsView() {
           setPage((p) => p + 1);
         }}
       />
+
+      <AuditDetailSheet id={openId} onClose={closeDetail} />
     </div>
   );
 }
@@ -288,7 +335,10 @@ function AuditLogsView() {
 export default function AuditLogsPage() {
   return (
     <PagePermissionGate permission="audit:read">
-      <AuditLogsView />
+      {/* `useSearchParams` (the open entry is in the URL) needs a Suspense boundary for static rendering. */}
+      <Suspense fallback={<Skeleton className="h-96 w-full rounded-[1.25rem]" />}>
+        <AuditLogsView />
+      </Suspense>
     </PagePermissionGate>
   );
 }

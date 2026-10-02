@@ -14,7 +14,6 @@
     "nodes": "Gateway nodes"
   },
   "general": {
-    "tykOrgId": "Tyk organization ID",
     "analyticsRetentionDays": "Analytics retention (raw)",
     "analyticsAggregateRetentionDays": "Analytics retention (aggregate)",
     "daysValue": "{count} days"
@@ -27,6 +26,7 @@
       "version": "Version",
       "latency": "Latency"
     },
+    "nodeLabel": "Node {index}",
     "reachable": "Reachable",
     "unreachable": "Unreachable",
     "empty": "No gateway nodes configured.",

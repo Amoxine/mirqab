@@ -40,7 +40,7 @@
     "reachable": "Accessible",
     "unreachable": "Inaccessible",
     "version": "Version",
-    "redis": "Redis",
+    "redis": "Magasin de données",
     "latency": "Latence",
     "redisStatus": {
       "pass": "Opérationnel",
@@ -88,7 +88,9 @@
     "products": "Produits",
     "settings": "Paramètres",
     "roles": "Rôles",
-    "certificates": "Certificats"
+    "certificates": "Certificats",
+    "traffic": "Trafic",
+    "search": "Recherche de requêtes"
   },
   "header": {
     "logoutError": "Échec de la déconnexion",
@@ -144,7 +146,8 @@
     "statusMixLabel": "Réponses par classe de statut : {breakdown}",
     "statusMixEmpty": "Aucune réponse enregistrée sur cette période.",
     "statusMixUnavailable": "Les codes de statut sont indisponibles.",
-    "topError": "Erreur la plus fréquente : {code} ({count})"
+    "topError": "Erreur la plus fréquente : {code} ({count})",
+    "viewStatus": "Voir les requêtes avec le statut"
   },
   "latency": {
     "title": "Latence",
@@ -157,7 +160,8 @@
     "ofRequests": "des requêtes",
     "empty": "Pas d’erreurs sans trafic sur cette période.",
     "summary": "{count} erreurs · pic {peak}",
-    "none": "Aucune erreur sur cette période."
+    "none": "Aucune erreur sur cette période.",
+    "openFailed": "Ouvrir les requêtes en échec"
   },
   "topology": {
     "title": "Nœuds de passerelle",
@@ -168,9 +172,11 @@
     "controlPlane": "plan de contrôle",
     "reachable": "Joignable",
     "unreachable": "Injoignable",
+    "nodeLabel": "Nœud {index}",
     "noResponse": "Aucune réponse",
+    "timedOut": "Délai dépassé",
     "probeLatency": "Aller-retour de la sonde de santé du plan de contrôle",
-    "redisShort": "Redis",
+    "redisShort": "Magasin de données",
     "redis": {
       "pass": "sain",
       "fail": "en échec",
@@ -184,14 +190,17 @@
     "others": "Autres",
     "empty": "Aucun trafic d’API sur cette période.",
     "total": "<b>{count}</b> requêtes sur cette période",
-    "titleEndpoints": "Endpoints principaux"
+    "titleEndpoints": "Endpoints principaux",
+    "viewTraffic": "Voir le trafic de {name}"
   },
   "apiTraffic": {
     "title": "Trafic par API",
     "description": "Volume, taux d’erreur et latence des API les plus sollicitées",
     "status": "Statut",
     "highErrorRate": "taux d’erreur élevé",
-    "focus": "Afficher uniquement {name}"
+    "focus": "Afficher uniquement {name}",
+    "viewTraffic": "Voir le trafic de {name}",
+    "viewFailed": "Voir les requêtes en échec de {name}"
   },
   "trafficChart": {
     "title": "Volume de requêtes",
@@ -260,11 +269,13 @@
     "errorRate": "Taux d’erreur",
     "avgLatency": "Latence moy.",
     "p95": "P95",
-    "highErrorRate": "taux d’erreur élevé"
+    "highErrorRate": "taux d’erreur élevé",
+    "viewFailed": "Voir les requêtes en échec de {name}"
   },
   "scope": {
     "chip": "Affichage de",
-    "clear": "Afficher toutes les API"
+    "clear": "Afficher toutes les API",
+    "announce": "Affichage de {name} uniquement"
   },
   "notifications": {
     "label": "Notifications",
@@ -276,11 +287,11 @@
     "emptyHint": "Les problèmes de passerelle, de synchronisation et d’analytique, ainsi que les nouvelles versions des spécifications surveillées, apparaissent ici.",
     "gatewayDown": {
       "title": "La passerelle est injoignable",
-      "body": "Les modifications ne peuvent pas atteindre Tyk tant qu’elle ne répond pas."
+      "body": "Les modifications ne peuvent pas atteindre la passerelle tant qu’elle ne répond pas."
     },
     "pipelineDown": {
       "title": "L’analytique n’enregistre plus",
-      "body": "Tyk Pump ou ses tables manquent : les nouvelles requêtes ne sont pas comptées."
+      "body": "La collecte analytique est arrêtée ou son stockage est manquant : les nouvelles requêtes ne sont pas comptées."
     },
     "syncFailed": {
       "title": "Échec de synchronisation de {name}",

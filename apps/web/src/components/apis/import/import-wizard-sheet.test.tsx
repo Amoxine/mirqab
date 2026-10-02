@@ -183,7 +183,7 @@ describe('ImportWizardSheet', () => {
 
   it.each([
     [403, 'Missing permission api:create'],
-    [413, 'OAS document exceeds the 5 MB limit'],
+    [413, 'The OpenAPI document exceeds the 5 MB limit'],
     [415, 'Unsupported media type'],
     [422, 'OAS_IMPORT_UNSAFE_YAML'],
   ] as const)('shows a refused request (%i) inline in translated text, the server detail as a secondary LTR line', async (status, detail) => {

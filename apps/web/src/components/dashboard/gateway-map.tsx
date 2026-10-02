@@ -9,7 +9,7 @@ import { StateMessage } from '@/components/shared/state-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFormat } from '@/hooks/use-format';
 import { useNodeHealth } from '@/hooks/use-settings';
-import { locationOf } from '@/lib/gateway-locations';
+import { locationOf, type GatewayLocation } from '@/lib/gateway-locations';
 import { cn } from '@/lib/utils';
 import type { NodeHealthEntry } from '@/types';
 
@@ -21,6 +21,14 @@ function hostOf(nodeUrl: string): string {
   }
 }
 
+/**
+ * The API's own `health.error` strings (`GET /gateway/nodes/health`) are English and are never
+ * printed: a known one maps to a translated reason here, anything else reads as "no response".
+ */
+const UNREACHABLE_REASON: Record<string, string> = {
+  'Gateway health check timed out': 'timedOut',
+};
+
 function NodeMap({ nodes }: { nodes: NodeHealthEntry[] }) {
   const t = useTranslations('dashboard.topology');
   const fmt = useFormat();
@@ -30,24 +38,33 @@ function NodeMap({ nodes }: { nodes: NodeHealthEntry[] }) {
       ? [node.health.version, node.health.latencyMs === null ? null : fmt.ms(node.health.latencyMs)]
           .filter(Boolean)
           .join(' · ')
-      : (node.health.error ?? t('noResponse'));
+      : t(UNREACHABLE_REASON[node.health.error ?? ''] ?? 'noResponse');
 
-  const located = nodes.flatMap((node): WorldMapNode[] => {
-    const host = hostOf(node.nodeUrl);
-    const loc = locationOf(host);
-    return loc
-      ? [
-          {
-            id: node.nodeUrl,
-            title: loc.city,
-            code: loc.code ? `${loc.code} · ${host}` : host,
-            detail: detail(node),
-            lat: loc.lat,
-            lon: loc.lon,
-            up: node.health.reachable,
-          },
-        ]
-      : [];
+  const cities = nodes.map((node) => locationOf(hostOf(node.nodeUrl))?.city);
+
+  // Nodes at the same coordinates share one pin: two label cards at one point sit exactly on top of
+  // each other (the pills below the map still list every node).
+  const places = new Map<string, { loc: GatewayLocation; nodes: NodeHealthEntry[] }>();
+  for (const node of nodes) {
+    const loc = locationOf(hostOf(node.nodeUrl));
+    if (!loc) continue;
+    const key = `${String(loc.lat)},${String(loc.lon)}`;
+    const place = places.get(key);
+    if (place) place.nodes.push(node);
+    else places.set(key, { loc, nodes: [node] });
+  }
+  const located = [...places.entries()].map(([key, { loc, nodes: group }]): WorldMapNode => {
+    const [only] = group;
+    const reachable = group.filter((node) => node.health.reachable).length;
+    return {
+      id: key,
+      title: loc.city,
+      ...(loc.code ? { code: loc.code } : {}),
+      detail: group.length === 1 && only ? detail(only) : t('summary', { up: reachable, total: group.length }),
+      lat: loc.lat,
+      lon: loc.lon,
+      up: reachable === group.length,
+    };
   });
 
   return (
@@ -65,8 +82,13 @@ function NodeMap({ nodes }: { nodes: NodeHealthEntry[] }) {
       )}
       {/* Text version of every node (also the only place unlocated nodes appear). */}
       <ul className="mt-1 flex flex-wrap gap-1.5">
-        {nodes.map((node) => {
+        {nodes.map((node, index) => {
           const up = node.health.reachable;
+          // The host is only the key to the location lookup: it carries the gateway's internal name.
+          // A city shared by several nodes gets the position too, so their pills stay distinguishable.
+          const position = t('nodeLabel', { index: index + 1 });
+          const city = cities[index];
+          const label = !city ? position : cities.filter((c) => c === city).length > 1 ? `${city} · ${position}` : city;
           return (
             <li
               key={node.nodeUrl}
@@ -79,9 +101,7 @@ function NodeMap({ nodes }: { nodes: NodeHealthEntry[] }) {
                 )}
                 aria-hidden="true"
               />
-              <span dir="ltr" className="truncate font-mono">
-                {hostOf(node.nodeUrl)}
-              </span>
+              <span className="truncate">{label}</span>
               <span className={cn('shrink-0', up ? 'text-muted-foreground' : 'text-destructive')}>
                 {up ? t('reachable') : t('unreachable')}
               </span>

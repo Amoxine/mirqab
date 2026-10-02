@@ -4,9 +4,13 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { AnalyticsErrorState, formatCount } from '@/components/analytics/analytics-empty-state';
+import { StretchedLink } from '@/components/shared/row-link';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsApis, useAnalyticsOverview, useAnalyticsTraffic } from '@/hooks/use-analytics';
+import { usePermissions } from '@/hooks/use-permissions';
+import { trafficHref } from '@/lib/traffic-filters-to-query';
+import { cn } from '@/lib/utils';
 import type { AnalyticsRange } from '@/types';
 import { ScopeTag } from './scope-tag';
 
@@ -23,6 +27,7 @@ export function TopApisCard({
 }) {
   const t = useTranslations('dashboard.topApis');
   const locale = useLocale();
+  const { can } = usePermissions();
   const apis = useAnalyticsApis(range, !scope);
   const traffic = useAnalyticsTraffic({ range, apiId: scope?.id }, !!scope);
   const overview = useAnalyticsOverview(range, scope?.id);
@@ -30,15 +35,22 @@ export function TopApisCard({
   const pct = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
 
   const total = overview.data?.totalRequests ?? 0;
+  // Each slice opens the traffic behind it: an API's, or (narrowed to one API) one endpoint's. An API
+  // slice also keeps a second link to the API itself, from its name, for someone who may open it.
   const ranked = scope
     ? (traffic.data?.topEndpoints ?? []).map((row) => ({
         apiDefId: `${row.method} ${row.path}`,
         name: `${row.method} ${row.path}`,
         slug: row.path,
         requests: row.requests,
-        href: null,
+        href: trafficHref({ range, apiId: scope.id, method: row.method, path: row.path }),
+        detailHref: null,
       }))
-    : (apis.data ?? []).map((row) => ({ ...row, href: `/apis/${row.apiDefId}` }));
+    : (apis.data ?? []).map((row) => ({
+        ...row,
+        href: trafficHref({ range, apiId: row.apiDefId }),
+        detailHref: can('api:read') ? `/apis/${row.apiDefId}` : null,
+      }));
   const top = ranked.filter((row) => row.requests > 0).slice(0, 3);
   const topSum = top.reduce((sum, row) => sum + row.requests, 0);
   // The rest of the range's traffic, from the overview total (the per-API list is capped).
@@ -50,9 +62,10 @@ export function TopApisCard({
       sub: row.slug,
       value: row.requests,
       href: row.href,
+      detailHref: row.detailHref,
     })),
     ...(others > 0
-      ? [{ key: 'others', label: t('others'), sub: null, value: others, href: null }]
+      ? [{ key: 'others', label: t('others'), sub: null, value: others, href: null, detailHref: null }]
       : []),
   ];
   const max = Math.max(...columns.map((c) => c.value), 1);
@@ -65,7 +78,7 @@ export function TopApisCard({
           <ScopeTag name={scope?.name} />
         </h2>
         <Link
-          href={scope ? `/analytics/traffic?apiId=${scope.id}` : '/analytics'}
+          href={scope ? trafficHref({ range, apiId: scope.id }) : '/analytics'}
           aria-label={t('open')}
           className="bg-foreground text-card grid size-8 shrink-0 place-items-center rounded-full transition-transform duration-300 hover:rotate-45 rtl:-scale-x-100"
         >
@@ -108,35 +121,41 @@ export function TopApisCard({
               const barClass =
                 'flex flex-col justify-end rounded-t-[4px] border-t-2 border-primary bg-gradient-to-b from-foreground/20 to-foreground/[0.04] px-2 pb-2 transition-[height] duration-500';
               const barStyle = { height: `${Math.max(18, (c.value / max) * 72).toFixed(1)}%` };
-              const inner = (
-                <>
-                  <span dir="auto" className="truncate text-start text-[0.72rem]">
-                    {c.label}
-                  </span>
-                  <span className="text-muted-foreground truncate font-mono text-[0.64rem]">
-                    {formatCount(c.value, locale)}
-                  </span>
-                </>
-              );
               return (
                 <li key={c.key} className="flex min-w-0 flex-col justify-end">
                   <div className="mb-2 text-[clamp(1.35rem,2vw,1.9rem)] font-light leading-none tracking-[-0.045em]">
                     {pct.format(share)}
                   </div>
-                  {c.href ? (
-                    <Link
-                      href={c.href}
-                      className={`${barClass} hover:brightness-125`}
-                      style={barStyle}
-                      title={c.sub}
-                    >
-                      {inner}
-                    </Link>
-                  ) : (
-                    <div className={barClass} style={barStyle} title={c.label}>
-                      {inner}
-                    </div>
-                  )}
+                  {/* The count is the bar's link (its stretched ::after covers the bar); the name, when
+                      it has a page of its own, is a second link lifted above it. */}
+                  <div
+                    className={cn(barClass, c.href && 'relative hover:brightness-125')}
+                    style={barStyle}
+                    title={c.href ? c.sub : c.label}
+                  >
+                    <span dir="auto" className="truncate text-start text-[0.72rem]">
+                      {c.detailHref ? (
+                        <Link
+                          href={c.detailHref}
+                          className="relative z-10 rounded-sm hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {c.label}
+                        </Link>
+                      ) : (
+                        c.label
+                      )}
+                    </span>
+                    <span className="text-muted-foreground truncate font-mono text-[0.64rem]">
+                      {c.href ? (
+                        <StretchedLink href={c.href} className="after:rounded-t-[4px]">
+                          <span className="sr-only">{t('viewTraffic', { name: c.label })}</span>{' '}
+                          {formatCount(c.value, locale)}
+                        </StretchedLink>
+                      ) : (
+                        formatCount(c.value, locale)
+                      )}
+                    </span>
+                  </div>
                 </li>
               );
             })}

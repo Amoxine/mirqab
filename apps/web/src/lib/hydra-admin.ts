@@ -20,6 +20,25 @@ export const HYDRA_PUBLIC_URL = configuredHydraUrl === '' ? 'http://hydra:4444' 
 // not. The prefixed name stays as a fallback for anything that does set it at build time.
 const runtimeAppUrl = process.env.APP_URL ?? '';
 const configuredAppUrl = runtimeAppUrl === '' ? (process.env.NEXT_PUBLIC_APP_URL ?? '') : runtimeAppUrl;
+
+/**
+ * Every consumer resolves paths against `APP_URL`, and a bare `example.com` or `localhost:33000` makes
+ * that throw an opaque `Invalid URL` at import — every route 500s with no hint which variable is
+ * wrong. So a malformed value stops here, naming the variable that was read; only an EMPTY one falls
+ * back to the local default.
+ */
+function requireAbsoluteHttpUrl(value: string, name: string): string {
+  let protocol = '';
+  try {
+    protocol = new URL(value).protocol;
+  } catch {
+    // reported below with the rest of the cases
+  }
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw new Error(`${name} must be an absolute http(s) URL such as https://app.example.com, got "${value}"`);
+  }
+  return value;
+}
 /**
  * This app's BROWSER-facing origin, from config. `request.url` is NOT a substitute: Next derives it
  * from the request's own `Host` header, so it is (a) client-controlled, which makes it worthless as
@@ -29,7 +48,10 @@ const configuredAppUrl = runtimeAppUrl === '' ? (process.env.NEXT_PUBLIC_APP_URL
  * A plain redirect to a relative path can still resolve against `request.url` — that is why the
  * app's other call sites work — it is only these two jobs `request.url` cannot do.
  */
-export const APP_URL = configuredAppUrl === '' ? 'http://localhost:33000' : configuredAppUrl;
+export const APP_URL =
+  configuredAppUrl === ''
+    ? 'http://localhost:33000'
+    : requireAbsoluteHttpUrl(configuredAppUrl, runtimeAppUrl === '' ? 'NEXT_PUBLIC_APP_URL' : 'APP_URL');
 
 const configuredHydraBrowserUrl = process.env.NEXT_PUBLIC_HYDRA_URL ?? '';
 /** What `/oauth2/authorize` redirects the BROWSER to — always the host-published address, never `hydra:4444`. */

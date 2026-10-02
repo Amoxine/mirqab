@@ -206,7 +206,7 @@ export interface TenantSettings {
   analyticsAggregateRetentionDays: number;
 }
 
-/** One entry of `GET /gateway/nodes/health` — the `nodeUrl` is the admin URL (`/tyk` suffix), for display only. */
+/** One entry of `GET /gateway/nodes/health` — the `nodeUrl` is the admin URL (`/tyk` suffix); the UI labels nodes by position and never shows it. */
 export interface NodeHealthEntry {
   nodeUrl: string;
   health: GatewayStatus['gateway'];

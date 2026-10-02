@@ -35,5 +35,9 @@
     }
   },
   "filters": "عوامل التصفية",
-  "activeFilters": "{count, plural, zero {لا عوامل تصفية} one {عامل تصفية واحد نشط} two {عاملا تصفية نشطان} few {# عوامل تصفية نشطة} many {# عامل تصفية نشطًا} other {# عامل تصفية نشط}}"
+  "activeFilters": "{count, plural, zero {لا عوامل تصفية} one {عامل تصفية واحد نشط} two {عاملا تصفية نشطان} few {# عوامل تصفية نشطة} many {# عامل تصفية نشطًا} other {# عامل تصفية نشط}}",
+  "rate": {
+    "perSecond": "{rate} طلب/ث",
+    "every": "{rate} طلب / {seconds} ث"
+  }
 }

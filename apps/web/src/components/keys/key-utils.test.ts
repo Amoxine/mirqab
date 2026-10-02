@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { createTranslator } from 'next-intl';
+import arCommon from '@/messages/ar/common.json';
+import arKeys from '@/messages/ar/keys.json';
+import enCommon from '@/messages/en/common.json';
+import enKeys from '@/messages/en/keys.json';
+import frCommon from '@/messages/fr/common.json';
+import frKeys from '@/messages/fr/keys.json';
+import type { QuotaPeriod } from '@/hooks/use-keys';
 import {
+  QUOTA_PERIODS,
   emptyKeyFormValues,
+  formatQuotaPeriod,
   formatRate,
+  rateLabels,
   makeCreateKeyFormSchema,
   makeKeyFormSchema,
   periodFromSeconds,
@@ -121,13 +132,30 @@ describe('schemas', () => {
   });
 });
 
-describe('formatting', () => {
-  it('formats rate limits', () => {
-    expect(formatRate(0, 1, 'Unlimited')).toBe('Unlimited');
-    expect(formatRate(10, 1, 'Unlimited')).toBe('10 req/s');
-    expect(formatRate(100, 60, 'Unlimited')).toBe('100 req / 60 s');
+describe('formatRate', () => {
+  const COMMON = { en: enCommon, fr: frCommon, ar: arCommon };
+  // The three files share one shape; typing them as the English one gives the translator exact keys.
+  const labelsFor = (locale: keyof typeof COMMON) =>
+    rateLabels(createTranslator({ locale, messages: { common: COMMON[locale] as typeof enCommon }, namespace: 'common' }));
+
+  it.each([
+    ['en', '10 req/s', '100 req / 60 s'],
+    ['fr', '10 req/s', '100 req / 60 s'],
+    ['ar', '10 طلب/ث', '100 طلب / 60 ث'],
+  ] as const)('spells a rate out in %s: per second, and per N seconds', (locale, perSecond, perMinute) => {
+    const labels = labelsFor(locale);
+    expect(formatRate(10, 1, 'Unlimited', labels)).toBe(perSecond);
+    expect(formatRate(100, 60, 'Unlimited', labels)).toBe(perMinute);
   });
 
+  it('says "unlimited" with the caller\'s word when there is no rate limit, formatting nothing', () => {
+    const mustNotBeAsked = { perSecond: () => 'no', every: () => 'no' };
+    expect(formatRate(0, 1, 'Unlimited', mustNotBeAsked)).toBe('Unlimited');
+    expect(formatRate(-1, 60, 'Illimité', mustNotBeAsked)).toBe('Illimité');
+  });
+});
+
+describe('formatting', () => {
   it('computes quota consumption, clamped, and null when there is no quota', () => {
     expect(quotaUsedPercent(1000, 250)).toBe(75);
     expect(quotaUsedPercent(100, -5)).toBe(100);
@@ -142,5 +170,40 @@ describe('formatting', () => {
     expect(toDate('2030-01-01T00:00:00.000Z')?.getUTCFullYear()).toBe(2030);
     expect(toDate(0)).toBeNull();
     expect(toDate('garbage')).toBeNull();
+  });
+});
+
+describe('formatQuotaPeriod', () => {
+  const KEYS = { en: enKeys, fr: frKeys, ar: arKeys };
+  const forLocale = (locale: keyof typeof KEYS) => {
+    const translate = createTranslator({ locale, messages: { keys: KEYS[locale] }, namespace: 'keys' });
+    const labels = Object.fromEntries(QUOTA_PERIODS.map((p) => [p, translate(`form.quotaPeriods.${p}`)])) as Record<
+      QuotaPeriod,
+      string
+    >;
+    return { labels, every: (seconds: number) => translate('form.everyNSeconds', { seconds }) };
+  };
+
+  it.each(['en', 'fr', 'ar'] as const)('names the four standard periods without formatting "every N" in %s', (locale) => {
+    const { labels } = forLocale(locale);
+    const mustNotBeAsked = () => {
+      throw new Error('"every N seconds" was formatted for a standard period');
+    };
+    expect(formatQuotaPeriod(3600, labels, mustNotBeAsked)).toBe(labels.HOURLY);
+    expect(formatQuotaPeriod(86400, labels, mustNotBeAsked)).toBe(labels.DAILY);
+    expect(formatQuotaPeriod(604800, labels, mustNotBeAsked)).toBe(labels.WEEKLY);
+    expect(formatQuotaPeriod(2592000, labels, mustNotBeAsked)).toBe(labels.MONTHLY);
+  });
+
+  it.each([
+    ['en', 7200, 'Every 7200 s'],
+    ['en', 90, 'Every 90 s'],
+    ['fr', 7200, 'Toutes les 7200 s'],
+    ['fr', 90, 'Toutes les 90 s'],
+    ['ar', 7200, 'كل 7200 ثانية'],
+    ['ar', 90, 'كل 90 ثانية'],
+  ] as const)('spells a non-standard period out in %s: %i s -> %s', (locale, seconds, expected) => {
+    const { labels, every } = forLocale(locale);
+    expect(formatQuotaPeriod(seconds, labels, every)).toBe(expected);
   });
 });

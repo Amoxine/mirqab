@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { Menu } from 'lucide-react';
+import { BookOpen, Menu } from 'lucide-react';
 import { navLinkClass, useNavItems } from '@/components/layout/sidebar';
 import { TenantSwitcher } from '@/components/layout/tenant-switcher';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,17 @@ export function MobileNav() {
               </Link>
             );
           })}
+          {/* The header drops its docs link below `sm` (no room beside the other controls). */}
+          <Link
+            href="/docs"
+            className={`${navLinkClass(false)} sm:hidden`}
+            onClick={() => {
+              setOpen(false);
+            }}
+          >
+            <BookOpen className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>{tMobileNav('header.docs')}</span>
+          </Link>
         </nav>
       </SheetContent>
     </Sheet>

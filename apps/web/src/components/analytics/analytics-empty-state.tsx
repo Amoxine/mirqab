@@ -92,8 +92,8 @@ const lastRecordLabel = (
     ? formatDistanceToNow(new Date(health.lastRecordAt), { addSuffix: true, locale })
     : t('emptyState.never');
 
-// ponytail: mirrors pipeline-status.ts's `pipelineHint` conditions but returns a translation key —
-// that file is owned by another workstream, so the English copy isn't sourced from it directly.
+// Which hint to show, as a translation key: the collector being down outranks missing tables, which
+// outrank "no requests yet" (covered by analytics-empty-state.test.tsx).
 function pipelineHintKey(health: AnalyticsHealth): string {
   if (!health.pumpReachable) return 'emptyState.hintPumpDown';
   if (!health.rawTablePresent || !health.aggregateTablePresent)

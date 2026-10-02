@@ -1,5 +1,6 @@
 {
   "brand": "Developer Portal",
+  "authBrandName": "{brand} Developer Portal",
   "nav": {
     "catalog": "Catalog",
     "applications": "My Applications",

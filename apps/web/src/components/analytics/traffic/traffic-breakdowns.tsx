@@ -1,7 +1,11 @@
 'use client';
 
+import { useId } from 'react';
+import Link from 'next/link';
+import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { MethodBadge } from '@/components/apis/endpoints/method-badge';
+import { FIGURE_LINK, RowLink, rowLinkProps } from '@/components/shared/row-link';
 import { Card } from '@/components/ui/card';
 import { Eyebrow, ShareList } from '@open-gateway/ui';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import { useFormat } from '@/hooks/use-format';
 import { cn } from '@/lib/utils';
-import type { AnalyticsTraffic, TrafficEndpoint } from '@/types';
+import type { AnalyticsTraffic, TrafficEndpoint, TrafficFilters } from '@/types';
 
 /** The bar colour follows what the class means, so a glance separates healthy from failing traffic. */
 const CLASS_TONE = {
@@ -25,11 +29,25 @@ const CLASS_TONE = {
   '5xx': 'bg-destructive',
 } as const;
 
-/** How the filtered requests split by status class, method and the most frequent exact codes. */
-export function TrafficMix({ data }: { data: AnalyticsTraffic | undefined }) {
+/**
+ * How the filtered requests split by status class, method and the most frequent exact codes. Each
+ * row filters the page to it in place (`onChange`, the page's own filters), and a second press on
+ * the active one clears it; a class and an exact code replace each other, so the two never conflict.
+ */
+export function TrafficMix({
+  data,
+  filters,
+  onChange,
+}: {
+  data: AnalyticsTraffic | undefined;
+  filters: TrafficFilters;
+  onChange: (patch: Partial<TrafficFilters>) => void;
+}) {
   const t = useTranslations('analytics.traffic.mix');
   const tClasses = useTranslations('analytics.traffic.statusClasses');
   const fmt = useFormat();
+  // Each breakdown is named by its own heading (not by a second copy of the same words in an aria-label).
+  const ids = useId();
 
   const total = data?.summary.requests ?? 0;
   return (
@@ -45,8 +63,8 @@ export function TrafficMix({ data }: { data: AnalyticsTraffic | undefined }) {
         <p className="text-muted-foreground mt-3 text-sm">{t('empty')}</p>
       ) : (
         <div className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-1">
-          <section aria-label={t('byClass')}>
-            <h3 className="mb-2">
+          <section aria-labelledby={`${ids}-class`}>
+            <h3 id={`${ids}-class`} className="mb-2">
               <Eyebrow>{t('byClass')}</Eyebrow>
             </h3>
             <ShareList
@@ -57,38 +75,66 @@ export function TrafficMix({ data }: { data: AnalyticsTraffic | undefined }) {
                 label: tClasses(c.class),
                 value: c.count,
                 indicatorClassName: CLASS_TONE[c.class],
+                selected: filters.statusClass === c.class,
+                onSelect: () => {
+                  onChange({
+                    statusClass: filters.statusClass === c.class ? undefined : c.class,
+                    status: undefined,
+                  });
+                },
               }))}
             />
           </section>
-          <section aria-label={t('byMethod')}>
-            <h3 className="mb-2">
+          <section aria-labelledby={`${ids}-method`}>
+            <h3 id={`${ids}-method`} className="mb-2">
               <Eyebrow>{t('byMethod')}</Eyebrow>
             </h3>
             <ShareList
               total={total}
               format={(value, share) => `${fmt.number(value)} · ${fmt.percent(share)}`}
-              items={data.methods.map((m) => ({ key: m.method, label: m.method, value: m.count }))}
+              items={data.methods.map((m) => ({
+                key: m.method,
+                label: m.method,
+                value: m.count,
+                selected: filters.method === m.method,
+                onSelect: () => {
+                  onChange({ method: filters.method === m.method ? undefined : m.method });
+                },
+              }))}
             />
           </section>
-          <section aria-label={t('byCode')} className="sm:col-span-2 xl:col-span-1">
-            <h3 className="mb-2">
+          <section aria-labelledby={`${ids}-code`} className="sm:col-span-2 xl:col-span-1">
+            <h3 id={`${ids}-code`} className="mb-2">
               <Eyebrow>{t('byCode')}</Eyebrow>
             </h3>
             <ul className="flex flex-wrap gap-1.5">
               {data.statusCodes.map((c) => (
-                <li
-                  key={c.code}
-                  className="flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-xs"
-                >
-                  <span
-                    className={cn(
-                      c.code >= 500 && 'text-destructive',
-                      c.code >= 400 && c.code < 500 && 'text-warning',
-                    )}
+                <li key={c.code}>
+                  <button
+                    type="button"
+                    aria-pressed={filters.status === c.code}
+                    onClick={() => {
+                      onChange({
+                        status: filters.status === c.code ? undefined : c.code,
+                        statusClass: undefined,
+                      });
+                    }}
+                    className="hover:bg-accent focus-visible:ring-ring aria-pressed:bg-accent aria-pressed:border-foreground flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-xs focus-visible:outline-hidden focus-visible:ring-2"
                   >
-                    {c.code}
-                  </span>
-                  <span className="text-muted-foreground tabular-nums">{fmt.number(c.count)}</span>
+                    {/* The pressed state is a check mark as well as a fill and a border colour. */}
+                    {filters.status === c.code && <Check className="size-3" aria-hidden="true" />}
+                    <span
+                      className={cn(
+                        c.code >= 500 && 'text-destructive',
+                        c.code >= 400 && c.code < 500 && 'text-warning',
+                      )}
+                    >
+                      {c.code}
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {fmt.number(c.count)}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -99,7 +145,12 @@ export function TrafficMix({ data }: { data: AnalyticsTraffic | undefined }) {
   );
 }
 
-/** A ranked endpoint table; `emphasis` picks which latency column is the one the ranking is about. */
+/**
+ * A ranked endpoint table; `emphasis` picks which latency column is the one the ranking is about.
+ * `rowHref` is where an endpoint leads (the requests behind it): a click on the row follows a hidden
+ * link to it, and the path is the keyboard's link to the same place, named with its method (the badge
+ * beside it is not part of the link); without it (or when it gives nothing) the rows are plain.
+ */
 export function EndpointTable({
   title,
   description,
@@ -107,6 +158,7 @@ export function EndpointTable({
   loading,
   emphasis,
   emptyMessage,
+  rowHref,
 }: {
   title: string;
   description: string;
@@ -114,6 +166,7 @@ export function EndpointTable({
   loading: boolean;
   emphasis: 'requests' | 'p95';
   emptyMessage: string;
+  rowHref?: (row: TrafficEndpoint) => string | undefined;
 }) {
   const t = useTranslations('analytics.traffic.endpoints');
   const fmt = useFormat();
@@ -151,42 +204,64 @@ export function EndpointTable({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
-                <TableRow key={`${row.method} ${row.path}`}>
-                  <TableCell className="max-w-64">
-                    <div className="flex items-center gap-2">
-                      <MethodBadge method={row.method} />
-                      <span dir="ltr" title={row.path} className="truncate font-mono text-xs">
-                        {row.path}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      'text-end tabular-nums',
-                      emphasis === 'requests' && 'font-medium',
-                    )}
+              rows.map((row) => {
+                const href = rowHref?.(row);
+                return (
+                  <TableRow
+                    key={`${row.method} ${row.path}`}
+                    {...(href ? rowLinkProps('[&>th:first-child]:rounded-s-xl') : undefined)}
                   >
-                    {fmt.number(row.requests)}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      'text-end tabular-nums',
-                      row.errorRate >= 5 && 'text-destructive',
-                    )}
-                  >
-                    {fmt.percent(row.errorRate)}
-                  </TableCell>
-                  <TableCell className="text-end tabular-nums">
-                    {fmt.ms(row.avgLatencyMs)}
-                  </TableCell>
-                  <TableCell
-                    className={cn('text-end tabular-nums', emphasis === 'p95' && 'font-medium')}
-                  >
-                    {fmt.ms(row.p95LatencyMs)}
-                  </TableCell>
-                </TableRow>
-              ))
+                    <th scope="row" className="max-w-64 px-3 py-2 text-start align-middle font-normal">
+                      {href && <RowLink href={href} />}
+                      <div className="flex items-center gap-2">
+                        {/* The link's own text starts with the method, so the badge would read it twice. */}
+                        <span aria-hidden={href ? 'true' : undefined}>
+                          <MethodBadge method={row.method} />
+                        </span>
+                        {href ? (
+                          <Link
+                            href={href}
+                            dir="ltr"
+                            title={row.path}
+                            className={cn(FIGURE_LINK, 'truncate font-mono text-xs')}
+                          >
+                            <span className="sr-only">{row.method}</span>{' '}
+                            {row.path}
+                          </Link>
+                        ) : (
+                          <span dir="ltr" title={row.path} className="truncate font-mono text-xs">
+                            {row.path}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                    <TableCell
+                      className={cn(
+                        'text-end tabular-nums',
+                        emphasis === 'requests' && 'font-medium',
+                      )}
+                    >
+                      {fmt.number(row.requests)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-end tabular-nums',
+                        row.errorRate >= 5 && 'text-destructive',
+                      )}
+                    >
+                      {fmt.percent(row.errorRate)}
+                    </TableCell>
+                    <TableCell className="text-end tabular-nums">
+                      {fmt.ms(row.avgLatencyMs)}
+                    </TableCell>
+                    <TableCell
+                      className={cn('text-end tabular-nums', emphasis === 'p95' && 'font-medium')}
+                    >
+                      {fmt.ms(row.p95LatencyMs)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

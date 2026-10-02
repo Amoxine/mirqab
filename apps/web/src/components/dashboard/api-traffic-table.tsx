@@ -6,17 +6,19 @@ import { useLocale, useTranslations } from 'next-intl';
 import { AnalyticsErrorState, formatCount } from '@/components/analytics/analytics-empty-state';
 import { ApiStatusBadge } from '@/components/apis/api-status-badge';
 import { ApiNodeIcon } from '@/components/dashboard/api-node-icon';
+import { FIGURE_LINK, RowLink, rowLinkProps } from '@/components/shared/row-link';
 import { StateMessage } from '@/components/shared/state-card';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsApis } from '@/hooks/use-analytics';
+import { useCanSearchRequests } from '@/hooks/use-can-search-requests';
 import { useFormat } from '@/hooks/use-format';
+import { usePermissions } from '@/hooks/use-permissions';
+import { searchHref, searchToken, trafficHref } from '@/lib/traffic-filters-to-query';
 import { cn } from '@/lib/utils';
 import type { AnalyticsRange } from '@/types';
-
-/** Error rate at or above this share of requests is flagged in the table (text + colour). */
-const ERROR_FLAG = 5;
+import { ERROR_FLAG, FLAGGED_RATE } from './traffic-table';
 
 /** Per-API traffic for the range: volume with its share of the busiest API, error rate and latency. */
 export function ApiTrafficTable({
@@ -33,6 +35,8 @@ export function ApiTrafficTable({
   const locale = useLocale();
   const fmt = useFormat();
   const { data, isLoading, error, refetch } = useAnalyticsApis(range);
+  const canSearch = useCanSearchRequests();
+  const { can } = usePermissions();
   const max = Math.max(...(data ?? []).map((row) => row.requests), 1);
 
   return (
@@ -62,9 +66,11 @@ export function ApiTrafficTable({
           className="py-10"
         />
       ) : (
-        // Columns stay aligned for comparison; on phones the table scrolls inside the card.
-        <div className="overflow-x-auto px-3 pb-3 pt-2 sm:px-4">
-          <table className="w-full min-w-[40rem] border-separate border-spacing-y-1 text-start">
+        // Columns stay aligned for comparison; on phones the table scrolls inside the card. `relative`: the
+        // sr-only texts in the rows are absolutely positioned, and without a positioned scroller they sit
+        // outside its clip and widen the page.
+        <div className="relative overflow-x-auto px-3 pb-3 pt-2 sm:px-4">
+          <table className="w-full min-w-[28rem] border-separate border-spacing-y-1 text-start">
             <thead>
               <tr className="text-muted-foreground font-mono text-[0.68rem] uppercase tracking-[0.08em]">
                 <th scope="col" className="px-3 py-2 text-start font-normal">
@@ -87,31 +93,50 @@ export function ApiTrafficTable({
             <tbody className="text-sm tabular-nums">
               {data.map((row) => {
                 const flagged = row.requests > 0 && row.errorRate >= ERROR_FLAG;
+                // The row opens this API's traffic (a click on it follows the hidden row link; the request
+                // count is the keyboard's way to the same place); its failures open the search for them
+                // (errors are status 400 and up). The figure links say whose they are in their own text,
+                // since a number alone names nothing and the API name is a link only with api:read.
+                const traffic = trafficHref({ range, apiId: row.apiDefId });
+                const errorsHref = searchHref([searchToken('api', row.apiDefId), 'status:>=400'], range);
+                const errorRate = fmt.percent(row.errorRate);
                 return (
                   <tr
                     key={row.apiDefId}
-                    className="hover:bg-accent transition-colors [&>td:first-child]:rounded-s-xl [&>td:last-child]:rounded-e-xl"
+                    {...rowLinkProps(
+                      'hover:bg-accent transition-colors [&>:first-child]:rounded-s-xl [&>:last-child]:rounded-e-xl',
+                    )}
                   >
-                    <td className="px-3 py-2.5">
+                    {/* The name takes the room the figures leave (`w-full max-w-0`, the usual table recipe for a
+                        column that truncates), so one long unbroken name cannot widen the table for every row. */}
+                    <th scope="row" className="w-full max-w-0 px-3 py-2.5 text-start font-normal">
+                      <RowLink href={traffic} />
                       <div className="flex items-center gap-3">
                         <span className="bg-muted text-primary grid size-8 shrink-0 place-items-center rounded-full">
                           <ApiNodeIcon className="size-4" />
                         </span>
                         <div className="min-w-0">
-                          <Link
-                            href={`/apis/${row.apiDefId}`}
-                            dir="auto"
-                            className="block truncate text-start font-medium hover:underline"
-                          >
-                            {row.name}
-                          </Link>
-                          <span className="text-muted-foreground block truncate font-mono text-xs">
+                          {can('api:read') ? (
+                            <Link
+                              href={`/apis/${row.apiDefId}`}
+                              dir="auto"
+                              title={row.name}
+                              className="inline-block max-w-full truncate text-start align-bottom font-medium hover:underline"
+                            >
+                              {row.name}
+                            </Link>
+                          ) : (
+                            <span dir="auto" title={row.name} className="block truncate text-start font-medium">
+                              {row.name}
+                            </span>
+                          )}
+                          <span title={row.slug} className="text-muted-foreground block truncate font-mono text-xs">
                             {row.slug}
                           </span>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-3 py-2.5">
+                    </th>
+                    <td className="whitespace-nowrap px-3 py-2.5">
                       <div className="flex items-center gap-3">
                         <span
                           className="bg-muted relative h-0.5 w-20 shrink-0 rounded-full"
@@ -122,17 +147,27 @@ export function ApiTrafficTable({
                             style={{ width: `${((row.requests / max) * 100).toFixed(1)}%` }}
                           />
                         </span>
-                        <span title={fmt.number(row.requests)}>
+                        <Link href={traffic} className={FIGURE_LINK} title={fmt.number(row.requests)}>
+                          <span className="sr-only">{t('viewTraffic', { name: row.name })}</span>{' '}
                           {formatCount(row.requests, locale)}
-                        </span>
+                        </Link>
                       </div>
                     </td>
-                    <td className={cn('px-3 py-2.5 text-end', flagged && 'text-destructive')}>
-                      {row.requests > 0 ? fmt.percent(row.errorRate) : '—'}
+                    <td className={cn('whitespace-nowrap px-3 py-2.5 text-end', flagged && FLAGGED_RATE)}>
+                      {row.requests === 0 ? (
+                        '—'
+                      ) : canSearch && row.errors > 0 ? (
+                        <Link href={errorsHref} className={FIGURE_LINK}>
+                          <span className="sr-only">{t('viewFailed', { name: row.name })}</span>{' '}
+                          {errorRate}
+                        </Link>
+                      ) : (
+                        errorRate
+                      )}
                       {flagged && <span className="sr-only"> {t('highErrorRate')}</span>}
                       {flagged && <span aria-hidden="true">{' ▲'}</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-end">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-end">
                       {row.requests > 0 ? fmt.ms(row.avgLatencyMs) : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-end">

@@ -14,7 +14,6 @@
     "nodes": "Nœuds de la passerelle"
   },
   "general": {
-    "tykOrgId": "ID d'organisation Tyk",
     "analyticsRetentionDays": "Rétention des analyses (brutes)",
     "analyticsAggregateRetentionDays": "Rétention des analyses (agrégées)",
     "daysValue": "{count} jours"
@@ -27,6 +26,7 @@
       "version": "Version",
       "latency": "Latence"
     },
+    "nodeLabel": "Nœud {index}",
     "reachable": "Accessible",
     "unreachable": "Inaccessible",
     "empty": "Aucun nœud de passerelle configuré.",

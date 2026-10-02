@@ -32,7 +32,7 @@
     "rateHint": "Requêtes autorisées sur la fenêtre ci-dessous. Laissez vide pour illimité.",
     "perHint": "La fenêtre de la limite de débit, en secondes.",
     "quotaUnlimited": "Illimité",
-    "quotaMaxHint": "-1 est illimité (convention Tyk) ; 0 refuse tout.",
+    "quotaMaxHint": "-1 est illimité ; 0 refuse tout.",
     "activeHint": "Les forfaits inactifs ne peuvent pas être assignés à de nouvelles clés.",
     "submitCreate": "Créer le forfait",
     "submitCreating": "Création...",

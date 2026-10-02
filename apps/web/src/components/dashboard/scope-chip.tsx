@@ -1,12 +1,24 @@
 'use client';
 
+import type { Ref } from 'react';
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-/** "Scoped to <api>" with a button back to the gateway-wide view; shown only when the scope was picked, not automatic. */
-export function ScopeChip({ name, onClear }: { name: string; onClear: () => void }) {
+/**
+ * "Scoped to <api>" with a button back to the gateway-wide view; shown only when the scope was picked,
+ * not automatic. `clearRef` is that button, for a caller that moves focus to it after a pick.
+ */
+export function ScopeChip({
+  name,
+  onClear,
+  clearRef,
+}: {
+  name: string;
+  onClear: () => void;
+  clearRef?: Ref<HTMLButtonElement>;
+}) {
   const t = useTranslations('dashboard.scope');
   return (
     <Badge variant="outline" className="h-9 gap-1 ps-3 pe-1 text-sm font-normal">
@@ -15,6 +27,7 @@ export function ScopeChip({ name, onClear }: { name: string; onClear: () => void
         {name}
       </b>
       <Button
+        ref={clearRef}
         type="button"
         variant="ghost"
         size="icon"

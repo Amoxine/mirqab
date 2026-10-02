@@ -7,6 +7,10 @@ export interface ShareItem {
   value: number;
   /** Colour of the bar (a `bg-*` class), e.g. `bg-destructive` for failing traffic. */
   indicatorClassName?: string;
+  /** Makes the row a toggle button ("show only this one"); it reports a press, the caller decides what it does. */
+  onSelect?: () => void;
+  /** Whether the row's choice is the active one; announced as pressed, and shown by a rule at its start and by weight, not by colour or fill alone. */
+  selected?: boolean;
 }
 
 export interface ShareListProps {
@@ -25,16 +29,30 @@ export function ShareList({ items, total, format, className }: ShareListProps) {
     <ul className={cn('space-y-2.5', className)}>
       {items.map((item) => {
         const share = sum > 0 ? (item.value / sum) * 100 : 0;
+        const head = (
+          <>
+            <span dir="auto" className="truncate">
+              {item.label}
+            </span>
+            <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
+              {format(item.value, share)}
+            </span>
+          </>
+        );
         return (
           <li key={item.key} className="space-y-1">
-            <div className="flex items-baseline justify-between gap-2 text-sm">
-              <span dir="auto" className="truncate">
-                {item.label}
-              </span>
-              <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
-                {format(item.value, share)}
-              </span>
-            </div>
+            {item.onSelect ? (
+              <button
+                type="button"
+                aria-pressed={item.selected ?? false}
+                onClick={item.onSelect}
+                className="hover:bg-accent focus-visible:ring-ring aria-pressed:bg-accent aria-pressed:border-foreground aria-pressed:font-medium flex w-full items-baseline justify-between gap-2 rounded-sm border-s-2 border-transparent ps-1.5 text-start text-sm focus-visible:outline-hidden focus-visible:ring-2"
+              >
+                {head}
+              </button>
+            ) : (
+              <div className="flex items-baseline justify-between gap-2 text-sm">{head}</div>
+            )}
             <Progress
               value={share}
               aria-hidden="true"

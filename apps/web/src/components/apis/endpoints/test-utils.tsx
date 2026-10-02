@@ -50,7 +50,7 @@ export interface Call {
   contentType: string | null;
 }
 
-type Reply = { status: number; body?: unknown } | Promise<never>;
+type Reply = { status: number; body?: unknown } | Promise<{ status: number; body?: unknown }>;
 
 /**
  * Stubs `fetch` for the API client: `route(call)` answers each request. Every request is recorded

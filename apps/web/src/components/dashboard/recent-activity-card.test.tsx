@@ -39,6 +39,20 @@ describe('RecentActivityCard', () => {
     expect(screen.getByText('Orders API')).toBeDefined();
   });
 
+  it('opens an entry in the audit log, with its detail sheet showing, from the whole row', async () => {
+    mockFetch(() => page([entry, { ...entry, id: '2', action: 'DELETED' }]));
+    const { container } = renderCard();
+    const link = await screen.findByRole('link', { name: /Updated.*apis.*Ada/ }, WAIT);
+    expect(link.getAttribute('href')).toBe('/audit-logs?open=1');
+    expect(screen.getByRole('link', { name: /Deleted.*apis/ }).getAttribute('href')).toBe('/audit-logs?open=2');
+    // The link's pseudo-element covers the whole entry, so the entry must be its positioned parent.
+    expect(link.className).toContain('after:inset-0');
+    expect(link.closest('li')?.className).toContain('relative');
+    expect(container.querySelectorAll('a a')).toHaveLength(0);
+    // "View all" still goes to the list.
+    expect(screen.getByRole('link', { name: dashboard.recentActivity.viewAll }).getAttribute('href')).toBe('/audit-logs');
+  });
+
   it('says so when that API has no recorded activity, instead of the gateway-wide empty text', async () => {
     mockFetch(() => page([]));
     renderCard({ id: '6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f', name: 'Orders API' });

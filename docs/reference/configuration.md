@@ -64,8 +64,8 @@ Session cookie names (defined in `apps/web/src/lib/cookie-names.ts`, read by the
 | Variable | Default (Dockerfile / code) | Compose (build arg / runtime) | Req | Secret | Purpose / read by |
 |---|---|---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | Dockerfile `https://localhost:33001/api` | both: `https://localhost:33001/api` | Y | N | API base for the browser (`lib/api-client.ts`, `lib/portal-api-client.ts`). Note `apps/web/.env.example` shows it WITHOUT `/api` (`https://localhost:33001`) while compose/Dockerfile/`install.sh` include `/api` |
-| `NEXT_PUBLIC_APP_URL` | Dockerfile `https://localhost:33000` | build arg `https://localhost:33000` | N | N | The app's public origin, client side; also fallback for `APP_URL` (`lib/hydra-admin.ts`) |
-| `APP_URL` | falls back to `NEXT_PUBLIC_APP_URL` | runtime `https://localhost:33000` | N (but load-bearing) | N | Server-side public origin for the open-redirect check (`sanitizeReturnTo`, `lib/return-to.ts`, `lib/hydra-admin.ts`). A deployment on another origin that forgets it silently flattens every `return_to` to `/` |
+| `NEXT_PUBLIC_APP_URL` | Dockerfile `https://localhost:33000` | build arg `https://localhost:33000` | N | N | The app's public origin, client side; also fallback for `APP_URL` (`lib/hydra-admin.ts`), and held to the same absolute `http(s)` rule when it is the value in use (the error then names this variable) |
+| `APP_URL` | falls back to `NEXT_PUBLIC_APP_URL` | runtime `https://localhost:33000` | N (but load-bearing) | N | Server-side public origin for the open-redirect check (`sanitizeReturnTo`, `lib/return-to.ts`, `lib/hydra-admin.ts`). A deployment on another origin that forgets it silently flattens every `return_to` to `/`. Fails fast: a value that is not an absolute `http(s)` URL (`app.example.com`, `localhost:33000`, `ftp://...`) stops the web app at start-up with an error naming this variable and the value, instead of an opaque `Invalid URL` on every route; empty or unset keeps the `localhost` default |
 | `NEXT_PUBLIC_KRATOS_URL` | Dockerfile `https://localhost:33012` | both | Y | N | Browser-facing Kratos (`lib/kratos-client.ts`) |
 | `NEXT_PUBLIC_HYDRA_URL` | Dockerfile `https://localhost:33010` | both | Y | N | Browser-facing Hydra; `/oauth2/authorize` redirects the browser here (`lib/hydra-admin.ts`) |
 | `NEXT_PUBLIC_GATEWAY_URL` | Dockerfile `https://localhost:33005` | both | N | N | Gateway data plane for the portal try-it console (`lib/gateway-url.ts`) |
@@ -137,8 +137,8 @@ Base configuration in `infra/pump/pump.conf`; env overrides in compose.
 | `SECRETS_DEFAULT` | kratos | `${KRATOS_SECRETS_DEFAULT:?}` | Y | Y | |
 | `SECRETS_COOKIE` | kratos | `${KRATOS_SECRETS_COOKIE:?}` | Y | Y | |
 | `SECRETS_CIPHER` | kratos | `${KRATOS_SECRETS_CIPHER:?}` | Y | Y | **Exactly 32 characters** (`install.sh` uses `rand_hex 16`) |
-| `COURIER_SMTP_CONNECTION_URI` | kratos | `${KRATOS_SMTP_URI:-smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true}` | N | Y if it carries credentials | Set `KRATOS_SMTP_URI` in `infra/.env` to send real mail; default delivers to Mailpit (UI on `127.0.0.1:33016`) |
-| `SESSION_COOKIE_SECURE` | kratos | `${KRATOS_COOKIE_SECURE:-false}` | N | N | Kratos session cookie `Secure` flag. Default `false` in the base file even though Kratos is served over HTTPS |
+| `COURIER_SMTP_CONNECTION_URI` | kratos | `${KRATOS_SMTP_URI:-smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true}` | N | Y if it carries credentials | Set `KRATOS_SMTP_URI` in `infra/.env` to send real mail; default delivers to Mailpit (UI on `127.0.0.1:33016`), which only runs under `--profile dev`. The prod overlay makes it `${KRATOS_SMTP_URI:?}` and `prod-preflight` rejects the Mailpit address |
+| `SESSION_COOKIE_SECURE` | kratos | base `${KRATOS_COOKIE_SECURE:-false}`; prod overlay `${KRATOS_COOKIE_SECURE:-true}` | N | N | Kratos session cookie `Secure` flag. Default `false` in the base file even though Kratos is served over HTTPS; the prod overlay defaults it to `true` and `prod-preflight` fails on anything but `true` |
 
 Non-env Ory settings (issuer, UI URLs, CORS, TTLs) are hard-coded to `https://localhost:330xx` in `infra/ory/hydra/hydra.yml`, `infra/ory/kratos/kratos.yml`; change those files for another origin. `infra/ory/keto/keto.yml` and `namespaces.ts` hold Keto's ports and namespaces.
 
@@ -189,7 +189,9 @@ The API's OTEL variables are in section 1. Prometheus, blackbox and the collecto
 | `WEB_IMAGE` | `open-gateway-web:local` | prod overlay | N | N | Prebuilt web image |
 | `EDGE_TLS_PROBE` | `edge:33001` | api | N | N | See section 1 |
 | `COOKIE_SECURE`, `TRUST_PROXY_HOPS`, `SPEC_FETCH_ALLOWED_HOSTS`, `TYK_ADMIN_URLS`, `KRATOS_SMTP_URI`, `KRATOS_COOKIE_SECURE`, `NEXT_PUBLIC_GATEWAY_NODE_LOCATIONS` | see above | compose interpolation | N | N | Optional operator overrides in `infra/.env`; `install.sh` never writes them but preserves them |
+| `COMPOSE_PROFILES` | `dev` in the `infra/.env` that `install.sh` writes; unset elsewhere | docker compose itself | N | N | Enables the `dev` profile (Mailpit) on a command with no `--profile` flag; an explicit `--profile` REPLACES it. Must not be set on a server: `infra/scripts/check-prod-ports.sh` fails on it |
 | `DEFAULT_ADMIN_EMAIL` | `admin@opengateway.io` | `infra/scripts/prod-preflight.sh` | N | N | Seeded admin whose login must fail in prod |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | both unset **and** `NODE_ENV` exactly `development` or `test`: the seed uses `admin@opengateway.io` / `Admin123!`. Anything else (unset, `Production`, `staging`, a typo...): **required** | `packages/database/prisma/seed.ts` | Y in prod | `ADMIN_PASSWORD` | Fails closed. A supplied value is validated in every environment, never ignored: password 12 to 72 bytes (bcrypt reads only the first 72), no edge whitespace, neither value the dev default. Passed with `-e` to the one-off seed container, never written to `infra/.env`. See `docs/go-live.md` |
 | `REDIS_HOST`, `REDIS_PORT`, `KRATOS_PUBLIC_URL` | `redis`, `6379`, `http://kratos:4433` (compose) | prod-preflight | N | N | Preflight probes |
 | `DEBUG`, `VERBOSE` | `0` | `install.sh` | N | N | Also settable via `--debug` / `--verbose` |
 
@@ -206,6 +208,7 @@ Required vs soft, summarised:
 | `PG_EXPORTER_PASSWORD` | optional (monitoring fails closed) | required |
 | `REDIS_PASSWORD` | ignored | required |
 | `EDGE_IMAGE` | ignored | required |
+| `KRATOS_SMTP_URI` | optional, defaults to the dev-only Mailpit | required, and not Mailpit |
 
 ## 10. Host-side (`pnpm dev`) files
 

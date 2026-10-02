@@ -6,21 +6,34 @@ import { useTranslations } from 'next-intl';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsOverview, useAnalyticsTimeSeries } from '@/hooks/use-analytics';
+import { useCanSearchRequests } from '@/hooks/use-can-search-requests';
 import { useFormat } from '@/hooks/use-format';
+import { searchHref, searchToken, trafficHref } from '@/lib/traffic-filters-to-query';
 import type { AnalyticsRange } from '@/types';
 import { Figure } from './figure';
 import { Sparkline } from './sparkline';
 import { bucketErrorRate } from './viz-utils';
 
-function MiniShell({ title, children }: { title: string; children: React.ReactNode }) {
+/** `href` is the list behind the figure; `linkLabel` names it when it is not simply "the analytics for this card". */
+function MiniShell({
+  title,
+  href,
+  linkLabel,
+  children,
+}: {
+  title: string;
+  href: string;
+  linkLabel?: string;
+  children: React.ReactNode;
+}) {
   const tCommon = useTranslations('dashboard.page');
   return (
     <Card className="bg-card/85 flex flex-col gap-2.5 rounded-[1.25rem] p-4 backdrop-blur-md">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[0.95rem] font-normal">{title}</h3>
         <Link
-          href="/analytics"
-          aria-label={tCommon('openAnalytics', { title })}
+          href={href}
+          aria-label={linkLabel ?? tCommon('openAnalytics', { title })}
           className="bg-foreground text-card grid size-8 shrink-0 place-items-center rounded-full transition-transform duration-300 hover:rotate-45 rtl:-scale-x-100"
         >
           <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
@@ -84,13 +97,18 @@ export function LatencyMini({ range, apiId }: { range: AnalyticsRange; apiId?: s
       </>
     );
   }
-  return <MiniShell title={t('title')}>{body}</MiniShell>;
+  return (
+    <MiniShell title={t('title')} href={trafficHref({ range, apiId })}>
+      {body}
+    </MiniShell>
+  );
 }
 
 /** Error rate for the range with its per-bucket trend. */
 export function ErrorsMini({ range, apiId }: { range: AnalyticsRange; apiId?: string }) {
   const t = useTranslations('dashboard.errors');
   const fmt = useFormat();
+  const canSearch = useCanSearchRequests();
   const overview = useAnalyticsOverview(range, apiId);
   const series = useAnalyticsTimeSeries('requests', range, apiId);
   const data = overview.data;
@@ -126,5 +144,19 @@ export function ErrorsMini({ range, apiId }: { range: AnalyticsRange; apiId?: st
       </>
     );
   }
-  return <MiniShell title={t('title')}>{body}</MiniShell>;
+  // The failed requests themselves (status 400 and up, how errors are counted) for someone who may
+  // search; the traffic view for the same range otherwise.
+  return canSearch ? (
+    <MiniShell
+      title={t('title')}
+      href={searchHref([apiId ? searchToken('api', apiId) : null, 'status:>=400'], range)}
+      linkLabel={t('openFailed')}
+    >
+      {body}
+    </MiniShell>
+  ) : (
+    <MiniShell title={t('title')} href={trafficHref({ range, apiId })}>
+      {body}
+    </MiniShell>
+  );
 }

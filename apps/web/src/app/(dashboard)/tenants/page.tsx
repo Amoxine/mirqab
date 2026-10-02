@@ -279,6 +279,7 @@ function TenantsView() {
         isError={isError}
         error={error}
         onRetry={() => void refetch()}
+        getRowHref={(tenant) => `/tenants/${tenant.id}`}
         emptyMessage={t('list.empty')}
         emptyAction={createButton}
       />

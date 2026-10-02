@@ -35,6 +35,7 @@ la fois, et **Charger plus** récupère les 50 suivants.
 | `method:` | `method:POST` | Les requêtes de cette méthode. Donnez-en plusieurs avec des virgules, comme `method:PUT,PATCH`. |
 | `latency:` | `latency:>800` | Les requêtes plus lentes que 800 millisecondes. Vous pouvez utiliser `>`, `>=`, `<` et `<=`. Un nombre seul comme `latency:800` signifie 800 ou plus. |
 | `path:` | `path:/orders` | Les requêtes dont le chemin **commence par** le texte. Il faut au moins 3 lettres ou chiffres. |
+| `route:` | `route:/orders` | Les requêtes vers exactement ce chemin, rien en dessous : `route:/orders` ne trouve pas `/orders/42`. Il n’y a pas de longueur minimale, donc `route:/` trouve la racine. Les lignes de points de terminaison de **Trafic** et du tableau de bord ouvrent la recherche avec lui. |
 | `api:` | `api:payments` | Les requêtes vers une API, donnée par son nom, son slug ou son id. |
 | `key:` | `key:mobile-app` | Les requêtes faites avec la clé dont vous donnez l’alias, tel qu’affiché dans la colonne **Clé** des résultats. |
 | `reqh:` | `reqh:content-type=application/json` | Les requêtes avec cet en-tête et exactement cette valeur. Sans `=` ni valeur, comme dans `reqh:x-tenant`, toute requête qui a l’en-tête. |

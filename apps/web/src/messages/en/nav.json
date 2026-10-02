@@ -13,6 +13,7 @@
   "brand": "MIRQAB",
   "brandShort": "OG",
   "brandCaption": "Gateway control plane",
+  "brandDescription": "Define APIs, issue keys, set plans and quotas, and watch traffic from one dashboard.",
   "groups": {
     "workspace": "Workspace",
     "manage": "Manage",

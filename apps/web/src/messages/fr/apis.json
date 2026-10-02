@@ -207,7 +207,7 @@
     "clientSecret": "Secret client",
     "tokenUrl": "Point de terminaison du jeton",
     "getToken": "Obtenir un jeton",
-    "getTokenHint": "Envoyez l'<code1>access_token</code1> renvoyé en tant que <code2>Authorization: Bearer &lt;token&gt;</code2> lors de l'appel à cette API.",
+    "getTokenHint": "Envoyez le jeton <code1>access_token</code1> renvoyé en tant que <code2>Authorization: Bearer &lt;token&gt;</code2> lors de l'appel à cette API.",
     "copySecret": "Copier le secret",
     "revokeTitle": "Révoquer ce client OAuth2 ?",
     "thisClient": "Ce client",
@@ -242,7 +242,7 @@
     },
     "endpoints": {
       "title": "Points de terminaison",
-      "description": "Dérivés du document OAS généré de l'API — jamais saisis manuellement.",
+      "description": "Dérivés de la spécification générée de l'API — jamais saisis manuellement.",
       "empty": "Aucun point de terminaison pour l'instant. Ils apparaissent dès qu'un middleware par requête (réécriture d'URL, disjoncteur, réponse simulée, transformation de corps ou validation de schéma) est configuré.",
       "method": "Méthode",
       "path": "Chemin",

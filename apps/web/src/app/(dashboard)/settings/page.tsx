@@ -15,6 +15,7 @@ import { toast } from '@/components/ui/sonner';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { StateCard } from '@/components/shared/state-card';
+import { useFormat, type Format } from '@/hooks/use-format';
 import { useNodeHealth, useReloadGateways, useSettings } from '@/hooks/use-settings';
 import type { NodeHealthEntry } from '@/types';
 
@@ -63,9 +64,6 @@ function GeneralTab() {
     <Card>
       <CardContent className="pt-6">
         <dl>
-          <Row label={t('tykOrgId')}>
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{data.tykOrgId}</code>
-          </Row>
           <Row label={t('analyticsRetentionDays')}>{t('daysValue', { count: data.analyticsRetentionDays })}</Row>
           <Row label={t('analyticsAggregateRetentionDays')}>
             {t('daysValue', { count: data.analyticsAggregateRetentionDays })}
@@ -76,9 +74,10 @@ function GeneralTab() {
   );
 }
 
-function nodeColumns(t: ReturnType<typeof useTranslations>): ColumnDef<NodeHealthEntry>[] {
+function nodeColumns(t: ReturnType<typeof useTranslations>, fmt: Format): ColumnDef<NodeHealthEntry>[] {
   return [
-    { accessorKey: 'nodeUrl', header: t('columns.node') },
+    // Position, not the URL: the admin URL carries the gateway's internal host name.
+    { id: 'node', header: t('columns.node'), cell: ({ row }) => t('nodeLabel', { index: row.index + 1 }) },
     {
       id: 'status',
       header: t('columns.status'),
@@ -98,7 +97,7 @@ function nodeColumns(t: ReturnType<typeof useTranslations>): ColumnDef<NodeHealt
       id: 'latency',
       header: t('columns.latency'),
       cell: ({ row }) =>
-        row.original.health.latencyMs === null ? '—' : `${String(row.original.health.latencyMs)} ms`,
+        row.original.health.latencyMs === null ? '—' : fmt.ms(row.original.health.latencyMs),
     },
   ];
 }
@@ -107,7 +106,8 @@ function NodesTab() {
   const t = useTranslations('settings.nodes');
   const { data, isLoading, isError, error, refetch } = useNodeHealth();
   const reload = useReloadGateways();
-  const columns = useMemo(() => nodeColumns(t), [t]);
+  const fmt = useFormat();
+  const columns = useMemo(() => nodeColumns(t, fmt), [t, fmt]);
 
   const table = useReactTable({
     data: data ?? [],

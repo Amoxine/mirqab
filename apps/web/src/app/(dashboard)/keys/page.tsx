@@ -318,6 +318,7 @@ function KeysPage() {
         isError={isError}
         error={error}
         onRetry={() => void refetch()}
+        getRowHref={(key) => `/keys/${key.id}`}
         emptyMessage={filtered ? t('list.emptyFiltered') : t('list.empty')}
         emptyAction={
           filtered ? (

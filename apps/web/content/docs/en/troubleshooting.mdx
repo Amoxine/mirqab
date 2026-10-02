@@ -31,7 +31,7 @@ stops, if it is set to block, never reaches the gateway and leaves no record. Se
 | Symptom | Cause | What to do |
 |---|---|---|
 | A page says "Analytics pipeline not receiving data". | The recording of requests is down, its tables are not created yet, or no request has arrived yet. The hint on the card says which. | Tell the people who run the platform which hint you see. If no request has arrived, send traffic through the gateway. |
-| A notice says "Tyk Pump is not running" above the figures. | New requests are not being recorded, so the figures are stale. The notice gives the time of the last record. | Tell the people who run the platform. |
+| A notice says "Analytics collection is paused" above the figures. | New requests are not being recorded, so the figures are stale. The notice gives the time of the last record. | Tell the people who run the platform. |
 | Figures show a dash or "No data". | Nothing was recorded in the range, or a filter hides it. Or **Do not track** is on in the API's **Edit** sheet, so its requests are not recorded. | Choose a longer range. On the Dashboard, look for a **Showing** chip and choose **Show all APIs**. On **Traffic**, choose **Reset filters**. |
 | Figures look too low. | **Do not track** is on for an API, or the recorder was down for a while. | Check **Do not track** in the API's **Edit** sheet, and the notices above the figures. |
 | "Failed to load data". | The request for the figures failed. | Use the **Retry** button on the card. |

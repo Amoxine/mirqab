@@ -8,10 +8,10 @@ import {
   GRID_STROKE,
   TOOLTIP_STYLE,
   formatBucket,
-  formatCount,
 } from '@/components/analytics/analytics-empty-state';
 import { usePrefersReducedMotion } from '@/hooks/use-media-query';
 import { useAnalyticsTimeSeries } from '@/hooks/use-analytics';
+import { useFormat } from '@/hooks/use-format';
 import type { AnalyticsRange } from '@/types';
 
 /**
@@ -21,6 +21,7 @@ import type { AnalyticsRange } from '@/types';
 export function LatencyChart({ range }: { range: AnalyticsRange }) {
   const t = useTranslations('analytics');
   const locale = useLocale();
+  const fmt = useFormat();
   const animate = !usePrefersReducedMotion();
   const { data, isLoading, error, refetch } = useAnalyticsTimeSeries('latency', range);
 
@@ -50,18 +51,19 @@ export function LatencyChart({ range }: { range: AnalyticsRange }) {
             tickLine={false}
             axisLine={false}
             width={64}
-            tickFormatter={(value: number) => `${formatCount(value, locale)} ms`}
+            tickFormatter={(value: number) => fmt.ms(value)}
           />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
             labelFormatter={(label: unknown) => (typeof label === 'string' ? formatBucket(label, range, true, locale) : '')}
+            // The unit is Intl's for the locale, not a string written here.
+            formatter={(value) => (typeof value === 'number' ? fmt.ms(value) : String(value))}
           />
           <Line
             isAnimationActive={animate}
             type="monotone"
             dataKey="avgLatencyMs"
             name={t('charts.latency.series')}
-            unit=" ms"
             stroke="var(--color-primary)"
             strokeWidth={2}
             dot={false}
