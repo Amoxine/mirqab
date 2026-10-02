@@ -15,7 +15,18 @@
 #   DB_PASS          already required by the base file
 #   EDGE_IMAGE       the digest-pinned edge image CD last published (WP29b); a tag is rejected
 #   PG_EXPORTER_PASSWORD  openssl rand -hex 32 — soft in the base file, required here (OG-OBS-02)
-# and the seeded admin@opengateway.io / Admin123! login must no longer work.
+#   KRATOS_SMTP_URI  a real SMTP server (smtps://user:pass@host:465/); the base file's default is the
+#                    dev-only Mailpit, which this overlay does not start (it is under `--profile dev`)
+# and the seeded admin@opengateway.io / Admin123! login must no longer work. The seed enforces that
+# itself under NODE_ENV=production: it refuses to run without ADMIN_EMAIL and ADMIN_PASSWORD
+# (docs/go-live.md). infra/.env.production.example lists every variable with how to generate it.
+#
+# Needs a Docker Compose that knows the `!reset` YAML tag (2.24 or later; only v5.1.4 was run
+# against this file). What an OLDER Compose does with the tag is unverified: it may reject it, or it
+# may parse it without clearing anything, in which case every `ports: !reset []` below is lost and
+# the loopback admin ports and the raw-TCP port are published again, silently. So
+# infra/scripts/check-prod-ports.sh asserts both the Compose version and the rendered port list
+# (only the edge's five), and deploy-staging.sh runs it before `up`.
 
 # Same cap as the base file's anchor (OG-OBS-01): YAML anchors do not cross files, so the one service
 # this overlay defines itself needs its own copy. Keep the two in step.
@@ -24,6 +35,12 @@ x-logging: &default-logging
   options:
     max-size: "50m"
     max-file: "5"
+
+# ONE value, three consumers: prod-preflight, api and web all take NODE_ENV from this anchor. That is
+# what lets the preflight's NODE_ENV check read the value the application will actually run with; a
+# literal on each service (as this file used to have) made the check unable to fail. It catches an
+# edit to THIS line, not an edit that swaps one service's alias for a literal.
+x-node-env: &prod-node-env production
 
 services:
   # ─── Preflight gate ────────────────────────────────────
@@ -39,7 +56,7 @@ services:
     logging: *default-logging
     entrypoint: ["sh", "/preflight.sh"]
     environment:
-      NODE_ENV: production
+      NODE_ENV: *prod-node-env
       TYK_GW_SECRET: ${TYK_GW_SECRET:-}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       DB_PASS: ${DB_PASS:-}
@@ -52,6 +69,13 @@ services:
       # OG-OBS-02: `:-` here only so the check reports it as one preflight line; the two services
       # below make it `:?`, and this adds the shape (no whitespace, at least 32 characters).
       PG_EXPORTER_PASSWORD: ${PG_EXPORTER_PASSWORD:-}
+      # Same `:-` / `:?` split as the two above: required by the kratos service below, repeated here
+      # so the shape check (not the dev Mailpit address) prints as one preflight line.
+      KRATOS_SMTP_URI: ${KRATOS_SMTP_URI:-}
+      # The same expression the kratos service below hands Kratos, so the check reads what Kratos gets.
+      KRATOS_COOKIE_SECURE: ${KRATOS_COOKIE_SECURE:-true}
+      # The same `${COOKIE_SECURE:-true}` the base file hands api and web, so the check reads what they get.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       KRATOS_PUBLIC_URL: http://kratos:4433
     volumes:
       - ./scripts/prod-preflight.sh:/preflight.sh:ro
@@ -59,8 +83,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # HEALTHY, not started: the behavioural check below logs in through Kratos' public API, and
+      # against a cold Kratos it raced the start-up and failed on a connection refused. Kratos is a
+      # long-running service with its own healthcheck, not a one-shot, so waiting on it cannot hang
+      # on a secret (rebuild.sh deploys the working tree, and an awaited one-shot that needs a
+      # secret blocks it forever when the secret is not there).
       kratos:
-        condition: service_started
+        condition: service_healthy
     networks:
       - open-gateway-network
       - ory-internal
@@ -81,6 +110,9 @@ services:
       # redis-cli reads this, so the healthcheck below needs no -a and the password never appears in
       # `docker inspect`'s Healthcheck.Test or in the process list.
       REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+    # The base file's 127.0.0.1:33003 is a laptop convenience (host-side `pnpm dev`). Nothing in
+    # production reaches Redis from the host: every client is a container on this network.
+    ports: !reset []
 
   # ─── Gateway nodes: authenticate to Redis ──────────────
   # One per node. The anchor in the base file cannot carry this: it is a per-deployment secret, and
@@ -89,6 +121,12 @@ services:
   tyk-gateway:
     environment:
       TYK_GW_STORAGE_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+    # The base file's `33020:6000` is WP27's demo/test TCP port, published on ALL interfaces and
+    # bypassing the edge and its WAF. Production publishes no raw-TCP port by default; an API with
+    # `protocol: tcp` needs its own port published deliberately (docs/go-live.md). The listener
+    # itself is untouched — Tyk still opens it inside the network, and the blackbox `tcp-33020`
+    # probe still dials tyk-gateway:6000 there.
+    ports: !reset []
     depends_on:
       prod-preflight:
         condition: service_completed_successfully
@@ -134,6 +172,44 @@ services:
   redis-exporter:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}
+
+  # ─── Ory: real SMTP, Secure session cookie ─────────────
+  # The base file's default sends Kratos mail to the dev-only Mailpit container, which this overlay
+  # does not start. An unset value would therefore not fail loudly at runtime: Kratos would queue
+  # every recovery and verification code and never deliver one. `:?` makes it a start-up error.
+  #
+  # SESSION_COOKIE_SECURE defaults to TRUE here (the base file's default is false, from when the stack
+  # was plain HTTP). Kratos runs with `--dev`, which does not make cookies secure on its own, and
+  # without `Secure` the browser attaches the session cookie to plain-HTTP requests to the same
+  # hostname too. prod-preflight reads the same expression and fails on anything but `true`.
+  kratos:
+    environment:
+      COURIER_SMTP_CONNECTION_URI: ${KRATOS_SMTP_URI:?set KRATOS_SMTP_URI to a real SMTP server (smtps://user:pass@host:465/)}
+      SESSION_COOKIE_SECURE: ${KRATOS_COOKIE_SECURE:-true}
+    ports: !reset []
+
+  # ─── No host ports but the edge's ──────────────────────
+  # The base file publishes five datastore and admin ports on 127.0.0.1 for a laptop: Postgres 33002,
+  # Redis 33003, Hydra admin 33011, Kratos admin 33013, Keto 33014/33015. Production publishes none of
+  # them, so the ONLY ports this stack exposes are the edge's five (check-prod-ports.sh asserts it).
+  #
+  # The one that mattered was the Kratos admin API: it is unauthenticated, and on a loopback port any
+  # local user, or any container in host networking (node-exporter runs that way), could mint a
+  # recovery link for the super_admin and take the account. Postgres on loopback was the same shape
+  # for the database.
+  #
+  # Everything that used them runs inside the stack instead: web and api reach these as hydra:4445,
+  # kratos:4434, keto:4466/4467 and postgres:5432, and the post-deploy login check
+  # (apps/api/test/e2e/kratos-hydra-login.e2e.mjs) is `docker cp`ed into the api container and run
+  # there (docs/go-live.md).
+  postgres:
+    ports: !reset []
+
+  hydra:
+    ports: !reset []
+
+  keto:
+    ports: !reset []
 
   # ─── Edge: digest-pinned image, fronting all three gateway nodes ───────────────
   # `image` overrides the base file's locally-built `open-gateway-edge:wp26b`. The base file's
@@ -186,8 +262,10 @@ services:
     image: ${API_IMAGE:-open-gateway-api:local}
     environment:
       # app.module.ts reads this directly for the throttler: 100 req/min at production, 1000
-      # otherwise. The preflight refuses to let the stack start if it is anything else.
-      NODE_ENV: production
+      # otherwise. Taken from the same anchor as prod-preflight and web, so the preflight's NODE_ENV
+      # check reads this very value; replacing the alias here with a literal would take this service
+      # out of the preflight's sight.
+      NODE_ENV: *prod-node-env
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD (openssl rand -hex 32)}@redis:6379
       # The three nodes by NAME, never a scaled-up single service. A scaled service is one DNS name
       # behind which the individual containers are not addressable, and the control plane has to
@@ -203,7 +281,7 @@ services:
   web:
     image: ${WEB_IMAGE:-open-gateway-web:local}
     environment:
-      NODE_ENV: production
+      NODE_ENV: *prod-node-env
     depends_on:
       prod-preflight:
         condition: service_completed_successfully

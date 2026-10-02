@@ -30,6 +30,7 @@ flowchart LR
 |---|---|
 | Understand containers, ports, networks, Caddy routing | [infrastructure.md](infrastructure.md) |
 | Look up an environment variable | [configuration.md](configuration.md) |
+| Take the stack to production: required inputs, steps, every `localhost` to change, known gaps | [../go-live.md](../go-live.md) |
 | Work on users, tenants, roles, keys, plans, products, quotas, the developer portal, audit | [api-identity-and-commerce.md](api-identity-and-commerce.md) |
 | Work on API definitions, Tyk sync, OpenAPI import, certificates, webhooks, MCP, analytics (incl. `/analytics/traffic`), API bootstrap and shared guards | [api-gateway-and-analytics.md](api-gateway-and-analytics.md) |
 | Work on the dashboard: routes, components, hooks, session flow, i18n, theming | [web-app.md](web-app.md) |
@@ -44,7 +45,7 @@ flowchart LR
 | Shared UI (shadcn primitives, `PageFilter`, `DataTable`, dialogs, KPI/chart pieces, `WorldMap`) | `packages/ui` | [packages.md](packages.md) |
 | Prisma schema, migrations, seed | `packages/database` | [packages.md](packages.md) |
 | Shared types, lint/format/tsconfig bases | `packages/types`, `packages/config` | [packages.md](packages.md) |
-| Container stack (31 compose services), edge, Ory, pump, observability | `infra/` | [infrastructure.md](infrastructure.md) |
+| Container stack (29 compose services), edge, Ory, pump, observability | `infra/` | [infrastructure.md](infrastructure.md) |
 | Installer and rebuild scripts | `install.sh`, `infra/scripts` | [infrastructure.md](infrastructure.md) |
 
 ## Cross-cutting facts worth knowing first

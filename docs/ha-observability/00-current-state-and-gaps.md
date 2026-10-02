@@ -3,6 +3,7 @@
 > **Status:** planning package; owner decisions D-OBS-01…14 **approved 2026-09-27** (recommended defaults, [04 §6](04-roadmap-decisions-validation.md#6-owner-decisions-needed)).
 > - OG-OBS-00/01/02 have since been **implemented as repo changes and lab-verified, but not deployed** ([04 §3.1](04-roadmap-decisions-validation.md#31-deployment-go-ahead-checklist-og-obs-0102)).
 > - The current-state findings below describe the stack **as audited at HEAD `cc096d8`**, before those changes. No firewall rule, running service or alert delivery has changed.
+> - **Later change (go-live prep, 2026-10-01):** the `tyk-healthcheck` and `edge-healthcheck` sidecars this file mentions were removed from `infra/docker-compose.yml`. What they checked is probed and alerted on by Prometheus (see the comment in the compose file where they were). The audit rows that name them are left as observed on 2026-09-27.
 >
 > **Package:** [00 current state](00-current-state-and-gaps.md) · [01 target architecture](01-target-architecture.md) ·
 > [02 assets and signals](02-assets-and-signal-catalog.md) · [03 dashboards, alerts, runbooks](03-dashboards-alerts-and-runbooks.md) ·

@@ -37,6 +37,13 @@ name: Open Gateway Infrastructure
 # the one listener outside compose networking: it runs in the host network namespace and binds the
 # docker0 gateway address only, never the LAN — see that service.
 #
+# Dev-only surface, absent from production: `mailpit` (and its loopback 33016) only exists under
+# `--profile dev`, and docker-compose.prod.yml resets EVERY development port: 33002, 33003, 33011,
+# 33013, 33014/33015 and the raw-TCP `33020:6000` demo port on tyk-gateway, so production publishes only
+# the edge's five (infra/scripts/check-prod-ports.sh asserts it). The post-deploy login check that used
+# those loopback ports runs inside the api container instead (docs/go-live.md, step 10). node-exporter's
+# host-network listener, above, is not a compose port and is not in that list.
+#
 # Ory (Hydra/Kratos/Keto) is the auth system: the API's JwtStrategy validates only Hydra-issued
 # JWTs, and the old local login/register/refresh routes are gone. WP7 owns removing the now-dead
 # code paths and updating docs to match — this stack has already cut over.
@@ -417,6 +424,9 @@ services:
       # itself the moment a `protocol:"tcp"` def with this port loads (confirmed against the v5.15.0
       # source, gated by TYK_GW_DISABLEPORTWHITELIST above) — this mapping does not create the
       # listener, it only has to agree with whatever port that definition uses.
+      #
+      # DEV only: docker-compose.prod.yml resets this list, so production publishes no raw-TCP port
+      # until a TCP API gets its own (docs/go-live.md).
       - "33020:6000"
     volumes:
       - tyk_apps:/opt/tyk-gateway/apps
@@ -530,78 +540,29 @@ services:
         condition: service_healthy
     # No compose healthcheck — distroless image (no shell/curl to run one). The pump's own
     # /health endpoint (pump.conf: health_check_endpoint_*, port 8083) is not published to the host;
-    # the API probes it over this network via PUMP_HEALTH_URL to report "pump not running", and the
-    # sidecar below gives `docker compose ps`/`up --wait` a real container-level health signal too.
+    # the API probes it over this network via PUMP_HEALTH_URL to report "pump not running", and
+    # blackbox's `pump-health` job probes it for the PumpHealthFailing alert. `docker compose ps` therefore
+    # shows this container as `running`, never `healthy`.
     networks:
       - open-gateway-network
 
-  # ─── Gateway + Pump healthcheck sidecar ────────────────
-  # Both tyk-gateway and tyk-pump are distroless (no shell, no curl/wget), so neither can run a
-  # `HEALTHCHECK` of its own — the reason both were healthcheck-less until now. This sidecar has no
-  # job beyond polling their in-network health endpoints (neither is published to the host) and
-  # surfacing the result as its own compose health state.
-  tyk-healthcheck:
-    image: curlimages/curl:8.15.0
-    container_name: open-gateway-tyk-healthcheck
-    logging: *default-logging
-    entrypoint: ["sh", "-c", "sleep infinity"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://tyk-gateway:8081/hello && curl -sf http://tyk-pump:8083/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    depends_on:
-      - tyk-gateway
-      - tyk-pump
-    networks:
-      - open-gateway-network
-
-  # ─── Edge healthcheck sidecar (WP29a) ──────────────────
-  # The edge already HAS a healthcheck (`wget http://127.0.0.1:2019/...`, in-container, against
-  # Caddy's admin API). This sidecar is not a duplicate of it, and the difference is the whole
-  # reason it exists: the admin-API probe proves the PROCESS is alive and holds a config, and it
-  # structurally cannot prove that a TLS handshake succeeds — because Caddy's `tls internal` issues
-  # its 12-hour leaves lazily, AT handshake time. If issuance or renewal breaks, the admin API keeps
-  # answering 200 on 2019 while every real request fails. That is R14's silent-failure mode exactly,
-  # and the in-container check reports healthy right through it.
-  #
-  # So: a real HTTPS request, from OUTSIDE the container, over the network path a client uses. Same
-  # curl-sidecar pattern as tyk-healthcheck above (for a different reason — there the images are
-  # distroless; here the check has to originate off-box).
-  #
-  #   --connect-to  keeps SNI and Host as `localhost` (what the certificate is issued for) while
-  #                 dialling the container name. Without it the probe fails on a hostname mismatch,
-  #                 which would look exactly like the outage it is supposed to detect.
-  #   /api/metrics  is answered 404 by the EDGE itself (`respond /api/metrics* 404` in the
-  #                 Caddyfile), so this measures the edge and never the API behind it. curl exits 0
-  #                 on a 404 — TLS, routing and the response are all proven without `-f` turning an
-  #                 upstream's health into the edge's.
-  #   --cacert      when the root has been exported (infra/edge/README.md), so an EXPIRED leaf fails
-  #                 the probe too; `-k` otherwise, which still catches a handshake that dies
-  #                 outright. A fresh install has no root.crt and must not be born unhealthy.
-  edge-healthcheck:
-    image: curlimages/curl:8.15.0
-    container_name: open-gateway-edge-healthcheck
-    logging: *default-logging
-    entrypoint: ["sh", "-c", "sleep infinity"]
-    volumes:
-      - ./edge:/edge:ro
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          if [ -r /edge/root.crt ]; then CA="--cacert /edge/root.crt"; else CA="-k"; fi;
-          curl -sS -o /dev/null $$CA --connect-to localhost:33001:edge:33001
-          https://localhost:33001/api/metrics
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    depends_on:
-      - edge
-    networks:
-      - open-gateway-network
+  # ─── Health sidecars: removed ──────────────────────────
+  # `tyk-healthcheck` and `edge-healthcheck` were two `curlimages/curl` containers running
+  # `sleep infinity` to host a HEALTHCHECK. Nothing depended on either, nothing alerted on either
+  # (a container health state is visible to `docker ps` only), and neither had a restart policy, so
+  # both sat exited for days without anyone noticing. What they checked is probed continuously by
+  # Prometheus, and alerted on, instead:
+  #   tyk-gateway :8081/hello, tyk-pump :8083/health  -> blackbox jobs tyk-hello, tyk-hello-redis,
+  #                                                      pump-health (TykNodeDown, PumpHealthFailing)
+  #   TLS handshake on the edge's :33001 listener     -> the api's own handshake probe
+  #                                                      (EDGE_TLS_PROBE=edge:33001) feeding
+  #                                                      EdgeCertificateMetricsAbsent /
+  #                                                      EdgeCertificateRenewalStalled, and blackbox
+  #                                                      job oidc-availability through :33010
+  #                                                      (OidcDiscoveryOrJwksFailing, critical, 2m)
+  # The reasoning that once justified the edge one — a Caddy `tls internal` leaf is issued lazily at
+  # handshake time, so the in-container admin-API healthcheck cannot see an issuance failure — still
+  # holds; it is now met by those two real handshakes rather than by a container nobody read.
 
   # ─── OpenTelemetry Collector (WP20) ────────────────────
   # Traces in from the edge, the gateway and the API; WAF detections in from the edge's log file and
@@ -779,7 +740,7 @@ services:
   # observability/blackbox.yml. The edge's exported root CA comes in as the `./edge` DIRECTORY, not
   # the `root.crt` file, for the reason the api service spells out: that file is git-ignored and
   # per-install, and a file bind-mount of a missing path makes Docker create a root-owned DIRECTORY
-  # at infra/edge/root.crt — which then breaks the README's export step and edge-healthcheck.
+  # at infra/edge/root.crt — which then breaks the README's export step.
   blackbox:
     image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
     container_name: open-gateway-blackbox
@@ -1171,9 +1132,15 @@ services:
   # verification email actually arrived, with no internet-connected mail provider needed. Point
   # KRATOS_SMTP_URI (infra/.env) at a real external SMTP server instead for an install that needs
   # mail to actually leave the stack; this container is not built for that.
+  #
+  # DEV ONLY: behind the `dev` profile, so production never runs a mail sink that accepts anything
+  # from anyone on ory-internal and keeps it readable on a loopback port. Start it with
+  # `--profile dev` (install.sh and rebuild.sh pass it). The prod overlay requires KRATOS_SMTP_URI,
+  # so a prod stack cannot fall back to this container's address.
   mailpit:
     image: axllent/mailpit:v1.21.3
     container_name: open-gateway-mailpit
+    profiles: ["dev"]
     logging: *default-logging
     restart: unless-stopped
     expose:
@@ -1205,9 +1172,11 @@ services:
       SECRETS_COOKIE: ${KRATOS_SECRETS_COOKIE:?set KRATOS_SECRETS_COOKIE (install.sh generates infra/.env; or openssl rand -hex 32)}
       # Must be exactly 32 characters — Kratos refuses to start otherwise (openssl rand -hex 16).
       SECRETS_CIPHER: ${KRATOS_SECRETS_CIPHER:?set KRATOS_SECRETS_CIPHER (install.sh generates infra/.env; or openssl rand -hex 16)}
-      # WP22: real SMTP by default now — Mailpit, started above, actually receives what Kratos sends
-      # rather than failing against the old placeholder. Override KRATOS_SMTP_URI in infra/.env to
-      # point at a real external SMTP server for an install that needs mail to leave the stack.
+      # WP22: real SMTP by default now — Mailpit, started above under `--profile dev`, actually
+      # receives what Kratos sends rather than failing against the old placeholder. Override
+      # KRATOS_SMTP_URI in infra/.env to point at a real external SMTP server for an install that
+      # needs mail to leave the stack. The Mailpit address is a DEV default only: without
+      # `--profile dev` nothing answers on it, and docker-compose.prod.yml makes this `:?`.
       COURIER_SMTP_CONNECTION_URI: ${KRATOS_SMTP_URI:-smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true}
       SESSION_COOKIE_SECURE: ${KRATOS_COOKIE_SECURE:-false}
     volumes:
@@ -1229,8 +1198,11 @@ services:
     depends_on:
       kratos-migrate:
         condition: service_completed_successfully
+      # `required: false`: mailpit only exists under `--profile dev`. With the profile off compose
+      # drops this edge instead of refusing to start; with it on, Kratos still waits for Mailpit.
       mailpit:
         condition: service_healthy
+        required: false
     networks:
       - ory-internal
 

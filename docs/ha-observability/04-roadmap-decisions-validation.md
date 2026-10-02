@@ -4,6 +4,7 @@
 > - **OG-OBS-00, 01 and 02 are implemented as repo changes** (2026-09-27, uncommitted). They were verified in throwaway lab containers and are **not deployed**: the running stack has not been restarted or recreated. Deploying them needs a separate owner go-ahead and the checklist in [§3.1](#31-deployment-go-ahead-checklist-og-obs-0102).
 > - OG-OBS-03…06, the drills and the other tests below remain a **design for later authorised work**. None of it may be executed until the owner approves it and, for OG-OBS-06, gives written authorisation per environment.
 > - Effort ranges are estimates under the stated assumptions. They are not a schedule.
+> - **Later change (go-live prep, 2026-10-01):** the `tyk-healthcheck` and `edge-healthcheck` services named in step P-1 no longer exist, so its command is now `docker compose -f infra/docker-compose.yml up -d prometheus`. The step is a dated record and is left as written.
 
 ## 1. Sequencing
 

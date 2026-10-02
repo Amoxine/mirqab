@@ -155,6 +155,27 @@ jobs:
       - name: Guard — inventory renderer tests
         run: node --test infra/scripts/render-inventory.test.mjs
 
+      # Production go-live gates (infra/scripts). None of them starts a stack: the preflight cases run
+      # against fake wget/redis-cli, and the ports guard only RENDERS the compose files (`docker compose
+      # config`, which needs the Docker CLI but no daemon work, and dummy secrets it builds itself).
+      #
+      # The preflight cases run INSIDE redis:7-alpine, the image prod-preflight really executes in, so what
+      # is tested is busybox ash and busybox wget's measured behaviour rather than whatever `sh` the runner
+      # has. Read-only mount, no network.
+      - name: Guard — prod-preflight gate cases (in the preflight's own image)
+        run: >-
+          docker run --rm --network none -v "$PWD/infra/scripts:/s:ro"
+          redis:7-alpine sh /s/prod-preflight.check.sh
+
+      - name: Guard — prod ports guard cases
+        run: bash infra/scripts/check-prod-ports.check.sh
+
+      # The one that matters: base + prod must publish exactly the edge's five ports, with a Compose new
+      # enough to honour the overlay's `ports: !reset []`. An edit that re-publishes a development port
+      # (or a Compose that silently ignores the tag) fails here instead of on a host.
+      - name: Guard — production publishes only the edge's ports
+        run: bash infra/scripts/check-prod-ports.sh
+
       - name: Format check
         run: pnpm format:check
 

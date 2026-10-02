@@ -87,6 +87,8 @@ cp apps/web/.env.example apps/web/.env.local
 cp apps/api/.env.example apps/api/.env.local
 
 # 3. Start infrastructure (PostgreSQL 16 + Redis 7)
+#    Mailpit (the dev mail sink) starts only when infra/.env has COMPOSE_PROFILES=dev, which install.sh
+#    writes; add the line yourself if you wrote infra/.env by hand. See docs/deployment.md.
 pnpm infra:up
 
 # Wait for health checks...
@@ -98,8 +100,10 @@ pnpm db:generate
 # 5. Run database migrations (creates tables, indexes, enums)
 pnpm db:migrate:dev
 
-# 6. Seed database with default admin user, roles, and permissions
-pnpm db:seed
+# 6. Seed database with default admin user, roles, and permissions.
+#    NODE_ENV=development is required: without it the seed refuses (it fails closed, so a
+#    mislabelled environment can never receive the published development password).
+NODE_ENV=development pnpm db:seed
 ```
 
 ---
@@ -593,7 +597,7 @@ notifications: {
 | `pnpm db:generate` | Generate PrismaClient TypeScript types from schema |
 | `pnpm db:migrate:dev` | Create + apply a new migration (prompts for name) |
 | `pnpm db:migrate` | Apply pending migrations (production mode, no prompt) |
-| `pnpm db:seed` | Run seed script (`packages/database/prisma/seed.ts`) |
+| `NODE_ENV=development pnpm db:seed` | Run seed script (`packages/database/prisma/seed.ts`). The `NODE_ENV` is required: the seed hands out the development admin (`admin@opengateway.io` / `Admin123!`) only for a literal `development` or `test` with `ADMIN_EMAIL` / `ADMIN_PASSWORD` unset, and refuses anything else, including an unset `NODE_ENV` |
 | `pnpm db:studio` | Open Prisma Studio (visual database browser) |
 | `pnpm db:reset` | Drop and recreate database (dev only!) |
 
@@ -629,7 +633,7 @@ The seed script (`packages/database/prisma/seed.ts`) is **idempotent** — safe 
 Run it manually:
 
 ```bash
-pnpm db:seed
+NODE_ENV=development pnpm db:seed
 ```
 
 ### Schema Changes Workflow
@@ -896,7 +900,7 @@ docker compose -f infra/docker-compose.yml exec postgres \
 pnpm db:reset
 pnpm db:generate
 pnpm db:migrate:dev
-pnpm db:seed
+NODE_ENV=development pnpm db:seed
 ```
 
 ### Prisma Client Not Generated
@@ -949,7 +953,7 @@ pnpm db:generate
 pnpm db:migrate:dev
 
 # 3. Re-seed
-pnpm db:seed
+NODE_ENV=development pnpm db:seed
 ```
 
 ### CORS Errors from Frontend

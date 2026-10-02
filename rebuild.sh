@@ -2,7 +2,7 @@
 # ============================================================================
 # MIRQAB — Stack Rebuild Script
 # ============================================================================
-# Rebuilds and recreates the Docker Compose stack (infra/docker-compose.yml).
+# Rebuilds and recreates the Docker Compose stack (infra/docker-compose.yml, `dev` profile on).
 #
 # Usage:
 #   bash rebuild.sh                 # Interactive: choose all or specific services
@@ -36,7 +36,9 @@ fail() { error "$1"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/infra/docker-compose.yml"
-COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+# `--profile dev` keeps the dev-only Mailpit selectable (and listed by `--all`); without it compose
+# does not know the service and `bash rebuild.sh mailpit` is rejected as unrecognised.
+COMPOSE_ARGS=(-f "$COMPOSE_FILE" --profile dev)
 
 [ -f "$COMPOSE_FILE" ] || fail "Compose file not found: $COMPOSE_FILE"
 command -v docker &>/dev/null || fail "docker is not installed or not on PATH"

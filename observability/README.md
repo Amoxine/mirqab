@@ -83,7 +83,7 @@ OG-OBS-01/02 adds the rest, every one carrying the static labels `environment`, 
 | `web-login` | blackbox → `web:3000/` | expects **307**, not a followed 200 — see `blackbox.yml`'s `http_2xx_redirect` module comment |
 | `oidc` | blackbox → `https://edge:33010/.well-known/openid-configuration` | **data only as of verify round 2 (M4)** — `oidc_discovery` (ca_file-verified), no alert reads it |
 | `oidc-availability` | same target as `oidc` | new in verify round 2 (M4) — `oidc_discovery_insecure` (`insecure_skip_verify`), this is what `OidcDiscoveryOrJwksFailing` actually reads, so a fresh install with no exported `root.crt` can't page on trust alone |
-| `tcp-33020` | blackbox → `tyk-gateway:6000` | live today; reads `probe_success 0` until a TCP-protocol API def is loaded (see below). **No active rule reads this job** — `TcpPassthroughDown` would fire permanently on today's stack, so it's deferred (see `rules/services.yml`) |
+| `tcp-33020` | blackbox → `tyk-gateway:6000` | live today; reads `probe_success 0` until a TCP-protocol API def is loaded (see below). **No active rule reads this job** — `TcpPassthroughDown` would fire permanently on today's stack, so it's deferred (see `rules/services.yml`). The `33020:6000` host port is dev-only (the prod overlay resets it); the probe is in-network, so it runs the same in both |
 
 None of the exporter-backed jobs (`node`, `cadvisor`, `postgres`, `redis`, `edge`, `ory-*`,
 `otel-collector-self`) have a live target yet — their containers/listeners are other workers' C1/C2
@@ -139,7 +139,7 @@ Verified `probe_success 1` against the live stack, 2026-09-27:
   way since WP26b). The blackbox container mounts the whole `./edge` directory at
   `/etc/blackbox/edge:ro`, not the file directly (C1, obs-w2) — `root.crt` is per-install and
   git-ignored, and bind-mounting a single missing file makes Docker create a directory there
-  instead, which breaks edge-healthcheck the same way (`infra/edge/README.md`). **Verify round 2
+  instead, which breaks the `root.crt` export step (`infra/edge/README.md`). **Verify round 2
   (M4): this job is now DATA ONLY** — a fresh install with no exported `root.crt` would otherwise
   make `OidcDiscoveryOrJwksFailing` (critical) fire forever on trust alone. The alert now reads the
   new `oidc-availability` job (`oidc_discovery_insecure` module, `insecure_skip_verify: true`)

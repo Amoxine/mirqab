@@ -153,12 +153,19 @@ per client machine or every request needs `-k` — [`infra/edge/README.md`](infr
   The gateway's control API (`/tyk/*`) **and** `/hello` run on port 8081, which is not published to the
   host; only the API container reaches them. Postgres (33002) and Redis (33003) are bound to `127.0.0.1`.
 
-**Credentials:** `admin@opengateway.io` / `Admin123!` — a development default; change it after the
-first login. **Login goes through Ory Kratos**, not Postgres, so the seeded row alone is not enough:
-`install.sh` runs `packages/database/scripts/migrate-users-to-kratos.ts` immediately after seeding,
-which creates the matching Kratos identity. The import re-uses the seeded bcrypt hash as Kratos's
-`hashed_password`, so the password above is the one that works (see `docs/security.md`'s Password
-Policy section).
+**Credentials (development only):** `admin@opengateway.io` / `Admin123!` — the seed default, handed out
+only when `NODE_ENV` is literally `development` or `test` **and** neither `ADMIN_EMAIL` nor
+`ADMIN_PASSWORD` is set; change it after the first login. **Production never uses it**: the seed fails
+closed, so under any other `NODE_ENV` (unset, `Production`, `staging`...) it refuses to run unless
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` are supplied (password of at least 12 characters and at most 72
+bytes, neither value the dev default), and
+`prod-preflight` fails the deploy if the default login still works — see
+[`docs/go-live.md`](docs/go-live.md). **Login goes through Ory Kratos**, not Postgres, so the seeded
+row alone is not enough: `install.sh` runs `packages/database/scripts/migrate-users-to-kratos.ts`
+immediately after seeding, which creates the matching Kratos identity. The import re-uses the seeded
+bcrypt hash as Kratos's `hashed_password`, so the seeded password (the dev default above, or
+`ADMIN_PASSWORD` in production) is the one that works (see `docs/security.md`'s Password Policy
+section).
 
 If you set the stack up by hand rather than through `install.sh`, run that import yourself once the
 stack is up, or the admin will exist in Postgres and be unable to sign in:
@@ -168,7 +175,7 @@ docker compose -f infra/docker-compose.yml run --rm \
   api npx tsx scripts/migrate-users-to-kratos.ts
 ```
 It is idempotent (it looks each email up in Kratos first), so re-running it — or re-running
-`install.sh` — is safe. Note that Kratos would *reject* `Admin123!` at self-service registration
+`install.sh` — is safe. Note that Kratos would *reject* the dev default `Admin123!` at self-service registration
 ("too similar to the identifier"); the import path bypasses that policy by carrying the hash over
 directly, which is why this is an import and not a scripted sign-up.
 
@@ -190,7 +197,7 @@ pnpm infra:up
 # 4. Setup database
 pnpm db:generate
 pnpm db:migrate:dev
-pnpm db:seed
+NODE_ENV=development pnpm db:seed   # NODE_ENV is required: the seed refuses anything else
 
 # 5. Start all services
 pnpm dev
@@ -446,7 +453,7 @@ open-gateway/
 | `pnpm db:generate` | Generate Prisma client from schema |
 | `pnpm db:migrate:dev` | Run development migrations (creates migration files) |
 | `pnpm db:migrate` | Run production migrations (no file creation) |
-| `pnpm db:seed` | Seed database with default data |
+| `NODE_ENV=development pnpm db:seed` | Seed database with default data (refuses without a literal `development`/`test` `NODE_ENV`) |
 | `pnpm db:studio` | Open Prisma Studio (http://localhost:33004) |
 | `pnpm db:reset` | Reset database (drops and recreates) |
 
@@ -630,6 +637,13 @@ docker compose -f infra/docker-compose.yml up --build
 # Start infrastructure only (PostgreSQL + Redis)
 pnpm infra:up
 ```
+
+Mailpit, the development mail sink Kratos sends recovery and verification mail to, is behind the `dev`
+profile and is **not** started in production. `install.sh` writes `COMPOSE_PROFILES=dev` into the
+`infra/.env` it generates, which is what makes a bare `docker compose up` (and `pnpm infra:up`) start it. If
+you wrote `infra/.env` by hand, add that line or pass `--profile dev`. An explicit `--profile` on the command
+line replaces `COMPOSE_PROFILES` instead of adding to it, so combine them: `--profile dev --profile multinode`.
+Never put `COMPOSE_PROFILES=dev` on a server ([`docs/go-live.md`](docs/go-live.md)).
 
 ### Production Build
 

@@ -2,7 +2,7 @@
 
 Every fact here was read from the files cited in backticks. Where a fact could not be confirmed from a file it says **unverified**.
 
-Sources: `infra/docker-compose.yml` (base, 31 services), `infra/docker-compose.prod.yml` (overlay, adds 1 and changes 12), `infra/edge/`, `infra/ory/`, `infra/pump/`, `infra/postgres/`, `infra/scripts/`, `observability/`, `install.sh`, `rebuild.sh`.
+Sources: `infra/docker-compose.yml` (base, 29 services: 25 by default, `mailpit` under `--profile dev`, 3 gateway-node services under `--profile multinode`), `infra/docker-compose.prod.yml` (overlay, adds 1 and changes 14), `infra/edge/`, `infra/ory/`, `infra/pump/`, `infra/postgres/`, `infra/scripts/`, `observability/`, `install.sh`, `rebuild.sh`.
 
 Compose project name: `Open Gateway Infrastructure` (`name:` in the base file). Every container is named `open-gateway-<service>` (`container_name`), except `prod-preflight` (`open-gateway-prod-preflight`) which follows the same pattern.
 
@@ -16,7 +16,7 @@ flowchart LR
 
   subgraph host[Docker host - published ports]
     edge["edge (Caddy + Coraza WAF)<br/>TLS internal CA<br/>33000 33001 33005 33010 33012"]
-    tcp["33020 -> tyk-gateway:6000 (raw TCP, bypasses edge)"]
+    tcp["33020 -> tyk-gateway:6000 (raw TCP, bypasses edge, dev only)"]
   end
 
   subgraph ogn[open-gateway-network]
@@ -36,7 +36,7 @@ flowchart LR
     hydra["hydra :4444 public / :4445 admin"]
     kratos["kratos :4433 public / :4434 admin"]
     keto["keto :4466 read / :4467 write / :4468 metrics"]
-    mailpit["mailpit :1025 smtp / :8025 ui"]
+    mailpit["mailpit :1025 smtp / :8025 ui (dev profile only)"]
   end
 
   upstream([Tenant upstream APIs])
@@ -95,7 +95,7 @@ Defined at the bottom of `infra/docker-compose.yml`. Both are plain `bridge`, ne
 | Network | Members | Why |
 |---|---|---|
 | `open-gateway-network` | nearly everything, including tyk-gateway(s), tyk-pump, redis, prometheus, exporters, otel-collector | default app network |
-| `ory-internal` | postgres, hydra*, kratos*, keto*, mailpit, ory-db-init, edge, api, web (and `prod-preflight` in prod) | Hydra/Kratos/Keto admin APIs are unauthenticated. `tyk-gateway`/`tyk-pump` are deliberately NOT on this network, so a tenant `proxyUrl` pointed at a raw Ory container IP has no route (SSRF split, comment at top of the base file) |
+| `ory-internal` | postgres, hydra*, kratos*, keto*, mailpit (`--profile dev` only), ory-db-init, edge, api, web (and `prod-preflight` in prod) | Hydra/Kratos/Keto admin APIs are unauthenticated. `tyk-gateway`/`tyk-pump` are deliberately NOT on this network, so a tenant `proxyUrl` pointed at a raw Ory container IP has no route (SSRF split, comment at top of the base file) |
 
 Rule stated in the base file: never add a service to `open-gateway-network` that is unauthenticated or trusts the network origin of a request. The monitoring services (prometheus, cadvisor, exporters, blackbox) are the documented accepted exception. `node-exporter` uses `network_mode: host` and is on neither network.
 
@@ -110,15 +110,17 @@ Host-published ports only come from `ports:` entries. "expose" ports are contain
 | 33005 | all interfaces | edge:33005 -> `EDGE_GATEWAY_UPSTREAMS` (`tyk-gateway:8080`) | edge | HTTPS, Tyk data plane |
 | 33010 | all interfaces | edge:33010 -> `hydra:4444` | edge | HTTPS, Hydra public |
 | 33012 | all interfaces | edge:33012 -> `kratos:4433` | edge | HTTPS, Kratos public |
-| 33020 | all interfaces (`"33020:6000"`) | tyk-gateway:6000 | tyk-gateway | raw TCP passthrough API (`ApiProtocol.TCP`); the one deliberate non-edge published port |
-| 33002 | `127.0.0.1` | postgres:5432 | postgres | loopback only |
-| 33003 | `127.0.0.1` | redis:6379 | redis | loopback only, unauthenticated in base file |
-| 33011 | `127.0.0.1` | hydra:4445 | hydra | admin API, unauthenticated |
-| 33013 | `127.0.0.1` | kratos:4434 | kratos | admin API, unauthenticated |
-| 33014 | `127.0.0.1` | keto:4466 | keto | read API, unauthenticated |
-| 33015 | `127.0.0.1` | keto:4467 | keto | write API, unauthenticated |
-| 33016 | `127.0.0.1` | mailpit:8025 | mailpit | web UI/API for caught mail |
+| 33020 | all interfaces (`"33020:6000"`) | tyk-gateway:6000 | tyk-gateway | raw TCP passthrough API (`ApiProtocol.TCP`); the one deliberate non-edge published port. **Dev only**: the prod overlay resets it |
+| 33002 | `127.0.0.1` | postgres:5432 | postgres | loopback only. **Dev only**: the prod overlay resets it |
+| 33003 | `127.0.0.1` | redis:6379 | redis | loopback only, unauthenticated in base file. **Dev only** |
+| 33011 | `127.0.0.1` | hydra:4445 | hydra | admin API, unauthenticated. **Dev only** |
+| 33013 | `127.0.0.1` | kratos:4434 | kratos | admin API, unauthenticated. **Dev only**: the prod overlay resets it |
+| 33014 | `127.0.0.1` | keto:4466 | keto | read API, unauthenticated. **Dev only** |
+| 33015 | `127.0.0.1` | keto:4467 | keto | write API, unauthenticated. **Dev only** |
+| 33016 | `127.0.0.1` | mailpit:8025 | mailpit | web UI/API for caught mail. Exists only under `--profile dev` |
 | 9100 | `172.17.0.1` (docker0; `NODE_EXPORTER_LISTEN_ADDRESS`) | host netns | node-exporter | not a compose-networked port; refuses LAN/loopback |
+
+In production (base + `docker-compose.prod.yml`) the published set is the edge's five ports and nothing else: `docker compose ... config` renders exactly five `ports:` entries, and `infra/scripts/check-prod-ports.sh` asserts it (and the Compose version) before every deploy. "Dev only" above means the overlay resets the mapping with `ports: !reset []`; the services keep listening inside their networks.
 
 Not published (internal only): `web:3000`, `api:4000`, `tyk-gateway:8080` (data) and `:8081` (control API), `tyk-pump:8083` (health) and `:9090` (pump's own Prometheus endpoint, scraped as job `tyk-pump`), `edge:9180` (internal metrics listener), `edge:2019` (Caddy admin, loopback inside the container), `otel-collector:4317/4318/8889/8888`, `prometheus:9090`, `blackbox:9115`, `postgres-exporter:9187`, `redis-exporter:9121`, `cadvisor:8080`, `mailpit:1025`, `hydra:4444`, `kratos:4433`, `keto:4468` (metrics).
 
@@ -162,10 +164,10 @@ Backup and restore: `infra/scripts/pg-backup.sh` (loop) and `infra/scripts/pg-re
 | Service | Image | Purpose | Ports | Volumes | depends_on / health | Networks |
 |---|---|---|---|---|---|---|
 | `tyk-gateway-init` | `alpine:3` | One-shot: for `/apps` and `/policies`: `chown -R 65532:65532`, `chmod 0755`, `touch .keep`, chown `.keep` | none | `tyk_apps:/apps`, `tyk_policies:/policies` | none | open-gateway-network |
-| `tyk-gateway` | `tykio/tyk-gateway:v5.15.0` | Tyk OSS gateway (no Tyk Dashboard). Config is entirely env (`x-tyk-gateway-env` anchor) | `expose` 8080; publishes `33020:6000` | `tyk_apps:/opt/tyk-gateway/apps`; `tyk_policies:/opt/tyk-gateway/policies` | redis healthy, `tyk-gateway-init` completed. **No healthcheck** (distroless) | open-gateway-network |
+| `tyk-gateway` | `tykio/tyk-gateway:v5.15.0` | Tyk OSS gateway (no Tyk Dashboard). Config is entirely env (`x-tyk-gateway-env` anchor) | `expose` 8080; publishes `33020:6000` (dev only, reset in prod) | `tyk_apps:/opt/tyk-gateway/apps`; `tyk_policies:/opt/tyk-gateway/policies` | redis healthy, `tyk-gateway-init` completed. **No healthcheck** (distroless) | open-gateway-network |
 | `tyk-gateway-multinode-init`, `tyk-gateway-2`, `tyk-gateway-3` | `alpine:3` / `tykio/tyk-gateway:v5.15.0` | Only with `--profile multinode`. Each extra node has its own apps/policies volumes (`tyk_apps_2`, `tyk_policies_2`, `tyk_apps_3`, `tyk_policies_3`) | `expose` 8080 only | per-node volumes | redis healthy, multinode-init completed | open-gateway-network |
 | `tyk-pump` | `tykio/tyk-pump-docker-pub:v1.17.0` | Drains Redis analytics into Postgres | none published | `./pump/pump.conf:/opt/tyk-pump/pump.conf:ro` | redis healthy, postgres healthy. **No healthcheck** (distroless) | open-gateway-network |
-| `tyk-healthcheck` | `curlimages/curl:8.15.0`, `sleep infinity` | Sidecar giving compose a health signal: `curl -sf http://tyk-gateway:8081/hello && curl -sf http://tyk-pump:8083/health` (5 s, 12 retries) | none | none | `depends_on: tyk-gateway, tyk-pump` | open-gateway-network |
+The `tyk-healthcheck` curl sidecar that used to poll `tyk-gateway:8081/hello` and `tyk-pump:8083/health` was removed: nothing depended on it or alerted on it, and blackbox probes the same two endpoints continuously (`tyk-hello`, `tyk-hello-redis`, `pump-health` → `TykNodeDown`, `PumpHealthFailing`).
 
 Tyk env (anchor `x-tyk-gateway-env`; identical for every node so drift detection works):
 `TYK_GW_LISTENPORT=8080`, `TYK_GW_CONTROLAPIPORT=8081` (control API `/tyk/*` and `/hello` move here and are never published), `TYK_GW_SECRET` (default `tyk-gateway-secret`, dev only; prod overlay's preflight rejects it), `TYK_GW_USEDBAPPCONFIGS=false` (definitions are files), `TYK_GW_STORAGE_TYPE/HOST/PORT=redis/redis/6379`, `TYK_GW_ALLOWINSECURECONFIGS=true`, `TYK_GW_HTTPSERVEROPTIONS_ENABLEWEBSOCKETS=true`, `TYK_GW_DISABLEPORTWHITELIST=true` (needed for `protocol:"tcp"` listen ports), analytics on (`ENABLEANALYTICS`, empty `ANALYTICSCONFIG_TYPE`, `STORAGEEXPIRATIONTIME=3600`, detailed recording off), `TYK_GW_HASHKEYS=true`, `TYK_GW_ENFORCEORGQUOTAS=true` and `TYK_GW_ENFORCEORGDATAAGE=true` (both required for per-tenant org cutoff), file-backed policies (`POLICYSOURCE=file`, `POLICYPATH=/opt/tyk-gateway/policies`, `ALLOWEXPLICITPOLICYID=true`), OpenTelemetry to `otel-collector:4317` (gRPC, `simple` span processor, `AlwaysOn`, resource `open-gateway-tyk`).
@@ -180,16 +182,16 @@ Pump: `infra/pump/pump.conf` defines three pumps: `postgres` (`sql`, batch 1000,
 |---|---|---|---|---|---|---|
 | `hydra-migrate` | `oryd/hydra:v26.2.0` | One-shot `migrate sql -e --yes` | none | none | `ory-db-init` completed | ory-internal |
 | `hydra` | `oryd/hydra:v26.2.0` | OAuth2/OIDC, JWT access tokens. `serve all -c /etc/config/hydra.yml` (no `--dev`; TLS terminated at edge) | `expose` 4444; `127.0.0.1:33011:4445` | `./ory/hydra/hydra.yml:/etc/config/hydra.yml:ro` | `hydra-migrate` completed. healthcheck `wget http://127.0.0.1:4445/health/ready` | ory-internal |
-| `mailpit` | `axllent/mailpit:v1.21.3` | SMTP catcher for Kratos courier | `expose` 1025; `127.0.0.1:33016:8025` | none | healthcheck `wget http://127.0.0.1:8025/readyz` | ory-internal |
+| `mailpit` | `axllent/mailpit:v1.21.3` | SMTP catcher for Kratos courier. **Dev only**: `profiles: ["dev"]`, started by `install.sh` / `rebuild.sh` (`--profile dev`); the prod overlay does not start it | `expose` 1025; `127.0.0.1:33016:8025` | none | healthcheck `wget http://127.0.0.1:8025/readyz` | ory-internal |
 | `kratos-migrate` | `oryd/kratos:v26.2.0` | One-shot migration | none | none | `ory-db-init` completed | ory-internal |
-| `kratos` | `oryd/kratos:v26.2.0` | Identities, self-service flows (headless). `serve all --dev --watch-courier -c ...` | `expose` 4433; `127.0.0.1:33013:4434` | `./ory/kratos:/etc/config/kratos:ro` | `kratos-migrate` completed, `mailpit` healthy. healthcheck `wget http://127.0.0.1:4434/health/ready` | ory-internal |
+| `kratos` | `oryd/kratos:v26.2.0` | Identities, self-service flows (headless). `serve all --dev --watch-courier -c ...` | `expose` 4433; `127.0.0.1:33013:4434` | `./ory/kratos:/etc/config/kratos:ro` | `kratos-migrate` completed; `mailpit` healthy when the dev profile is on (`required: false`, so compose drops the edge without it). healthcheck `wget http://127.0.0.1:4434/health/ready` | ory-internal |
 | `keto-migrate` | `oryd/keto:v26.2.0` | One-shot `migrate up --yes -c ...` | none | `./ory/keto:/etc/config/keto:ro` | `ory-db-init` completed | ory-internal |
 | `keto` | `oryd/keto:v26.2.0` | Relation-tuple authorization (tenant membership) | `127.0.0.1:33014:4466`, `127.0.0.1:33015:4467` | `./ory/keto:/etc/config/keto:ro` | `keto-migrate` completed. healthcheck `wget http://127.0.0.1:4466/health/ready` | ory-internal |
 
 Config files:
 
 - `infra/ory/hydra/hydra.yml`: issuer `https://localhost:33010/`; login/consent/logout/error URLs on `https://localhost:33000/oauth2/*`; `strategies.access_token: jwt`; TTLs access 1h, refresh 720h, id 1h, auth code 10m; allowed top-level claims `pol`, `tid`; `serve.tls.allow_termination_from` = 10/8, 172.16/12, 192.168/16; `secrets: {}` (secrets come from env).
-- `infra/ory/kratos/kratos.yml`: public base `https://localhost:33012/` with CORS for `https://localhost:33000`; admin base `http://localhost:33013/`; password and code methods; argon2 hasher; UI URLs under `https://localhost:33000/auth/*`; session lifespan 24h, cookie SameSite Lax; courier SMTP `smtp://mailpit:1025/...` (overridden by env `COURIER_SMTP_CONNECTION_URI` from `KRATOS_SMTP_URI`); schema `identity.schema.json`.
+- `infra/ory/kratos/kratos.yml`: public base `https://localhost:33012/` with CORS for `https://localhost:33000`; admin base `http://localhost:33013/`; password and code methods; argon2 hasher; UI URLs under `https://localhost:33000/auth/*`; session lifespan 24h, cookie SameSite Lax; courier SMTP `smtp://mailpit:1025/...` (overridden by env `COURIER_SMTP_CONNECTION_URI` from `KRATOS_SMTP_URI`; the Mailpit address is a dev default, and the prod overlay requires `KRATOS_SMTP_URI`); `from_address: no-reply@open-gateway.local`; schema `identity.schema.json`.
 - `infra/ory/keto/keto.yml`: namespaces from `namespaces.ts`; read 4466, write 4467, metrics 4468.
 - `infra/ory/init-db.sql`: creates the three DBs.
 - All URLs above are hard-coded to `localhost:330xx`; a deployment on a different origin has to edit these files (unverified whether any templating exists; none seen).
@@ -205,7 +207,7 @@ Config files:
 | `blackbox` | `prom/blackbox-exporter:v0.28.0@sha256:...` | Synthetic probes; modules in `observability/blackbox.yml` (`tyk_hello`, `tyk_hello_redis`, `http_2xx`, `http_2xx_redirect`, `oidc_discovery`, `oidc_discovery_insecure`, `tcp_connect`) | `expose` 9115 | `../observability/blackbox.yml`; `./edge:/etc/blackbox/edge:ro` | none | open-gateway-network |
 | `postgres-exporter` | `quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:...` | Postgres metrics as `og_monitor` | `expose` 9187 | none | postgres healthy; `pg-monitoring-init` `service_started` (deliberately not `completed_successfully`) | open-gateway-network |
 | `redis-exporter` | `oliver006/redis_exporter:v1.92.0@sha256:...` | Redis metrics, `--check-keys=analytics-*`, `/scrape` and key-value export disabled | `expose` 9121 | none | redis healthy | open-gateway-network |
-| `edge-healthcheck` | `curlimages/curl:8.15.0` | Sidecar: real HTTPS request to `https://localhost:33001/api/metrics` via `--connect-to localhost:33001:edge:33001`; uses `--cacert /edge/root.crt` if readable else `-k` | none | `./edge:/edge:ro` | `depends_on: edge` | open-gateway-network |
+The `edge-healthcheck` curl sidecar (a real HTTPS request to `edge:33001`) was removed. A TLS handshake on the edge is still exercised continuously and alerted on: by the api's own probe of `edge:33001` (`EDGE_TLS_PROBE`, feeding `EdgeCertificateMetricsAbsent` and `EdgeCertificateRenewalStalled`) and by the blackbox `oidc-availability` job through `edge:33010` (`OidcDiscoveryOrJwksFailing`). See `infra/edge/README.md`, "Health signals".
 
 Prometheus jobs in `observability/prometheus.yml` (15 s interval): `tyk-pump`, `open-gateway-api`, `otel-collector`, `prometheus`, `node`, `cadvisor`, `postgres`, `redis`, `edge`, `ory-hydra`, `ory-kratos`, `ory-keto` (via `edge:9180`), `otel-collector-self`, and blackbox-driven `tyk-hello`, `tyk-hello-redis`, `api-health`, `pump-health`, `ory-ready`, `web-login`, `oidc`, `oidc-availability`, `tcp-33020`. Alert/recording rules: `observability/rules/{containers,host,monitoring,open-gateway,services}.yml` plus `tests/`. There is no Alertmanager, so alerts are read off `ALERTS{alertstate="firing"}` in the Prometheus query API.
 
@@ -243,9 +245,11 @@ Usage (from the file header): `docker compose -f infra/docker-compose.yml -f inf
 
 | Service | Change vs base |
 |---|---|
-| `prod-preflight` (new) | `redis:7-alpine`, entrypoint `infra/scripts/prod-preflight.sh`. Runs to completion; api, web and all three gateways depend on `service_completed_successfully`. Depends on postgres healthy and kratos started. Checks (each prints `ok`/bad, none short-circuits; read from `infra/scripts/prod-preflight.sh`): `NODE_ENV=production`; `TYK_GW_SECRET` set, not the committed default, no whitespace; `REDIS_PASSWORD` set, no whitespace; Redis refuses unauthenticated `PING`; pump connection string carries a non-empty password; `infra/pump/pump.conf` has no baked password; `EDGE_IMAGE` is a 64-hex `@sha256:` digest; `PG_EXPORTER_PASSWORD` shape; the seeded `admin@opengateway.io` login no longer works (probed against Kratos). Later checks in the script were not individually read. |
-| `redis` | `command` replaced: adds `--requirepass ${REDIS_PASSWORD:?}` (keeps `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction`); `REDISCLI_AUTH` env so the healthcheck needs no `-a` |
-| `tyk-gateway`, `-2`, `-3` | `TYK_GW_STORAGE_PASSWORD=${REDIS_PASSWORD:?}`; depend on `prod-preflight` |
+| `prod-preflight` (new) | `redis:7-alpine`, entrypoint `infra/scripts/prod-preflight.sh`. Runs to completion; api, web and all three gateways depend on `service_completed_successfully`. Depends on postgres healthy and kratos **healthy**. Checks (each prints `ok`/`FAIL`, none short-circuits; read from `infra/scripts/prod-preflight.sh`, pinned by `infra/scripts/prod-preflight.check.sh`): `NODE_ENV=production` (fed from the shared `x-node-env` anchor); `TYK_GW_SECRET` set, not the committed default, no whitespace, 32+ characters; `REDIS_PASSWORD` (32+), `DB_PASS` (16+) and `PG_EXPORTER_PASSWORD` (32+) set, no whitespace and only `A-Za-z0-9._~-` (spliced raw into URLs and command lines); Redis refuses an unauthenticated `PING` **and** accepts `REDIS_PASSWORD`; pump connection string carries a non-empty password; `infra/pump/pump.conf` has no baked password; `EDGE_IMAGE` is a 64-hex `@sha256:` digest; the seeded `admin@opengateway.io` login is **explicitly rejected** by Kratos (HTTP 400 as the first stderr line, non-zero wget exit; a session token anywhere in the answer fails; a 5xx, a 502 whose text says 400, a refused connection, a `-T` timeout or an empty answer is "inconclusive" and also fails); `KRATOS_SMTP_URI` parsed as Go does (authority ends at `/`, `?` or `#`, host after the last `@`, host:port shape required, so an unencoded `/ ? # @` in the credentials is rejected with a percent-encode hint; host not empty, loopback, unspecified, a bare number or Mailpit; `skip_ssl_verify` / `disable_starttls` only with an explicit false, no `%` in the query; the URI is never printed; reachability is not tested); `KRATOS_COOKIE_SECURE` and `COOKIE_SECURE` are `true`. Every `wget` is bounded by `-T $WGET_TIMEOUT` (10 s). |
+| `redis` | `command` replaced: adds `--requirepass ${REDIS_PASSWORD:?}` (keeps `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction`); `REDISCLI_AUTH` env so the healthcheck needs no `-a`; `ports: !reset []` (no host port 33003) |
+| `kratos` | `COURIER_SMTP_CONNECTION_URI=${KRATOS_SMTP_URI:?}`: no Mailpit default in production; `SESSION_COOKIE_SECURE=${KRATOS_COOKIE_SECURE:-true}` (the base default is `false`); `ports: !reset []` (no host port 33013) |
+| `postgres`, `hydra`, `keto` | `ports: !reset []` (no host ports 33002, 33011, 33014, 33015) |
+| `tyk-gateway`, `-2`, `-3` | `TYK_GW_STORAGE_PASSWORD=${REDIS_PASSWORD:?}`; depend on `prod-preflight`. `tyk-gateway` also resets `ports` (no host port 33020) |
 | `tyk-pump` | `TYK_PMP_ANALYTICSSTORAGECONFIG_PASSWORD=${REDIS_PASSWORD:?}` |
 | `pg-monitoring-init`, `postgres-exporter` | `PG_EXPORTER_PASSWORD` becomes required (`:?`) |
 | `redis-exporter` | `REDIS_PASSWORD` |
@@ -253,17 +257,22 @@ Usage (from the file header): `docker compose -f infra/docker-compose.yml -f inf
 | `api` | `image: ${API_IMAGE:-open-gateway-api:local}`; `NODE_ENV=production` (also switches the throttler from 1000 to 100 req/min, `apps/api/src/app.module.ts`); `REDIS_URL` with password; `TYK_ADMIN_URLS` default the three nodes' `:8081/tyk`; depends on `prod-preflight` |
 | `web` | `image: ${WEB_IMAGE:-open-gateway-web:local}`; `NODE_ENV=production` (this is also what makes the web session cookies `Secure`); depends on `prod-preflight` |
 
-The overlay repeats the `x-logging` anchor because YAML anchors do not cross files.
+The overlay repeats the `x-logging` anchor because YAML anchors do not cross files, and defines one more, `x-node-env`, that feeds `NODE_ENV` to `prod-preflight`, `api` and `web` so the preflight's check reads the real value. It uses the `!reset` YAML tag, so the Docker Compose on the deploy host has to understand it (2.24 or later; only v5.1.4 was run against it; an older one may ignore the tag and publish the development ports, so `check-prod-ports.sh` asserts the version and the rendered port list). The post-deploy login check, which used to need host-published Postgres and Kratos admin ports, now runs inside the `api` container (`docs/go-live.md`, step 10).
+
+The runbook for taking this overlay live, with every input the owner has to supply, is `docs/go-live.md`; `infra/.env.production.example` lists the variables.
 
 ## 8. Scripts and entrypoints
 
 | Path | What it is |
 |---|---|
-| `install.sh` (repo root) | Full installer v2.0.0. Checks Node >= 20, pnpm >= 9, Docker; generates secrets; writes `infra/.env`, `apps/api/.env.local`, `apps/web/.env.local` (all `chmod 600`); `pnpm install`; builds; `prisma generate`; `docker compose -f infra/docker-compose.yml up -d --build` (base file only, no prod overlay, no multinode profile); waits for health; runs `prisma migrate deploy` and the seed inside the api container; runs `migrate-users-to-kratos.ts`; prints URLs. Flags: `--non-interactive`, `--debug`, `--verbose`, `--help`; `--with-tyk` is a deprecated no-op. Logs to `.install-logs/`. Re-run is safe: an existing `infra/.env` is only appended to (missing managed keys), values are never rotated. |
-| `rebuild.sh` (repo root) | `docker compose ... build` + `up -d` for selected services (interactive list, `--all`, or names), then waits up to 60 s for `(healthy)` where a healthcheck exists. Uses the base file only. Never runs `down -v`. Because it builds from the working tree, uncommitted compose changes go live. |
+| `install.sh` (repo root) | Full installer v2.0.0. Checks Node >= 20, pnpm >= 9, Docker; generates secrets; writes `infra/.env`, `apps/api/.env.local`, `apps/web/.env.local` (all `chmod 600`); `pnpm install`; builds; `prisma generate`; `docker compose -f infra/docker-compose.yml --profile dev up -d --build` (base file only, no prod overlay, no multinode profile; `dev` starts Mailpit). It also writes `COMPOSE_PROFILES=dev` into `infra/.env` (appended on a re-run if missing) so a bare `docker compose up` / `pnpm infra:up` starts Mailpit too; an explicit `--profile` flag replaces that variable rather than adding to it; waits for health; runs `prisma migrate deploy` and the seed inside the api container; runs `migrate-users-to-kratos.ts`; prints URLs. Flags: `--non-interactive`, `--debug`, `--verbose`, `--help` (the old `--with-tyk` no-op was removed). Logs to `.install-logs/`. Re-run is safe: an existing `infra/.env` is only appended to (missing managed keys), values are never rotated. |
+| `rebuild.sh` (repo root) | `docker compose ... build` + `up -d` for selected services (interactive list, `--all`, or names), then waits up to 60 s for `(healthy)` where a healthcheck exists. Uses the base file only, with `--profile dev` so `mailpit` is listed and selectable. Never runs `down -v`. Because it builds from the working tree, uncommitted compose changes go live. |
 | `infra/scripts/pg-backup.sh` | `postgres-backup` entrypoint |
 | `infra/scripts/pg-restore-scratch.sh` | manual restore drill |
 | `infra/scripts/prod-preflight.sh` | `prod-preflight` entrypoint; also runnable standalone |
+| `infra/scripts/prod-preflight.check.sh` | Pure-shell test of the preflight (130 assertions): runs the real script against fake `wget` / `redis-cli` whose behaviour was measured on busybox 1.37, asserting each check's line and exit status; `PREFLIGHT=<path>` points it at a variant. Run it in the image the preflight uses: `docker run --rm --network none -v "$PWD/infra/scripts:/s:ro" redis:7-alpine sh /s/prod-preflight.check.sh` (this is what CI does) |
+| `infra/scripts/check-prod-ports.sh` | Asserts Docker Compose >= 2.24 and that base + prod renders exactly the edge's five published ports, with and without `--profile`; `deploy-staging.sh` runs it before `up` and CI runs it with dummy secrets. It cannot see node-exporter, which listens on the docker0 address from the host network namespace |
+| `infra/scripts/check-prod-ports.check.sh` | Shim-based test of the guard above (versions, extra or missing ports, random ports, render failure, dev profile leaking in) |
 | `infra/scripts/deploy-staging.sh` | run on the staging host, piped over SSH by `.github/workflows/cd-staging.yml` |
 | `infra/scripts/setup.sh` | local dev bootstrap (**unverified** contents beyond the header) |
 | `infra/scripts/check-docs-paths.sh`, `check-no-k8s.sh`, `check-page-gates.sh`, `check-locale-keys.mjs` | CI guards (dead doc links in README/CHANGELOG/deployment.md; no helm/k8s dirs; every dashboard page uses `PagePermissionGate`; locale key parity) |
@@ -273,13 +282,14 @@ CI workflows: `.github/workflows/ci.yml`, `.github/workflows/cd-staging.yml`.
 
 ## 9. Gotchas
 
-- **Tyk images are distroless** (uid 65532, no shell/curl/wget). `tyk-gateway`, `tyk-pump` have no compose healthcheck; dependents use `service_started`, and `docker compose ps` shows them as `running`, not `healthy`. Use the `tyk-healthcheck` sidecar's state, `/hello` on 8081, or `GET /api/gateway/status`.
+- **Tyk images are distroless** (uid 65532, no shell/curl/wget). `tyk-gateway`, `tyk-pump` have no compose healthcheck; dependents use `service_started`, and `docker compose ps` shows them as `running`, not `healthy`. Use `/hello` on 8081, the blackbox `tyk-hello` / `pump-health` probes in Prometheus, or `GET /api/gateway/status`.
 - **`tyk_apps` / `tyk_policies` ownership.** A named volume's mount point is root-owned, so `POST /tyk/apis` fails with "file object creation failed". `tyk-gateway-init` chowns to 65532 and touches `.keep`. The `.keep` matters: Docker copies image content into a volume only while it is empty, so chowning an empty volume was undone on first boot. Multinode has its own init for the `_2`/`_3` volumes.
-- **Ports 33000-33020 map.** The five app ports are the edge's HTTPS listeners with the same numbers as the old plain-HTTP ones. 33020 is the only non-edge published app port (TCP APIs cannot be WAF-inspected). Do not add `ports:` to `web`, `api`, `hydra`, `kratos` or `tyk-gateway:8080`: a client reaching Tyk directly forges `X-Forwarded-For` and defeats per-client rate limits and the IP deny list. Docs that say the host mapping is `33005:8080` are outdated.
-- **Loopback-only** (`127.0.0.1`): 33002, 33003, 33011, 33013, 33014, 33015, 33016. Ory admin APIs are unauthenticated.
+- **Ports 33000-33020 map.** The five app ports are the edge's HTTPS listeners with the same numbers as the old plain-HTTP ones. 33020 is the only non-edge published app port in the dev stack (TCP APIs cannot be WAF-inspected); the prod overlay does not publish it, so a TCP API in production needs its own published port (`docs/go-live.md`). Do not add `ports:` to `web`, `api`, `hydra`, `kratos` or `tyk-gateway:8080`: a client reaching Tyk directly forges `X-Forwarded-For` and defeats per-client rate limits and the IP deny list. Docs that say the host mapping is `33005:8080` are outdated.
+- **Loopback-only** (`127.0.0.1`): 33002, 33003, 33011, 33013, 33014, 33015, 33016 (the last only with `--profile dev`). Ory admin APIs are unauthenticated. Production publishes none of them: the only host ports are the edge's five.
+- **Mailpit follows `COMPOSE_PROFILES`, and an explicit `--profile` replaces it.** `install.sh` writes `COMPOSE_PROFILES=dev` into `infra/.env`, so a bare `docker compose up` / `pnpm infra:up` (and `down`) manages Mailpit. Passing `--profile multinode` on the command line REPLACES that variable (measured on Compose 5.1.4: with it, no Mailpit is rendered), so a dev stack that wants both passes `--profile dev --profile multinode`; a `down` without `dev` leaves a running Mailpit alone. A server must not carry `COMPOSE_PROFILES=dev`: `check-prod-ports.sh` renders without `--profile` precisely so that it would show.
 - **Caddyfile is a bind mount and is read once at start.** Editing it does not change the running config nor the image digest. Reload/recreate `edge` and verify with `docker exec open-gateway-edge wget -qO- http://127.0.0.1:2019/config/`.
 - **WAF is `DetectionOnly`.** It logs, it does not block.
-- **`./edge` is mounted as a directory** into `api` and `blackbox` (and `edge-healthcheck`) on purpose: `infra/edge/root.crt` is git-ignored, and a bind mount of a missing file makes Docker create a root-owned directory at that path, breaking the README export step. The api reads the cert at `EDGE_ROOT_CERT_PATH=/etc/open-gateway/edge/root.crt` for the expiry gauge; `docker compose cp` keeps Caddy's `0600`, hence the required `chmod 644`.
+- **`./edge` is mounted as a directory** into `api` and `blackbox` on purpose: `infra/edge/root.crt` is git-ignored, and a bind mount of a missing file makes Docker create a root-owned directory at that path, breaking the README export step. The api reads the cert at `EDGE_ROOT_CERT_PATH=/etc/open-gateway/edge/root.crt` for the expiry gauge; `docker compose cp` keeps Caddy's `0600`, hence the required `chmod 644`.
 - **`infra/gateway/tyk.conf` is an empty directory**, not a config file (see 4.3).
 - **Kratos runs with `--dev`** in the base file (`serve all --dev --watch-courier`) and `SESSION_COOKIE_SECURE` defaults to `false` (`KRATOS_COOKIE_SECURE`). `--watch-courier` is required or verification/recovery mail is queued and never sent.
 - **`COOKIE_SECURE` is passed only to `api`, but the session cookies are set by `web`.** `web` has no `COOKIE_SECURE` in its compose environment and runs `NODE_ENV=development` in the base file, so `mq_access_token` / `mq_refresh_token` are issued without `Secure` on the default stack, despite HTTPS. The API never reads `COOKIE_SECURE` (see `docs/reference/configuration.md`). The prod overlay sets web `NODE_ENV=production`.

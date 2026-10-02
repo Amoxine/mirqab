@@ -87,26 +87,36 @@ docker compose -f infra/docker-compose.yml up -d edge
 # healthy again in ~7s by compose's own reckoning (the healthcheck interval rounds up the 4.5s)
 ```
 
-**Health signals — two, deliberately:**
+**Health signals — three, deliberately:**
 
 | Check | Where | Catches | Misses |
 |---|---|---|---|
 | `edge` healthcheck | in-container, Caddy admin API on `127.0.0.1:2019` | the process died or dropped its config | anything about TLS — it answers 200 while every handshake fails |
-| `edge-healthcheck` sidecar | `curlimages/curl`, over the network, real HTTPS | TLS handshake failure, an unreachable edge, an expired or unissuable leaf | nothing the first one catches |
+| the api's TLS probe | the `api` container dials `edge:33001` with SNI `localhost` on every `/api/metrics` scrape (`EDGE_TLS_PROBE`) | TLS handshake failure and an unreachable edge: the leaf gauges vanish and `EdgeCertificateMetricsAbsent` fires after 10m; a stalled renewal: `EdgeCertificateRenewalStalled` | trust — it connects with `rejectUnauthorized: false` |
+| blackbox job `oidc-availability` | Prometheus' `blackbox` container, real HTTPS to `edge:33010`, SNI `localhost`, `insecure_skip_verify` | a handshake that dies outright or an unreachable edge, through `OidcDiscoveryOrJwksFailing` (critical, 2m) | an expired leaf or a wrong CA, by design — see the verified `oidc` job |
 
-The sidecar is not a duplicate. `tls internal` issues its 12-hour leaves **lazily, at handshake
-time**, so a broken CA or a stalled renewal is invisible to a probe that never performs a handshake
-— which is exactly R14's silent-failure mode. Verified: with the edge up the sidecar's command
-exits 0; against an unreachable port it exits 7; against a certificate the CA it verifies with did
-not sign, 60. The in-container admin-API probe exits 0 in all three.
+The in-container probe alone is not enough, and the other two are why. `tls internal` issues its
+12-hour leaves **lazily, at handshake time**, so a broken CA or a stalled renewal is invisible to a
+probe that never performs a handshake — which is exactly R14's silent-failure mode. A real
+handshake from outside the container is the only thing that sees it, and both of the last two rows
+are one, run continuously and alerted on. (A `curlimages/curl` sidecar, `edge-healthcheck`, used to
+do the same once per 10 s and alert on nothing; it was removed as redundant. Its measured behaviour
+is the reference for what a handshake failure looks like: exit 7 against an unreachable port, 60
+against a certificate the verifying CA did not sign, while the admin-API probe exits 0 in all
+three.)
+
+The verified path — Prometheus' `oidc` job, with `ca_file` set to the exported `root.crt` — is data
+only: it makes an expired leaf or a wrong CA queryable (`probe_success`, `probe_ssl_earliest_cert_expiry`)
+but no rule alerts on it, because a fresh install has no exported root and would page forever.
 
 Renewal itself is watched by `EdgeCertificateRenewalStalled` (`observability/rules/`), which alerts
 on the **fraction of lifetime remaining** rather than a day count — a 12-hour certificate cannot be
 watched any other way.
 
 **When the edge is down**, nothing is reachable: web, api, the gateway data plane, Hydra and Kratos
-all publish through it and nothing else publishes at all. The one exception is the TCP passthrough
-port `33020`, which Tyk binds directly (WP27) and which an edge outage does not touch.
+all publish through it and nothing else publishes at all. The one exception, in the dev stack only,
+is the TCP passthrough port `33020`, which Tyk binds directly (WP27) and which an edge outage does
+not touch; `docker-compose.prod.yml` does not publish it.
 
 ## Trusting the CA (one-time, per client machine)
 

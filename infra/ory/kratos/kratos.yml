@@ -86,21 +86,27 @@ session:
   lifespan: 24h
   cookie:
     same_site: Lax
-    # Behind TLS set KRATOS_COOKIE_SECURE=true in infra/.env (compose passes it as
-    # SESSION_COOKIE_SECURE); it must stay false while the stack is plain HTTP.
+    # `secure` has no key in this file: compose passes KRATOS_COOKIE_SECURE as the SESSION_COOKIE_SECURE
+    # environment variable. The base file defaults it to false (the stack was once plain HTTP, and it
+    # must stay false there); docker-compose.prod.yml defaults it to TRUE and prod-preflight fails on
+    # anything else. That flag covers the SESSION cookie only. Kratos' separate cookie setting for its
+    # continuity and CSRF cookies is not set by anything here and follows `serve --dev`, so it stays off
+    # (per the go-live re-review; not checked against Kratos' schema here) — docs/go-live.md, gap 6.
     persistent: true
 
 courier:
-  # WP22: real by default — docker-compose.yml sets COURIER_SMTP_CONNECTION_URI to Mailpit
-  # (mailpit:1025, started alongside Kratos), a genuine SMTP server that actually receives what this
-  # sends, so recovery/verification CODES reach a mailbox instead of silently failing against a
+  # WP22: real by default in DEV — docker-compose.yml sets COURIER_SMTP_CONNECTION_URI to Mailpit
+  # (mailpit:1025, started under `--profile dev`), a genuine SMTP server that actually receives what
+  # this sends, so recovery/verification CODES reach a mailbox instead of silently failing against a
   # placeholder. Ory config files do NOT expand ${VARS}; env vars override config by key name, so
   # that env var — not this file — is the value actually in effect. This one only applies if Kratos
   # is ever run outside that compose file with the env var unset, and is kept pointed at Mailpit's
   # in-network address for the same reason rather than left as a placeholder.
-  # Override KRATOS_SMTP_URI in infra/.env to point at a real external SMTP server for an install
-  # that needs mail to leave the stack; mint links server-side via the admin API
-  # (POST /admin/recovery/link) is the other way out, for a deploy with no mail server at all.
+  # Production never uses this value: docker-compose.prod.yml requires KRATOS_SMTP_URI and
+  # prod-preflight rejects the Mailpit address. Set it in infra/.env to a real external SMTP server;
+  # mint links server-side via the admin API (POST /admin/recovery/link) is the other way out, for a
+  # deploy with no mail server at all. `from_address` below must be on a domain the SMTP provider
+  # is allowed to send for (SPF/DKIM) — docs/go-live.md.
   smtp:
     connection_uri: smtp://mailpit:1025/?skip_ssl_verify=true&disable_starttls=true
     from_address: no-reply@open-gateway.local

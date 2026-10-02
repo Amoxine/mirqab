@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { tykOrgIdFor } from '../src/index';
 import { PERMISSIONS } from './permissions';
+import { DEV_ADMIN_PASSWORD, resolveAdminCredentials } from './admin-credentials';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -108,6 +109,22 @@ async function writeKetoMembership(
 }
 
 async function main() {
+  // Resolved FIRST, before the first write: an unusable admin credential must stop the seed with
+  // nothing half-created, not fail at step 4 after roles and permissions have already been written.
+  // The gate fails closed (see ./admin-credentials.ts): the dev default needs a literal
+  // NODE_ENV=development|test and no ADMIN_*, so a host-side `pnpm db:seed` sets NODE_ENV itself.
+  const admin = resolveAdminCredentials(process.env);
+  if (!admin.ok) {
+    console.error('❌ Refusing to seed: the admin credentials are not usable.');
+    for (const problem of admin.errors) console.error(`   - ${problem}`);
+    console.error(
+      '   In production pass them to the seed container, e.g. `docker compose ... run --rm -e ADMIN_EMAIL ' +
+        '-e ADMIN_PASSWORD api npx prisma db seed` (docs/go-live.md). For a local development database ' +
+        'run it with NODE_ENV=development and neither variable set (docs/development.md).',
+    );
+    process.exit(1);
+  }
+
   console.log('🌱 Seeding database...');
 
   // ─── 1. Create all permissions (idempotent) ──────────────────────
@@ -178,9 +195,12 @@ async function main() {
 
   // ─── 4. Create default admin user (idempotent) ───────────────────
   console.log('  Creating default admin user...');
-  const adminEmail = 'admin@opengateway.io';
-  const adminPassword = 'Admin123!';
-  const passwordHash = await bcrypt.hash(adminPassword, 12);
+  const adminEmail = admin.email;
+  const passwordHash = await bcrypt.hash(admin.password, 12);
+  // Asked BEFORE the upsert, because the upsert below only writes the password when it CREATES the
+  // row: for an existing user it leaves the password alone but still reactivates the account and
+  // (next block) makes it super_admin. The log has to say which of the two happened.
+  const adminExisted = (await prisma.user.findUnique({ where: { email: adminEmail }, select: { id: true } })) !== null;
 
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
@@ -210,7 +230,18 @@ async function main() {
     },
   });
 
-  console.log(`  ✅ Admin user "${adminUser.email}" (password: ${adminPassword})`);
+  // Only the published dev default is ever echoed; an operator-chosen password must not reach logs.
+  if (adminExisted) {
+    console.log(
+      `  ✅ Admin user "${adminUser.email}" already existed: its password was NOT changed, ` +
+        'and it is now ACTIVE and super_admin of the default tenant',
+    );
+  } else {
+    console.log(
+      `  ✅ Admin user "${adminUser.email}" created` +
+        (admin.password === DEV_ADMIN_PASSWORD ? ` (password: ${admin.password})` : ' with the password from ADMIN_PASSWORD'),
+    );
+  }
 
   // ─── 5. Publish every membership to Keto (idempotent) ────────────
   // Authorization is fail-closed: the API resolves a session's tenant only if Keto confirms the

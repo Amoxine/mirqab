@@ -319,6 +319,11 @@ scrape_configs:
 
   # WP27's TCP passthrough (:33020 host-side, 6000 in-container) bypasses the edge and its WAF
   # entirely (EDGE-08) — this is the one gateway probe blackbox reaches directly, not through 9180.
+  #
+  # The `33020:6000` host mapping is a DEV demo port: docker-compose.prod.yml resets it, so in
+  # production nothing is published and this job dials tyk-gateway:6000 inside the network only.
+  # Either way it reads probe_success 0 until a `protocol: "tcp"` API definition is loaded, which is
+  # why no rule reads it (rules/services.yml, EDGE-08) — nothing fires on it in prod either.
   - job_name: tcp-33020
     metrics_path: /probe
     params:

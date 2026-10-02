@@ -13,8 +13,12 @@ packages/*/dist/
 .env
 .env.local
 .env.*.local
+# Every other `.env.<anything>` too (`infra/.env.production`, `.env.staging`, a backup copy): the
+# templates are the only tracked ones, re-included below by their `.example` suffix.
+.env.*
 !.env.example
 !.env.local.example
+!.env*.example
 
 # Turborepo
 .turbo/

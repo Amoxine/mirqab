@@ -65,6 +65,12 @@ fi
 
 compose=(docker compose --env-file "$tmp" -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --profile multinode)
 
+# Before anything is pulled or recreated: prove THIS Compose, reading THIS env, publishes only the edge's
+# five ports. The overlay removes the development ports with `ports: !reset []`, and a Compose that
+# does not implement the tag may ignore it silently, which publishes the unauthenticated Kratos admin
+# API again. A failure here changes no state: $tmp is a temp file and nothing has been pulled.
+bash infra/scripts/check-prod-ports.sh --env-file "$tmp"
+
 # ── CTR-09 textfile metric: image + digest actually running, best-effort ────────────────────────
 # Volume resolved the same way pg-restore-scratch.sh resolves the primary's data volume: never a
 # guessed name, always read off a container Docker already knows is part of this stack.

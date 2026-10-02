@@ -59,7 +59,7 @@ modules:
   #
   # C1 (obs-w2): the container mounts the `./edge` DIRECTORY at /etc/blackbox/edge:ro, not the file
   # directly — root.crt is per-install and git-ignored, and a file bind-mount of a missing path
-  # makes Docker create a directory there instead, which breaks edge-healthcheck the same way.
+  # makes Docker create a directory there instead, which breaks the README's root.crt export step.
   # Without an exported root.crt (infra/edge/README.md), this module's ca_file read fails and only
   # this probe is affected — every other module here is untouched by that.
   #

@@ -46,7 +46,8 @@ Never use `:latest` — locally it resolves to a stale 2021 build (v3.0.4).
 ## Quick Start
 
 ```bash
-# From project root
+# From project root. (infra/.env from install.sh holds COMPOSE_PROFILES=dev, which also starts the
+# development mail sink Mailpit; an explicit --profile flag would replace that, see docs/deployment.md.)
 docker compose -f infra/docker-compose.yml up -d
 
 # Check all containers are healthy

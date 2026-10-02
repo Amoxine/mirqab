@@ -2,6 +2,11 @@
 
 > Production deployment for MIRQAB — SaaS Admin Dashboard for Tyk OSS
 
+> **Taking this stack live?** Follow the [go-live runbook](go-live.md): the inputs only the owner can
+> supply, the step list, every `localhost` touchpoint and the known gaps. The "Production Docker
+> Compose" and "NGINX Reverse Proxy Configuration" sections below are generic illustrations, not what
+> this repository deploys; it deploys `infra/docker-compose.yml` plus `infra/docker-compose.prod.yml`.
+
 ## Table of Contents
 
 1. [Environments](#environments)
@@ -47,6 +52,21 @@ pnpm infra:logs
 pnpm infra:down
 ```
 
+Mailpit, the mail sink Kratos sends recovery and verification mail to in development, is behind the
+`dev` profile and does not exist in production. `install.sh` writes `COMPOSE_PROFILES=dev` into the
+`infra/.env` it generates (appending it on a re-run if an older file lacks it), so a bare
+`docker compose -f infra/docker-compose.yml up -d`, which is all `pnpm infra:up` runs, starts it too, and
+`install.sh` and `rebuild.sh` also pass `--profile dev` explicitly. One thing to know: an explicit
+`--profile` on the command line **replaces** `COMPOSE_PROFILES` rather than adding to it, so to run the
+multinode profile in development and keep Mailpit, pass both:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile dev --profile multinode up -d
+```
+
+A server must never carry `COMPOSE_PROFILES=dev`: `infra/scripts/check-prod-ports.sh` fails on it, and
+`infra/.env.production.example` leaves it out.
+
 ### After redeploying `web`: run the login check
 
 A rebuilt `web` container can serve pages and pass its health checks while every login fails: an
@@ -54,8 +74,12 @@ image once shipped with the Prisma engine where `/oauth2/login` did not look, so
 500 and nothing that only fetched a page noticed. After any rebuild or redeploy of `web`, run:
 
 ```bash
-pnpm --filter @open-gateway/api test:e2e:login   # expect "11/11 checks passed" and exit 0
+pnpm --filter @open-gateway/api test:e2e:login   # development: expect "N/N checks passed" and exit 0
 ```
+
+On a production host, which publishes neither Postgres nor the Kratos admin API, the same script runs
+**inside the api container** instead (`docker cp` it in, `docker exec` it with the public URLs): the exact
+commands are in [go-live.md](go-live.md), step 10.
 
 It performs a real Kratos → Hydra → `web` login as a throwaway user against the running stack, then
 deletes that user and its Kratos identity. A non-zero exit, or a line starting `ABORTED:`, means the
@@ -64,7 +88,10 @@ redeploy is not done. Notes:
 - It targets the TLS edge (`https://localhost:33000` and friends) and trusts the edge CA through
   `infra/edge/root.crt` (export it as described in `infra/edge/README.md`). For another host or a
   plain-http stack, set `APP_URL`, `KRATOS_PUBLIC_URL`, `HYDRA_PUBLIC_URL` and `API_URL`.
-- It needs the host-published Postgres (`127.0.0.1:33002`), so it runs on the Docker host, not in CI.
+- Run from the host it needs the dev stack's loopback-published Postgres (`127.0.0.1:33002`) and Kratos
+  admin API (`127.0.0.1:33013`), so it runs on the Docker host, not in CI. Production publishes neither,
+  which is why the in-container form exists. A Ctrl-C or SIGTERM mid-run still removes the throwaway
+  identity, and a failed removal is reported as a failed check with the identity id.
 - It leaves its `LOGIN` audit row and prints the id (`audit rows left behind: #N LOGIN`); the row's
   user reads NULL afterwards because the user is deleted.
 - The staging CD health check (see CI/CD Pipeline below) fetches the API health URL and one page; it
@@ -656,7 +683,9 @@ into `infra/.env`, then `docker compose … pull` followed by `up -d`. Pull befo
 that cannot be fetched fails while the previous stack is still serving.
 
 `prod-preflight` gates the `up`, so a default secret or an `EDGE_IMAGE` that is not digest-pinned
-aborts the deploy rather than warning. The health check that follows is a real `curl --fail` retried
+aborts the deploy rather than warning. The overlay also requires `KRATOS_SMTP_URI` and `prod-preflight`
+rejects the development Mailpit address; the script rewrites only the three `*_IMAGE` lines, so the
+host's existing `infra/.env` must already hold a real SMTP URI (`infra/.env.production.example`). The health check that follows is a real `curl --fail` retried
 for up to 150 s; the job fails if staging never answers.
 
 The deploy job runs only when `vars.STAGING_DEPLOY` is `true`. A fork or a fresh clone has none of
@@ -843,7 +872,7 @@ Before deploying to production, verify ALL items:
 ### Application
 
 - [ ] All database migrations applied and tested
-- [ ] Default admin user created (password changed from seed)
+- [ ] First super_admin created by the seed from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (the production seed refuses the development default), imported into Kratos, and `prod-preflight` confirms `admin@opengateway.io` cannot sign in — see [go-live.md](go-live.md)
 - [ ] Environment variables validated (no missing required vars)
 - [ ] Error pages configured (404, 500)
 - [ ] Logging configured (structured JSON, correlation IDs)

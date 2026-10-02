@@ -58,6 +58,14 @@ COPY packages/config/package.json ./packages/config/
 # Copy Prisma schema (already generated in node_modules)
 COPY packages/database/prisma/ ./packages/database/prisma/
 
+# The seed lives in prisma/ but imports `../src/index` (for `tykOrgIdFor`), and `npx prisma db seed`
+# runs it from this tree through tsx, not from `dist/`. Without src/ here the seed died with
+# MODULE_NOT_FOUND before reaching its admin-credentials gate, so install.sh's seed step and the
+# production bootstrap in docs/go-live.md could never have run in this image. The relative imports of
+# seed.ts and admin-credentials.ts are checked against these COPY lines by
+# packages/database/prisma/seed-image-imports.check.ts, so a new import outside them fails `pnpm test`.
+COPY packages/database/src/ ./packages/database/src/
+
 # One-off maintenance scripts run through `docker compose run api` — install.sh calls
 # migrate-users-to-kratos.ts here right after seeding, so the seeded admin actually has a Kratos
 # identity to log in with. Without this the script isn't in the image at all.

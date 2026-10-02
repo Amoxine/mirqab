@@ -97,6 +97,15 @@ TYK_WEBHOOK_RELAY_SECRET=""
 # OG-OBS-02: the og_monitor role postgres-exporter logs in as.
 PG_EXPORTER_PASSWORD=""
 
+# Written into infra/.env so a bare `docker compose -f infra/docker-compose.yml up -d` (which is all
+# `pnpm infra:up` runs) starts the dev-only Mailpit too; without it Kratos mails a host that does not
+# exist and recovery codes vanish. Set unconditionally, not inherited from the caller's shell: this
+# file is the development flow. NEVER put it in a server's infra/.env (infra/.env.production.example
+# does not, and infra/scripts/check-prod-ports.sh fails on it). Note an explicit `--profile` on the
+# command line REPLACES this variable rather than adding to it, so `--profile multinode` needs
+# `--profile dev` beside it to keep Mailpit.
+COMPOSE_PROFILES="dev"
+
 NON_INTERACTIVE=false
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/infra/docker-compose.yml"
@@ -149,12 +158,12 @@ MANAGED_SECRETS=(
   REDIS_PASSWORD TYK_WEBHOOK_RELAY_SECRET PG_EXPORTER_PASSWORD
 )
 
-# Every key this script WRITES into infra/.env. The secrets plus EDGE_LAN_IP, which is not a
-# credential but is still ours to emit — and, like the secrets, is kept if the file already has it,
+# Every key this script WRITES into infra/.env. The secrets plus EDGE_LAN_IP and COMPOSE_PROFILES, which
+# are not credentials but are still ours to emit — and, like the secrets, are kept if the file already has them,
 # because auto-detection picks one interface and a multi-homed host may need a different one.
 # Each name here is also the shell variable holding its value, which is what lets the writer below
 # use `${!key}` instead of a case statement that would drift from this list.
-MANAGED_ENV_KEYS=( "${MANAGED_SECRETS[@]}" EDGE_LAN_IP )
+MANAGED_ENV_KEYS=( "${MANAGED_SECRETS[@]}" EDGE_LAN_IP COMPOSE_PROFILES )
 
 # A managed key written in a shape the strict parser cannot read is an ERROR, never an absence.
 #
@@ -315,7 +324,6 @@ generate_all_secrets
 for arg in "$@"; do
   case "$arg" in
     --non-interactive) NON_INTERACTIVE=true ;;
-    --with-tyk) ;; # deprecated no-op: the Tyk OSS gateway is always installed
     --debug) DEBUG=1; set -x ;;
     --verbose) VERBOSE=1 ;;
     --help|-h)
@@ -619,6 +627,8 @@ umask 077
   # WP26b edge: the host's LAN address, so `tls internal` also issues a certificate for
   # https://<lan-ip>:<port>. Not a secret; empty falls back to loopback-only listeners.
   printf 'EDGE_LAN_IP=%s\n' "$EDGE_LAN_IP"
+  # Development only: starts the Mailpit mail sink on a bare `docker compose up`. See the declaration.
+  printf 'COMPOSE_PROFILES=%s\n' "$COMPOSE_PROFILES"
 } > "${SCRIPT_DIR}/infra/.env"
 umask 022
 chmod 600 "${SCRIPT_DIR}/infra/.env"
@@ -700,8 +710,9 @@ success "Prisma client generated"
 # ─── 8. Start Full Stack ────────────────────────────────────────────────────
 step "Starting Full Stack via Docker Compose"
 
-# Build compose arguments array
-COMPOSE_ARGS_ARRAY=("-f" "$COMPOSE_FILE")
+# Build compose arguments array. `--profile dev` starts the dev-only Mailpit that Kratos mails to by
+# default; production (docs/go-live.md) never passes it and sets KRATOS_SMTP_URI instead.
+COMPOSE_ARGS_ARRAY=("-f" "$COMPOSE_FILE" "--profile" "dev")
 
 log "Building and starting all services..."
 DOCKER_LOG="${LOG_DIR}/docker-compose-$(date +%s).log"
@@ -962,18 +973,19 @@ echo -e "  🔐 Keto:   ${CYAN}localhost:${HOST_KETO_READ}${NC} (read), ${CYAN}l
 
 echo "" >&3
 
-echo -e "${BOLD} Default Credentials:${NC}" >&3
+echo -e "${BOLD} Development Credentials:${NC}" >&3
 echo -e "  Email:    ${CYAN}admin@opengateway.io${NC}" >&3
 echo -e "  Password: ${CYAN}Admin123!${NC}" >&3
-echo -e "  ${YELLOW}This is the seed default — change it after the first login.${NC}" >&3
+echo -e "  ${YELLOW}Development only — change it after the first login. Production refuses this${NC}" >&3
+echo -e "  ${YELLOW}login: set ADMIN_EMAIL / ADMIN_PASSWORD instead (docs/go-live.md).${NC}" >&3
 
 echo "" >&3
 echo -e "${BOLD} Quick Start Commands:${NC}" >&3
 echo -e "  Start development: ${CYAN}pnpm dev${NC}" >&3
-echo -e "  View logs:         ${CYAN}docker compose -f infra/docker-compose.yml logs -f${NC}" >&3
+echo -e "  View logs:         ${CYAN}docker compose -f infra/docker-compose.yml --profile dev logs -f${NC}" >&3
 echo -e "  Run tests:         ${CYAN}pnpm test${NC}" >&3
 echo -e "  Prisma Studio:     ${CYAN}pnpm db:studio${NC}" >&3
-echo -e "  Stop all:          ${CYAN}docker compose -f infra/docker-compose.yml down${NC}" >&3
+echo -e "  Stop all:          ${CYAN}docker compose -f infra/docker-compose.yml --profile dev down${NC}" >&3
 
 echo "" >&3
 echo -e "${BOLD} Documentation:${NC}" >&3

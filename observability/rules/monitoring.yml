@@ -88,6 +88,12 @@ groups:
       #   -----
       #   6,864 ≈ 6,900 expected total -> budget = 2 × 6,900 = 13,800, rounded to 14,000
       #
+      # Later change (go-live prep): tyk-healthcheck and edge-healthcheck were removed and mailpit
+      # moved behind the `dev` profile, so the container list above is stale. The steady-state count
+      # is 18 in production and 19 with `--profile dev`, i.e. 213 fewer cAdvisor series (71 × 3) in
+      # production than the 1,491 line assumes. The 14,000 budget is deliberately left alone — it is
+      # 2× the expectation, which this change only makes more generous.
+      #
       # Still a PLACEHOLDER for the postgres_exporter database-count gap: re-baseline again from
       # real prometheus_tsdb_head_series once every exporter is actually scraping in this stack
       # specifically, the same way 255 and node_exporter's 2,700 were.

@@ -1,0 +1,26 @@
+// Strict typecheck of the files tsconfig.json excludes (`prisma/`) and the repo's eslint ignores
+// (`packages/database/prisma/**`): the seed and the checks that guard its admin credentials. Run by
+// `pnpm --filter @open-gateway/database test`.
+//
+// `typeRoots` borrows @types/node from apps/api because this package does not depend on it, and
+// adding a dependency would change pnpm-lock.yaml. If that path stops existing, tsc says
+// "Cannot find type definition file for 'node'" and the test fails loudly rather than skipping.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "rootDir": ".",
+    "typeRoots": ["../../apps/api/node_modules/@types"],
+    "types": ["node"]
+  },
+  "include": [
+    "prisma/admin-credentials.ts",
+    "prisma/admin-credentials.check.ts",
+    "prisma/seed.ts",
+    "prisma/seed-source.check.ts",
+    "prisma/seed-image-imports.check.ts",
+    "prisma/seed-refusal.check.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
