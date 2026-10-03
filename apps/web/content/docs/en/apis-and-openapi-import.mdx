@@ -13,15 +13,16 @@ manage APIs under **APIs**. Viewing needs the `api:read` permission; without it 
 |---|---|---|---|
 | Create | **Create API** on the APIs page or the dashboard home | `api:create` | Button hidden |
 | Import | **Import OpenAPI** on the APIs page | `api:create` | Button hidden |
-| Edit, Activate, Disable | Open the API, then **Edit**, **Activate** or **Disable** | `api:update` | Buttons hidden |
-| Delete | Open the API, then **Delete** | `api:delete` | Button hidden |
+| Edit, Activate, Disable | The row menu on the APIs list, or open the API, then **Edit**, **Activate** or **Disable** | `api:update` | Actions hidden |
+| Delete | The row menu, or open the API, then **Delete** | `api:delete` | Action hidden |
 
 The **Edit API** sheet holds name, auth type, upstream URL, listen path, a rate limit (0 means
 unlimited), CORS settings and **Do not track**. The slug cannot change after creation. Saving pushes
 the change to the gateway.
 
 **Delete** asks you to confirm in the **Delete API?** dialog. An API with active keys cannot be deleted:
-revoke those keys first. It is also refused while OAuth2 clients use the API, or while a default version still has versions. The dialog also says the API is removed from the gateway.
+revoke those keys first. It is also refused while OAuth2 clients use the API, or while versions created
+through the API still exist. The dialog also says the API is removed from the gateway.
 
 ## Status and sync
 
@@ -48,16 +49,19 @@ Click **Import OpenAPI**. The wizard has three steps: document, check, import. N
 until you click **Import**.
 
 1. Choose the source: **File or text** (upload a file or paste it) or **From URL**. The document must
-   be OpenAPI 3.x, JSON or YAML, UTF-8 text, up to 5 MB.
+   be OpenAPI 3.x, JSON or YAML, UTF-8 text, up to 5 MB. It needs at least one server with an absolute http or https URL: it becomes the
+   upstream. Servers that point to internal addresses cannot be used. At most 5,000 operations are allowed.
 2. Click **Check document**. Errors block the import; warnings do not. The check shows the name,
    slug, listen path, upstream URL, endpoint count and a count per tag.
 3. If an API with the same slug or listen path exists, the wizard says so: enter a different **Slug
    (optional)** and check again. If the document lists several servers, pick the **Upstream server**.
    Click **Import**.
 
-The API name comes from the document title, and the slug and listen path come from the slug. MIRQAB
-then opens the API on its **Endpoints** tab. An imported API is **Draft** with **Auth type** **None**.
-Activate it, and change **Auth type** with **Edit** if callers need a key.
+The API name comes from the document title (cut at 100 characters). The slug comes from the title, or from the **Slug (optional)** you
+enter, cut at 60 characters, and the listen path is `/slug/`. MIRQAB then opens the API on its **Endpoints** tab.
+
+An imported API is **Draft** with **Auth type** **None**, which means no key is needed. If callers need a key, change **Auth type**
+with **Edit** before you **Activate** the API. Security schemes in the document are not turned into gateway authentication.
 
 ## Keep an API in step with its spec source
 
@@ -66,26 +70,30 @@ a newly detected version waits for a person to review it.
 
 1. Open the API's **Endpoints** tab. The **Specification source URL** card sits at the top.
 2. Click **Watch a URL**, enter the **Document URL** and choose how often to check: every 15 minutes,
-   every hour, every 6 hours or every 24 hours. The wizard offers the same choice through **Keep
-   checking this URL**.
+   every hour, every 6 hours or every 24 hours. The wizard offers the same choice through the **Keep
+   checking this URL** switch, which is on by default; the **Check** menu appears only while it is on.
 3. The card shows **State** (**Watching** or **Paused**), **Last checked**, **Next check** and
    **Last result**. **Check now** runs a check at once; a second check within 30 seconds is refused.
-   **Edit source** and **Remove** change or stop the watch.
+   **Edit source** and **Remove** change or stop the watch; in **Edit source**, the **Check on the schedule** switch pauses it.
 4. When the document changes, a banner reads **A new version of the specification is available** with
-   the counts added, removed and changed. The APIs list shows **Update available**, and the dashboard
-   home lists the API under **Specs with updates**.
+   the counts added, removed and changed. The banner also shows at the top of every other tab of the API page.
+   The APIs list shows **Update available**, and the dashboard home lists the API under **Specs with updates**.
 5. Click **Review** in the banner. The **Review the new version** sheet compares it with the current
    version. **Use this version** creates the next version and resyncs the API. **Dismiss** hides
    that content; a different change is proposed again.
 
-Limits shown in the messages: http or https only, no user name or password in the URL (put a token in
-the query string), at most 5 MB, at most 3 redirects, and at most 50 watched URLs per workspace.
+Limits: http or https only, no user name or password in the URL (put a token in the query string), and at
+most 2,048 characters. Internal and private addresses are refused unless your operator allows them. The
+download must finish within 10 seconds, and is limited to 5 MB and 3 redirects. At most 50 URLs can be
+watched per workspace.
 
 Watching later needs `api:update`, but importing from a URL starts watching by default with only `api:create`. With only `api:read` you see the card and the banner reads **View
 changes**, but **Use this version** and **Dismiss** are hidden.
 
-To replace the document yourself, click **Update specification** on the Endpoints tab, upload the new
-document, click **Compare**, then **Apply new version**. Settings of endpoints that stay are kept.
+To replace the document yourself, click **Update specification** on the Endpoints tab (it needs `api:update`), upload the new
+document, click **Compare**, then **Apply new version**. Settings of endpoints that stay are kept. **Apply new version** is disabled
+for a document identical to the current one, or one with error findings. When endpoints that have settings are removed, you must tick
+**I understand that these endpoints' settings will stop applying**; the same applies to **Use this version**.
 
 ## The Endpoints tab and endpoint controls
 
@@ -96,8 +104,8 @@ document**; with `api:update` you can click **Upload specification**.
 Two levels of control exist:
 
 - **Only allow declared endpoints.** Off, every path under the listen path reaches the upstream. On,
-  only the endpoints in the document answer and everything else gets 403. A dialog asks you to
-  confirm. This is the only setting that works as a hard boundary.
+  only the endpoints in the document answer: a path or a method the document does not declare gets 403, including HEAD
+  (OPTIONS is still answered). A dialog asks you to confirm. This is the only setting that works as a hard boundary.
 - **Per endpoint.** Use the edit control on an endpoint's row to open **Endpoint settings**.
 
 | Section | Control | What it does |
@@ -111,23 +119,26 @@ Two levels of control exist:
 | Responses | **Mock response** | Answers with a fixed response; the upstream is not called. |
 | Responses | **Validate request body** | Answers 422 for JSON that breaks the schema. Offered for POST, PUT and PATCH endpoints only. |
 
-Select several rows to open the bulk bar. Its **Actions** menu offers **Block**, **Unblock**, **Allow
+Select several rows, or choose a tag in the tag filter, to open the bulk bar. With a tag chosen, the bar also offers
+**Apply to all N endpoints tagged X** (it ignores the search). Its **Actions** menu offers **Block**, **Unblock**, **Allow
 without a key**, **Use the API's authentication** and the rate limit, timeout, size limit and cache
 settings. When a new version of the document drops an endpoint that had settings, a notice lists them as
 settings for endpoints no longer in the specification, and **Remove stale settings** deletes them.
 
-Changing these needs `api:update`. Without it, the rows open **Endpoint settings (read only)**.
+Changing these needs `api:update`. Without it, each row has an eye **View settings** button that opens **Endpoint settings (read only)**, and there is no row selection or bulk bar.
 
 ## Detailed recording and request search
 
 By default MIRQAB records the figures of each request, not its headers and bodies. To capture them for
-one API, open its **Designer** tab, open the **Detailed recording** card and turn on **Record full
-detail**. It is off by default because detailed records carry headers and bodies.
+one API, open its **Designer** tab, click the edit (pencil) control on the **Detailed recording** card, turn on **Record full
+detail** and click **Save**. This needs `api:update`. It is off by default because detailed records carry headers and bodies.
 
 - The API's **Traffic** tab then lists the captured requests and responses. It needs `api:update`.
   Values of fields whose names look like credentials are shown as `[REDACTED]`.
-- **Request search** under Analytics searches only captured requests. When nothing was
+- **Request search**, its own item in the sidebar below Analytics, searches only captured requests. When nothing was
   captured in the chosen window, it says so and tells you to turn on detailed recording for an API. It needs both `analytics:read`
   and `api:update`. See [Searching traffic](/docs/searching-traffic).
 
 Next: [Keys and plans](/docs/keys-and-plans) and [Getting started](/docs/getting-started).
+
+Verified against commit e4f3acc.

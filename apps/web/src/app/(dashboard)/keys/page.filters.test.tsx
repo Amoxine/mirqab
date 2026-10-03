@@ -7,6 +7,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import apis from '@/messages/en/apis.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import keys from '@/messages/en/keys.json';
 import plans from '@/messages/en/plans.json';
 import { mockFetch, ok } from '@/components/apis/endpoints/test-utils';
@@ -33,7 +34,7 @@ describe('Keys list filters', () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <NextIntlClientProvider locale="en" messages={{ keys, common, dashboard, apis, plans }}>
+        <NextIntlClientProvider locale="en" messages={{ keys, common, dashboard, docs, apis, plans }}>
           <KeysPage />
         </NextIntlClientProvider>
       </QueryClientProvider>,

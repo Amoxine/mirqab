@@ -15,7 +15,8 @@ session développeur, et une session de portail n’est pas acceptée par l’AP
 Chaque développeur s’inscrit dans une seule organisation. Sur **Créez votre compte développeur**, il saisit :
 
 - **Identifiant de l'organisation** : le slug de votre organisation, affiché sur la page **Organisations**.
-- **Nom complet**, **E-mail**, **Mot de passe** et **Confirmer le mot de passe**.
+- **Nom complet**, **E-mail**, **Mot de passe** et **Confirmer le mot de passe**. Le mot de passe compte de 8 à 72 caractères, avec une majuscule, une
+  minuscule et un chiffre.
 
 Après **Créer le compte**, la page demande de consulter sa messagerie pour vérifier le compte, puis de se connecter. La page
 **Connexion** propose aussi **Mot de passe oublié ?**. L’en-tête contient **Catalogue**, **Mes applications**
@@ -25,11 +26,13 @@ et **Se déconnecter**.
 
 Le portail affiche ce que l’organisation a configuré :
 
-1. Passez chaque API en **Active**. Le portail ne sert la documentation que des API actives. Pour une API en brouillon ou
+1. Passez chaque API en **Active** et **Synchronisée**, pour que des clés puissent être émises. Le portail ne sert la documentation que des API actives. Pour une API en brouillon ou
    désactivée, sa section affiche une erreur au lieu de la documentation.
 2. Créez un **Produit** qui regroupe les API. Le catalogue liste tous les produits de l’organisation ; il n’y a pas
-   d’interrupteur de publication distinct. Un produit sans API affiche **Ce produit ne contient encore aucune API.**
-3. Créez au moins un **Forfait** et laissez **Actif** activé. Les forfaits inactifs sont masqués du portail.
+   d’interrupteur de publication distinct. Un produit sans API affiche **Ce produit ne contient encore aucune API.** sur sa page.
+3. Cochez l’option **Activer CORS** pour chaque API que les développeurs vont tester, et autorisez l’adresse du portail comme origine : **Requête de test** est une
+   requête envoyée du navigateur du développeur vers la passerelle.
+4. Créez au moins un **Forfait** et laissez **Actif** activé. Les forfaits inactifs sont masqués du portail.
 
 Voir [Clés et forfaits](/docs/keys-and-plans) pour les forfaits et les produits.
 
@@ -45,7 +48,7 @@ page du produit. Elle liste les points de terminaison de chaque API avec leurs m
 Une application regroupe les abonnements et les clés d’un développeur.
 
 1. Ouvrez **Mes applications** et cliquez sur **Nouvelle application**. Saisissez un **Nom** et une
-   **Description** facultative, puis cliquez sur **Créer**.
+   **Description** facultative, puis cliquez sur **Créer**. Un développeur peut avoir 20 applications au maximum, et les noms d’application sont uniques par développeur.
 2. Ouvrez l’application et cliquez sur **S'abonner**.
 3. Choisissez un **Produit** et un **Forfait**, puis cliquez sur **S'abonner**.
 4. Si le forfait émet les clés immédiatement, une boîte de dialogue intitulée **Copiez votre clé** apparaît, avec un bouton
@@ -54,7 +57,8 @@ Une application regroupe les abonnements et les clés d’un développeur.
    normalement sa clé immédiatement. Si l’un d’eux est un jour retenu, il affiche **En attente** et
    « En attente d'approbation — aucune clé n'a encore été émise. »
 
-Une application peut s’abonner une fois à un produit. Les abonnements affichent **En attente**, **Actif** ou
+Une application peut s’abonner une fois à un produit, même après la révocation de cet abonnement. Pour retrouver l’accès, créez une nouvelle
+application. Les abonnements affichent **En attente**, **Actif** ou
 **Révoqué**. Un abonnement **Actif** affiche son utilisation : **Requêtes (24h)**, **Taux d'erreur**, **Latence
 moyenne** et **Quota**.
 
@@ -64,7 +68,8 @@ Sur la page d’un produit, chaque API a un formulaire **Requête de test** :
 
 - **Méthode** : GET, POST, PUT, PATCH ou DELETE.
 - **Chemin** : doit commencer par `/`.
-- **Votre clé (Authorization)** : collez la clé. Le libellé nomme l’en-tête attendu par l’API.
+- **Votre clé (Authorization)** : collez la clé. Le libellé nomme l’en-tête attendu par l’API. Le champ est obligatoire, même pour une API dont le
+  **Type d'authentification** est **Aucune**.
 - **Corps** : affiché pour toutes les méthodes sauf GET.
 
 Cliquez sur **Envoyer**. La page affiche le **Statut de la réponse** et le corps de la réponse. La requête part du
@@ -79,3 +84,5 @@ Le statut renvoyé par la passerelle a la même signification que pour n’impor
 Sur la page de l’application, cliquez sur **Révoquer** pour un abonnement. La boîte de dialogue **Révoquer cet abonnement ?**
 indique que la clé de ce produit cesse de fonctionner immédiatement et que l’action est irréversible. Un abonnement
 révoqué affiche **Révoqué** et ne propose plus **Révoquer**.
+
+Vérifié par rapport au commit e4f3acc.

@@ -1,16 +1,8 @@
 import { createFromSource } from 'fumadocs-core/search/server';
-import { createArabicTokenizer } from '@/lib/docs/arabic';
+import { docsSearchLocaleMap } from '@/lib/docs/search-locales';
 import { source } from '@/lib/docs/source';
 
 // Local Orama index built from the page loader; no external service. The client sends `?locale=`
-// (taken from the same cookie-derived locale in the layout). `language: 'arabic'`/'french'
-// enable the stemmers Orama ships; anything else uses the default multilingual segmenter.
-export const { GET } = createFromSource(source, {
-  localeMap: {
-    en: { language: 'english' },
-    fr: { language: 'french' },
-    // Orama only splits Arabic; `arabic.ts` normalises marks and letter variants and drops the article.
-    // No `language` here: the tokenizer carries it, and Orama refuses both (NO_LANGUAGE_WITH_CUSTOM_TOKENIZER).
-    ar: { tokenizer: createArabicTokenizer() },
-  },
-});
+// (taken from the same cookie-derived locale in the layout). Each locale's treatment, and why Arabic carries
+// no `language`, is in `lib/docs/search-locales.ts`, where a test builds the same index.
+export const { GET } = createFromSource(source, { localeMap: docsSearchLocaleMap });

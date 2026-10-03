@@ -15,7 +15,8 @@ developer session, and a portal session is not accepted by the dashboard's API.
 Each developer registers into one tenant. On **Create your developer account** they enter:
 
 - **Organization slug**: the slug of your tenant, shown on the **Tenants** page.
-- **Full name**, **Email**, **Password** and **Confirm password**.
+- **Full name**, **Email**, **Password** and **Confirm password**. The password has 8 to 72 characters, with an upper-case letter, a
+  lower-case letter and a digit.
 
 After **Create account**, the page says to check the email to verify the account, then sign in. The
 **Sign in** page also offers **Forgot password?**. The header has **Catalog**, **My Applications**
@@ -25,11 +26,13 @@ and **Sign out**.
 
 The portal shows what the tenant has configured:
 
-1. Make each API **Active**. The portal only serves documentation for active APIs. For a draft or
+1. Make each API **Active** and **Synced**, so keys can be issued. The portal only serves documentation for active APIs. For a draft or
    disabled API, its section shows an error instead of documentation.
 2. Create a **Product** that bundles the APIs. The catalog lists every product of the tenant; there is
-   no separate publish switch. A product with no APIs shows **This product has no APIs yet.**
-3. Create at least one **Plan** and leave **Active** on. Inactive plans are hidden from the portal.
+   no separate publish switch. A product with no APIs shows **This product has no APIs yet.** on its page.
+3. Turn on **Enable CORS** for each API developers will test, and allow the portal's address as an origin: **Test request** is a
+   request from the developer's browser to the gateway.
+4. Create at least one **Plan** and leave **Active** on. Inactive plans are hidden from the portal.
 
 See [Keys and plans](/docs/keys-and-plans) for plans and products.
 
@@ -45,7 +48,7 @@ console under each API.
 An application holds a developer's subscriptions and keys.
 
 1. Open **My Applications** and click **New application**. Enter a **Name** and an optional
-   **Description**, then click **Create**.
+   **Description**, then click **Create**. A developer can have at most 20 applications, and application names are unique per developer.
 2. Open the application and click **Subscribe**.
 3. Choose a **Product** and a **Plan**, then click **Subscribe**.
 4. If the plan issues keys at once, a dialog titled **Copy your key** appears, with a **Copy key**
@@ -54,7 +57,8 @@ An application holds a developer's subscriptions and keys.
    issues its key at once. If one is ever held, it shows **Pending** and
    "Waiting for approval — no key has been issued yet."
 
-An application can subscribe to a product once. Subscriptions show **Pending**, **Active** or
+An application can subscribe to a product once, even after that subscription was revoked. To get access again, create a new
+application. Subscriptions show **Pending**, **Active** or
 **Revoked**. An **Active** subscription shows its usage: **Requests (24h)**, **Error rate**, **Avg
 latency** and **Quota**.
 
@@ -64,7 +68,8 @@ On a product page, each API has a **Test request** form:
 
 - **Method**: GET, POST, PUT, PATCH or DELETE.
 - **Path**: must start with `/`.
-- **Your key (Authorization)**: paste the key. The label names the header the API expects.
+- **Your key (Authorization)**: paste the key. The label names the header the API expects. The field is required, even for an API whose
+  **Auth type** is **None**.
 - **Body**: shown for every method except GET.
 
 Click **Send**. The page shows **Response status** and the response body. The request goes from the
@@ -79,3 +84,5 @@ The status the gateway returns has the same meaning as for any caller. See
 On the application page, click **Revoke** on a subscription. The **Revoke this subscription?** dialog
 says the key for that product stops working immediately and this cannot be undone. A revoked
 subscription shows **Revoked** and no longer offers **Revoke**.
+
+Verified against commit e4f3acc.

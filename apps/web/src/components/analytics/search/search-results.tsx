@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { SearchX } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { formatDistanceToNow } from 'date-fns';
-import { passToRowLink } from '@open-gateway/ui';
+import { Notice, passToRowLink } from '@open-gateway/ui';
 import { AnalyticsErrorState } from '@/components/analytics/analytics-empty-state';
 import { MethodBadge } from '@/components/apis/endpoints/method-badge';
 import { FormattedDateTime } from '@/components/shared/formatted';
@@ -27,17 +27,23 @@ import { searchRequestKey } from '@/lib/search-target';
 import type { Locale } from '@/i18n/locales';
 
 /** What the server said was wrong, in words a person can act on; the API's own text is English only. */
+function searchErrorMessage(t: ReturnType<typeof useTranslations>, error: Error): string {
+  if (error instanceof ApiRequestError) {
+    if (error.code === 'SEARCH_TOO_BROAD') return t('tooBroad');
+    if (error.code === 'SEARCH_INVALID' || error.status === 400) return t('invalid');
+    if (error.code === 'SEARCH_BUSY' || error.status === 429) return t('busy');
+    if (error.status === 403) return t('forbidden');
+  }
+  return t('generic');
+}
+
 function ErrorView({ error, onRetry }: { error: Error; onRetry: () => void }) {
   const t = useTranslations('analytics.search.apiErrors');
-  let message = t('generic');
-  if (error instanceof ApiRequestError) {
-    if (error.code === 'SEARCH_TOO_BROAD') message = t('tooBroad');
-    else if (error.code === 'SEARCH_INVALID' || error.status === 400) message = t('invalid');
-    else if (error.code === 'SEARCH_BUSY' || error.status === 429) message = t('busy');
-    else if (error.status === 403) message = t('forbidden');
-  }
-  return <AnalyticsErrorState message={message} onRetry={onRetry} />;
+  return <AnalyticsErrorState message={searchErrorMessage(t, error)} onRetry={onRetry} />;
 }
+
+/** The indexer reports how far it has caught up; older than this and it is stalled, paused or has no table, not merely a moment late. */
+const INDEX_BEHIND_MS = 2 * 60_000;
 
 /**
  * The matches, newest first, with "Load more" for the next page. Empty, loading, error and
@@ -53,10 +59,13 @@ export function SearchResults({
   hasFilters,
   filterCount,
   indexedUntil,
+  indexedFrom = null,
+  coverage,
   onLoadMore,
   onRetry,
   onOpen,
   getHref,
+  loadMoreError = null,
 }: {
   items: TrafficSearchItem[];
   isLoading: boolean;
@@ -68,16 +77,24 @@ export function SearchResults({
   /** How many filters the search holds: part of what the count announcement says, so changing one is heard. */
   filterCount: number;
   indexedUntil: string | null;
+  /** The earliest instant the index covers; with `coverage` it says whether an empty result can be trusted. */
+  indexedFrom?: string | null;
+  /** Absent from an API image older than this field: treated as complete, which is what the page did before it existed. */
+  coverage?: 'complete' | 'partial' | 'none';
   onLoadMore: () => void;
   onRetry: () => void;
   /** Opens a result's sheet in place (a plain click). */
   onOpen: (item: TrafficSearchItem) => void;
   /** The page's address with a result open: what a new tab (a modified or middle click) loads. */
   getHref: (item: TrafficSearchItem) => string;
+  /** The next page failed: the rows already loaded stay, and the failure is shown beside "Load more" (whose retry asks for that page only). */
+  loadMoreError?: Error | null;
 }) {
   const t = useTranslations('analytics.search');
   const fmt = useFormat();
   const { can } = usePermissions();
+  const tErrors = useTranslations('analytics.search.apiErrors');
+  const tCommon = useTranslations('common');
   const locale = dateFnsLocale(useLocale() as Locale);
 
   // "Load more" appends rows below the button the user is on: focus goes to the first new row, so a
@@ -106,8 +123,14 @@ export function SearchResults({
   // region keeps its last words, and an unchanged text is not touched, so a background refetch that
   // brings the same count is silent. The index freshness is deliberately NOT in the region: it moves
   // on every refetch and would be read out each time.
+  // A stale index is the one freshness fact that IS said, once, as it flips: the text changes only when it
+  // becomes true or false, never as its age moves.
+  const behind = indexedUntil !== null && Date.now() - new Date(indexedUntil).getTime() > INDEX_BEHIND_MS;
+  // Partial coverage (indexing began after the window does, or is rebuilding) is a different fact from lateness: the
+  // newest requests are there, older ones may not be. A late index already says "may be missing", so it speaks alone.
+  const partial = coverage === 'partial' && indexedUntil !== null && !behind;
   const announced = useSettledText(
-    t('resultCount', { count: items.length, filters: filterCount }),
+    t('resultCount', { count: items.length, filters: filterCount }) + (behind ? ` · ${t('indexBehindShort')}` : ''),
     !isLoading && !isRefetching && error === null,
   );
 
@@ -124,16 +147,38 @@ export function SearchResults({
 
   return (
     <div className="space-y-2">
+      {/* A warning, not muted text, and a note rather than a live region: its age text moves with every refetch. */}
+      {behind && (
+        <Notice role="note" title={t('indexBehindTitle')}>
+          {freshness}
+        </Notice>
+      )}
+      {partial && (
+        <Notice role="note" title={t('coveragePartialTitle')}>
+          {indexedFrom !== null ? t('coveragePartialSince', { when: fmt.dateTime(indexedFrom) }) : null}
+        </Notice>
+      )}
       <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-2 text-xs">
         <span role="status" className="text-foreground font-medium">
           {announced}
         </span>
-        <span>{`${freshness} · ${t('coverage')}`}</span>
+        <span>{behind ? t('coverage') : `${freshness} · ${t('coverage')}`}</span>
       </div>
       {items.length === 0 ? (
         <StateMessage
           icon={<SearchX aria-hidden="true" />}
-          message={indexedUntil === null ? t('notIndexedYet') : hasFilters ? t('emptyNoMatch') : t('emptyNoCapture')}
+          // A late index is why an empty list says nothing about capture or filters, so it comes first.
+          message={
+            indexedUntil === null
+              ? t('notIndexedYet')
+              : behind
+                ? t('emptyIndexBehind')
+                : partial
+                  ? t('emptyPartial')
+                  : hasFilters
+                  ? t('emptyNoMatch')
+                  : t('emptyNoCapture')
+          }
           className="py-10"
         />
       ) : (
@@ -230,8 +275,14 @@ export function SearchResults({
               ))}
             </TableBody>
           </Table>
-          {hasMore && (
-            <div className="flex justify-center pt-3">
+          {(hasMore || loadMoreError !== null) && (
+            <div className="flex flex-col items-center gap-2 pt-3">
+              {/* The rows above stay: only the page that failed is missing, and the button asks for that page again. */}
+              {loadMoreError && (
+                <Notice role="alert" tone="destructive" title={t('loadMoreFailed')} className="w-full max-w-xl">
+                  {searchErrorMessage(tErrors, loadMoreError)}
+                </Notice>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -241,7 +292,7 @@ export function SearchResults({
                   onLoadMore();
                 }}
               >
-                {isFetchingMore ? t('loadingMore') : t('loadMore')}
+                {isFetchingMore ? t('loadingMore') : loadMoreError ? tCommon('retry') : t('loadMore')}
               </Button>
             </div>
           )}

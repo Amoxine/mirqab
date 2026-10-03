@@ -1,6 +1,7 @@
 'use client';
 
 import { fx, useElementWidth } from '../lib/viz';
+import { cn } from '../lib/utils';
 
 export interface SparklineProps {
   values: number[];
@@ -10,7 +11,14 @@ export interface SparklineProps {
   className?: string;
 }
 
-/** 2px trend line with an emphasised end point. Decorative: the figure beside it carries the value. */
+/**
+ * 2px trend line with an emphasised end point. Decorative: the figure beside it carries the value.
+ *
+ * It draws at the width its wrapper has. The svg is out of flow (`absolute` in a `relative` wrapper that holds the
+ * height itself) so it adds nothing to the intrinsic width of what contains it: in flow, a fixed-width svg held a
+ * grid column of `auto` width (and so the wrapper) at the width it was drawn, the wrapper could never get narrower,
+ * and the page kept its old width after the viewport shrank in place.
+ */
 export function Sparkline({ values, area = false, height = 44, className }: SparklineProps) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const pad = 5;
@@ -22,13 +30,13 @@ export function Sparkline({ values, area = false, height = 44, className }: Spar
   const last = values.length - 1;
 
   return (
-    <div ref={ref} className={className} style={{ height }} aria-hidden="true" dir="ltr">
+    <div ref={ref} className={cn('relative', className)} style={{ height }} aria-hidden="true" dir="ltr">
       {width > 0 && values.length > 1 && (
         <svg
           width={width}
           height={height}
           viewBox={`0 0 ${fx(width)} ${fx(height)}`}
-          className="block overflow-visible"
+          className="absolute left-0 top-0 block overflow-visible"
         >
           {area && (
             <path

@@ -9,7 +9,9 @@ import apis from '@/messages/en/apis.json';
 import auth from '@/messages/en/auth.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import { fail, mockFetch, never, ok } from '@/components/apis/endpoints/test-utils';
+import { indexedAgo } from '@/components/dashboard/test-render';
 import TrafficSearchPage from './page';
 
 const replace = vi.fn();
@@ -42,7 +44,7 @@ function renderPage(node: ReactNode = <TrafficSearchPage />) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <NextIntlClientProvider locale="en" messages={{ analytics, apis, auth, common, dashboard }}>
+      <NextIntlClientProvider locale="en" messages={{ analytics, apis, auth, common, dashboard, docs }}>
         {node}
       </NextIntlClientProvider>
     </QueryClientProvider>,
@@ -68,7 +70,7 @@ const page = (items: unknown[], extra: Record<string, unknown> = {}) => ({
   items,
   hasMore: false,
   nextCursor: null,
-  indexedUntil: '2026-09-29T11:59:50.000Z',
+  indexedUntil: indexedAgo(10_000),
   ...extra,
 });
 const searchBodies = (calls: { path: string; body: string | undefined }[]) =>
@@ -174,6 +176,35 @@ describe('traffic search page', () => {
     expect(await screen.findByText(T.emptyNoMatch, undefined, WAIT)).toBeDefined();
   });
 
+  it('says the index is behind, not that nothing was captured, when it is days behind and the result is empty', async () => {
+    mockFetch(() => ok(page([], { indexedUntil: indexedAgo(4 * 24 * 60 * 60_000) })));
+    renderPage();
+    // The warning, with the age, and the explanation for the empty list...
+    expect(await screen.findByText(T.indexBehindTitle, undefined, WAIT)).toBeDefined();
+    expect(screen.getByText(/Indexed up to 4 days ago/)).toBeDefined();
+    expect(screen.getByText(T.emptyIndexBehind)).toBeDefined();
+    // ...and none of the advice that would send the user to change settings that are not the problem.
+    for (const advice of [T.emptyNoCapture, T.emptyNoMatch]) expect(screen.queryByText(advice)).toBeNull();
+    expect(screen.queryByText(/detailed recording/)).toBeNull();
+  });
+
+  it('says the index covers only part of the window when the API reports partial coverage, and where it starts', async () => {
+    const from = new Date(Date.now() - 2 * 24 * 60 * 60_000).toISOString();
+    mockFetch(() => ok(page([], { coverage: 'partial', indexedFrom: from })));
+    renderPage();
+    expect(await screen.findByText(T.coveragePartialTitle, undefined, WAIT)).toBeDefined();
+    expect(screen.getByText(T.emptyPartial)).toBeDefined();
+    expect(screen.getByText(/Requests are searchable from .+ on\./)).toBeDefined();
+    for (const advice of [T.emptyNoCapture, T.emptyNoMatch]) expect(screen.queryByText(advice)).toBeNull();
+  });
+
+  it('shows no warning while the index is current', async () => {
+    mockFetch(() => ok(page([item(1)])));
+    renderPage();
+    await screen.findByText('/orders/1', undefined, WAIT);
+    expect(screen.queryByText(T.indexBehindTitle)).toBeNull();
+  });
+
   it('says the index has not started when the indexer has not reported yet', async () => {
     mockFetch(() => ok(page([], { indexedUntil: null })));
     renderPage();
@@ -188,6 +219,62 @@ describe('traffic search page', () => {
     await waitFor(() => {
       expect(searchBodies(calls).length).toBeGreaterThan(1);
     }, WAIT);
+  });
+
+  it.each([
+    ['422 SEARCH_TOO_BROAD', 422, 'SEARCH_TOO_BROAD', T.apiErrors.tooBroad],
+    ['429 SEARCH_BUSY', 429, 'SEARCH_BUSY', T.apiErrors.busy],
+    ['500', 500, 'ERR', T.apiErrors.generic],
+  ])('keeps the loaded rows when the next page fails with %s, and retries only that page', async (_name, status, code, reason) => {
+    let failNext = true;
+    const calls = mockFetch((c) => {
+      if (c.body?.includes('"cursor"')) return failNext ? fail(status, 'nope', code) : ok(page([item(3)]));
+      return ok(page([item(1), item(2)], { hasMore: true, nextCursor: { ts: item(2).ts, id: '2' } }));
+    });
+    renderPage();
+    await screen.findByText('/orders/1', undefined, WAIT);
+    fireEvent.click(screen.getByRole('button', { name: T.loadMore }));
+
+    // The rows stay, and the failure is next to the button that asked for it.
+    expect(await screen.findByText(T.loadMoreFailed, undefined, WAIT)).toBeDefined();
+    expect(screen.getByText(reason)).toBeDefined();
+    expect(screen.getByText('/orders/1')).toBeDefined();
+    expect(screen.getByText('/orders/2')).toBeDefined();
+    expect(screen.queryByText(analytics.errorState.title)).toBeNull();
+
+    // Retry asks for the next page again, and only that one: the first page is not requested a second time.
+    failNext = false;
+    fireEvent.click(screen.getByRole('button', { name: common.retry }));
+    await screen.findByText('/orders/3', undefined, WAIT);
+    const bodies = searchBodies(calls);
+    expect(bodies.filter((b) => !('cursor' in b))).toHaveLength(1);
+    expect(bodies.filter((b) => 'cursor' in b)).toHaveLength(2);
+    expect(screen.getByText('/orders/1')).toBeDefined();
+    expect(screen.queryByText(T.loadMoreFailed)).toBeNull();
+  });
+
+  it('still replaces the page with the error when the FIRST page fails', async () => {
+    mockFetch(() => fail(429, 'busy', 'SEARCH_BUSY'));
+    renderPage();
+    expect(await screen.findByText(T.apiErrors.busy, undefined, WAIT)).toBeDefined();
+    expect(screen.queryByText(T.loadMoreFailed)).toBeNull();
+  });
+
+  it('says so when the link names a time range the page does not know, and searches the default instead', async () => {
+    search = 'range=forever';
+    const calls = mockFetch(() => ok(page([item(1)])));
+    renderPage();
+    expect(await screen.findByText(T.rangeUnknown, undefined, WAIT)).toBeDefined();
+    await screen.findByText('/orders/1', undefined, WAIT);
+    expect(searchBodies(calls)[0]).toMatchObject({ range: '24h' });
+  });
+
+  it.each([['', 'no range'], ['range=7d', 'a known range']])('says nothing about the range for a link with %s', async (query) => {
+    search = query;
+    mockFetch(() => ok(page([item(1)])));
+    renderPage();
+    await screen.findByText('/orders/1', undefined, WAIT);
+    expect(screen.queryByText(T.rangeUnknown)).toBeNull();
   });
 
   it('shows a loading state while the first page is on its way', () => {

@@ -13,15 +13,15 @@ gérez les API sous **API**. La consultation exige la permission `api:read` ; sa
 |---|---|---|---|
 | Créer | **Créer une API** sur la page des API ou l’accueil du tableau de bord | `api:create` | Bouton masqué |
 | Importer | **Importer OpenAPI** sur la page des API | `api:create` | Bouton masqué |
-| Modifier, Activer, Désactiver | Ouvrir l’API, puis **Modifier**, **Activer** ou **Désactiver** | `api:update` | Boutons masqués |
-| Supprimer | Ouvrir l’API, puis **Supprimer** | `api:delete` | Bouton masqué |
+| Modifier, Activer, Désactiver | Le menu de la ligne dans la liste des API, ou ouvrir l’API, puis **Modifier**, **Activer** ou **Désactiver** | `api:update` | Actions masquées |
+| Supprimer | Le menu de la ligne, ou ouvrir l’API, puis **Supprimer** | `api:delete` | Action masquée |
 
 Le panneau **Modifier l'API** contient le nom, le type d’authentification, l’URL amont, le chemin d’écoute, une limite de débit (0 signifie
 illimité), les réglages CORS et **Ne pas suivre**. Le slug ne peut pas changer après la création. L’enregistrement envoie
 la modification à la passerelle.
 
 **Supprimer** demande une confirmation dans la boîte de dialogue **Supprimer l'API ?**. Une API qui a des clés actives ne peut pas être supprimée :
-révoquez d’abord ces clés. La suppression est aussi refusée tant que des clients OAuth2 utilisent l’API, ou tant qu’une version par défaut a encore des versions. La boîte de dialogue précise aussi que l’API est retirée de la passerelle.
+révoquez d’abord ces clés. La suppression est aussi refusée tant que des clients OAuth2 utilisent l’API, ou tant que des versions créées par l’intermédiaire de l’API existent encore. La boîte de dialogue précise aussi que l’API est retirée de la passerelle.
 
 ## Statut et synchronisation
 
@@ -48,16 +48,20 @@ Cliquez sur **Importer OpenAPI**. L’assistant compte trois étapes : document,
 tant que vous ne cliquez pas sur **Importer**.
 
 1. Choisissez la source : **Fichier ou texte** (téléversez un fichier ou collez-le) ou **Depuis une URL**. Le document doit
-   être en OpenAPI 3.x, JSON ou YAML, en texte UTF-8, de 5 Mo au maximum.
+   être en OpenAPI 3.x, JSON ou YAML, en texte UTF-8, de 5 Mo au maximum. Il doit comporter au moins un serveur avec une URL http ou https absolue :
+   elle devient l’amont. Les serveurs qui pointent vers des adresses internes ne peuvent pas être utilisés. 5 000 opérations au maximum sont autorisées.
 2. Cliquez sur **Vérifier le document**. Les erreurs bloquent l’import ; les avertissements non. La vérification affiche le nom, le
    slug, le chemin d’écoute, l’URL amont, le nombre de points de terminaison et un compte par étiquette.
 3. Si une API de même slug ou de même chemin d’écoute existe, l’assistant le signale : saisissez un autre **Slug
    (facultatif)** et relancez la vérification. Si le document liste plusieurs serveurs, choisissez le **Serveur amont**.
    Cliquez sur **Importer**.
 
-Le nom de l’API vient du titre du document, et le slug et le chemin d’écoute viennent du slug. MIRQAB
-ouvre ensuite l’API sur son onglet **Points de terminaison**. Une API importée est en **Brouillon** avec le **Type d'authentification** **Aucun**.
-Activez-la, et modifiez le **Type d'authentification** avec **Modifier** si les appelants ont besoin d’une clé.
+Le nom de l’API vient du titre du document (coupé à 100 caractères). Le slug vient du titre, ou du **Slug (facultatif)** que vous
+saisissez, coupé à 60 caractères, et le chemin d’écoute est `/slug/`. MIRQAB ouvre ensuite l’API sur son onglet **Points de terminaison**.
+
+Une API importée est en **Brouillon** avec le **Type d'authentification** **Aucune**, ce qui signifie qu’aucune clé n’est nécessaire. Si les appelants
+ont besoin d’une clé, modifiez le **Type d'authentification** avec **Modifier** avant d’**Activer** l’API. Les schémas de sécurité du document ne sont
+pas convertis en authentification de la passerelle.
 
 ## Garder une API synchronisée avec la source de sa spécification
 
@@ -66,26 +70,29 @@ une nouvelle version détectée attend qu’une personne la revoie.
 
 1. Ouvrez l’onglet **Points de terminaison** de l’API. La carte **URL source de la spécification** se trouve en haut.
 2. Cliquez sur **Surveiller une URL**, saisissez l’**URL du document** et choisissez la fréquence de vérification : toutes les 15 minutes,
-   toutes les heures, toutes les 6 heures ou toutes les 24 heures. L’assistant propose le même choix via **Continuer à
-   vérifier cette URL**.
+   toutes les heures, toutes les 6 heures ou toutes les 24 heures. L’assistant propose le même choix via l’interrupteur **Continuer à
+   vérifier cette URL**, activé par défaut ; le menu **Vérifier** n’apparaît que tant qu’il est activé.
 3. La carte affiche **État** (**Surveillée** ou **En pause**), **Dernière vérification**, **Prochaine vérification** et
    **Dernier résultat**. **Vérifier maintenant** lance une vérification immédiate ; une seconde vérification dans les 30 secondes est refusée.
-   **Modifier la source** et **Supprimer** changent ou arrêtent la surveillance.
+   **Modifier la source** et **Supprimer** changent ou arrêtent la surveillance ; dans **Modifier la source**, l’interrupteur **Vérifier selon le calendrier** la met en pause.
 4. Quand le document change, une bannière indique **Une nouvelle version de la spécification est disponible** avec
-   le nombre d’ajouts, de suppressions et de modifications. La liste des API affiche **Mise à jour disponible**, et l’accueil du
-   tableau de bord liste l’API sous **Spécifications à mettre à jour**.
+   le nombre d’ajouts, de suppressions et de modifications. La bannière s’affiche aussi en haut de tous les autres onglets de la page de l’API.
+   La liste des API affiche **Mise à jour disponible**, et l’accueil du tableau de bord liste l’API sous **Spécifications à mettre à jour**.
 5. Cliquez sur **Examiner** dans la bannière. Le panneau **Examiner la nouvelle version** la compare à la version actuelle.
    **Utiliser cette version** crée la version suivante et resynchronise l’API. **Ignorer** masque ce
    contenu ; un changement différent est proposé de nouveau.
 
-Limites affichées dans les messages : http ou https uniquement, aucun nom d’utilisateur ni mot de passe dans l’URL (placez un jeton dans
-la chaîne de requête), 5 Mo au maximum, 3 redirections au maximum, et 50 URL surveillées au maximum par espace de travail.
+Limites : http ou https uniquement, aucun nom d’utilisateur ni mot de passe dans l’URL (placez un jeton dans la chaîne de requête), et 2 048 caractères au maximum.
+Les adresses internes et privées sont refusées, sauf si votre opérateur les autorise. Le téléchargement doit se terminer en 10 secondes,
+et il est limité à 5 Mo et à 3 redirections. 50 URL au maximum peuvent être surveillées par espace de travail.
 
 Surveiller plus tard exige `api:update`, mais l’import depuis une URL démarre la surveillance par défaut avec seulement `api:create`. Avec seulement `api:read`, vous voyez la carte et la bannière indique **Voir les changements**,
 mais **Utiliser cette version** et **Ignorer** sont masqués.
 
-Pour remplacer vous-même le document, cliquez sur **Mettre à jour la spécification** dans l’onglet Points de terminaison, téléversez le nouveau
-document, cliquez sur **Comparer**, puis **Appliquer la nouvelle version**. Les réglages des points de terminaison qui restent sont conservés.
+Pour remplacer vous-même le document, cliquez sur **Mettre à jour la spécification** dans l’onglet Points de terminaison (il faut `api:update`), téléversez le nouveau
+document, cliquez sur **Comparer**, puis **Appliquer la nouvelle version**. Les réglages des points de terminaison qui restent sont conservés. **Appliquer la nouvelle version** est désactivé
+pour un document identique au document actuel, ou qui comporte des erreurs. Lorsque des points de terminaison qui ont des réglages sont supprimés, vous devez cocher
+**Je comprends que les réglages de ces points de terminaison ne s'appliqueront plus** ; il en va de même pour **Utiliser cette version**.
 
 ## L’onglet Points de terminaison et les contrôles par point de terminaison
 
@@ -96,8 +103,8 @@ OpenAPI** ; avec `api:update`, vous pouvez cliquer sur **Téléverser une spéci
 Il existe deux niveaux de contrôle :
 
 - **N'autoriser que les points de terminaison déclarés.** Désactivé, tout chemin sous le chemin d’écoute atteint l’amont. Activé,
-  seuls les points de terminaison du document répondent et tout le reste reçoit 403. Une boîte de dialogue demande de
-  confirmer. C’est le seul réglage qui fonctionne comme une frontière stricte.
+  seuls les points de terminaison du document répondent : un chemin ou une méthode que le document ne déclare pas reçoit 403, y compris HEAD
+  (OPTIONS reçoit toujours une réponse). Une boîte de dialogue demande de confirmer. C’est le seul réglage qui fonctionne comme une frontière stricte.
 - **Par point de terminaison.** Utilisez le contrôle de modification de la ligne d’un point de terminaison pour ouvrir **Réglages du point de terminaison**.
 
 | Section | Contrôle | Effet |
@@ -111,23 +118,26 @@ Il existe deux niveaux de contrôle :
 | Réponses | **Réponse simulée** | Répond avec une réponse fixe ; l’amont n’est pas appelé. |
 | Réponses | **Valider le corps de la requête** | Répond 422 pour du JSON qui enfreint le schéma. Proposé pour les points de terminaison POST, PUT et PATCH uniquement. |
 
-Sélectionnez plusieurs lignes pour ouvrir la barre groupée. Son menu **Actions** propose **Bloquer**, **Débloquer**, **Autoriser
+Sélectionnez plusieurs lignes, ou choisissez une étiquette dans le filtre d’étiquettes, pour ouvrir la barre groupée. Quand une étiquette est choisie, la barre propose aussi
+**Appliquer aux N points de terminaison étiquetés X** (elle ignore la recherche). Son menu **Actions** propose **Bloquer**, **Débloquer**, **Autoriser
 sans clé**, **Utiliser l'authentification de l'API** et les réglages de limite de débit, de délai d’expiration, de taille maximale et de cache.
 Lorsqu’une nouvelle version du document supprime un point de terminaison qui avait des réglages, un avis les liste comme
 des réglages de points de terminaison absents de la spécification, et **Supprimer les réglages obsolètes** les supprime.
 
-Modifier ces réglages exige `api:update`. Sans elle, les lignes ouvrent **Réglages du point de terminaison (lecture seule)**.
+Modifier ces réglages exige `api:update`. Sans elle, chaque ligne a un bouton en forme d’œil, **Voir les réglages**, qui ouvre **Réglages du point de terminaison (lecture seule)**, et il n’y a ni sélection de lignes ni barre groupée.
 
 ## Enregistrement détaillé et recherche de requêtes
 
 Par défaut, MIRQAB enregistre les chiffres de chaque requête, pas ses en-têtes ni ses corps. Pour les capturer pour
-une API, ouvrez son onglet **Concepteur**, ouvrez la carte **Enregistrement détaillé** et activez **Enregistrer le détail complet**.
-Il est désactivé par défaut, car les enregistrements détaillés contiennent des en-têtes et des corps.
+une API, ouvrez son onglet **Concepteur**, cliquez sur le contrôle de modification (crayon) de la carte **Enregistrement détaillé**, activez **Enregistrer le détail complet**
+et cliquez sur **Enregistrer**. Il faut `api:update`. Il est désactivé par défaut, car les enregistrements détaillés contiennent des en-têtes et des corps.
 
 - L’onglet **Trafic** de l’API liste alors les requêtes et réponses capturées. Il exige `api:update`.
   Les valeurs des champs dont le nom ressemble à des identifiants sont affichées sous la forme `[REDACTED]`.
-- **Recherche de requêtes** sous Analytique ne cherche que dans les requêtes capturées. Quand rien n’a été
+- **Recherche de requêtes**, une entrée à part dans la barre latérale sous Analytique, ne cherche que dans les requêtes capturées. Quand rien n’a été
   capturé sur la période choisie, elle l’indique et vous invite à activer l’enregistrement détaillé d’une API. Elle exige `analytics:read`
   et `api:update`. Voir [Rechercher dans le trafic](/docs/searching-traffic).
 
 Suite : [Clés et forfaits](/docs/keys-and-plans) et [Prise en main](/docs/getting-started).
+
+Vérifié par rapport au commit e4f3acc.

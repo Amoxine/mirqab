@@ -37,10 +37,15 @@ export function useDocsSearch(query: string) {
       const raw = (await res.json()) as RawHit[];
       const seen = new Set<string>();
       const hits: DocsHit[] = [];
+      // Fumadocs lists a page, then the headings and passages of it that matched; only the page carries its
+      // breadcrumbs, so the others take the page's name as their trail ("which page is this heading on?").
+      let page: RawHit | undefined;
       for (const r of Array.isArray(raw) ? raw : []) {
+        if (r.type === 'page') page = r;
         if (!r.url || !r.content || seen.has(r.url)) continue;
         seen.add(r.url);
-        hits.push({ url: r.url, title: r.content, trail: (r.breadcrumbs ?? []).join(' › ') });
+        const trail = r.breadcrumbs?.length || r.type === 'page' || !page ? (r.breadcrumbs ?? []) : [...(page.breadcrumbs ?? []), page.content ?? ''];
+        hits.push({ url: r.url, title: r.content, trail: trail.filter(Boolean).join(' › ') });
         if (hits.length === MAX_HITS) break;
       }
       return hits;

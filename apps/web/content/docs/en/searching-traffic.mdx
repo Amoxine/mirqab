@@ -35,9 +35,9 @@ a time, and **Load more** fetches the next 50.
 | `method:` | `method:POST` | Requests with that method. Give several with commas, as in `method:PUT,PATCH`. |
 | `latency:` | `latency:>800` | Requests slower than 800 milliseconds. You can use `>`, `>=`, `<` and `<=`. A bare number such as `latency:800` means 800 or more. |
 | `path:` | `path:/orders` | Requests whose path **starts with** the text. It needs at least 3 letters or digits. |
-| `route:` | `route:/orders` | Requests to exactly that path, nothing under it: `route:/orders` does not find `/orders/42`. It has no minimum length, so `route:/` finds the root. The endpoint rows in **Traffic** and on the dashboard open the search with it. |
+| `route:` | `route:/orders` | Requests to exactly that path, nothing under it: `route:/orders` does not find `/orders/42`. It has no minimum length, so `route:/` finds the root. On **Traffic**, the endpoint rows open the search with `route:` and `method:` for that endpoint. On the dashboard, an endpoint's error rate does the same, limited to failures. |
 | `api:` | `api:payments` | Requests to one API, given by its name, slug or id. |
-| `key:` | `key:mobile-app` | Requests made with the key whose alias you give, as shown in the **Key** column of the results. |
+| `key:` | `key:mobile-app` | Requests made with the key of that exact name, as shown in the **Key** column of the results. Two keys with the same name are both found. |
 | `reqh:` | `reqh:content-type=application/json` | Requests with that header and exactly that value. Without `=` and a value, as in `reqh:x-tenant`, any request that has the header. |
 | `resh:` | `resh:x-request-id` | The same for response headers. |
 | `body:` | `body:"insufficient funds"` | Requests or responses whose body contains those words, in that order and next to each other. |
@@ -50,6 +50,9 @@ them together.
 Start a filter with `-` to exclude matches. `-status:404` hides every 404, and `-res:timeout` hides responses
 whose body contains "timeout".
 
+As you type, a list of suggestions appears under the box. Choose one with the arrow keys and press **Enter** to add it. It offers the
+filter names; after `status:`, `method:` or `latency:` it offers common values, and after `api:` or `key:` the names of your APIs and keys.
+
 Combined example, all on one line:
 
 ```text
@@ -57,7 +60,7 @@ api:payments status:>=500 method:POST body:"insufficient funds"
 ```
 
 Four buttons under the box fill the bar with an example search: `status:>=500`, `status:4xx`,
-`latency:>800 method:POST` and `body:"insufficient funds"`. A button replaces whatever is in the bar.
+`latency:>800 method:POST` and `body:"insufficient funds"`. A button replaces all the chips already in the bar; the time range is kept.
 
 ## How chips behave
 
@@ -78,11 +81,12 @@ choose another.
 
 - At most 8 filters per search.
 - At most 3 of them can be body-word filters (`body:`, `req:` or `res:`).
-- A word filter needs at least 3 letters or digits.
+- A `status:` filter takes at most 10 codes.
+- A word filter needs at least one word of 3 or more letters or digits that is not a common word.
 - A filter value can be at most 200 characters.
-- A search that is only common words is refused: `id`, `data`, `name`, `value`, `true`, `false`, `null`,
-  `type`, `status` and `message`. They appear in almost every request. A phrase with at least one other word
-  is accepted.
+- Common words do not count: `id`, `data`, `name`, `value`, `true`, `false`, `null`, `type`, `status` and
+  `message`. They appear in almost every request, so a search made only of them is refused. A phrase with at least
+  one other word is accepted.
 - Only the first 16 KiB of each capture is kept and searched, and the headers count toward it. A result marked **cut at 16 KiB** was longer, so a
   word that sits later cannot be found.
 - Multipart bodies are not indexed, and a capture that is not valid UTF-8 is replaced as a whole.
@@ -94,14 +98,14 @@ choose another.
 
 Secrets are replaced with `[REDACTED]`, by name (and JWTs by their shape), before anything is stored or searched. That covers values of
 headers, query and form parameters, and JSON fields whose names look like credentials. A hidden value cannot be
-searched. A redacted header keeps its name, so `reqh:authorization` finds requests that sent it, but no value
-matches. Some harmless fields with similar names are hidden too.
+searched. A redacted header keeps its name, so `reqh:authorization` finds requests that sent it, but no real secret value can be found. Some harmless fields with similar names are hidden too.
 
 ## How fresh the results are
 
-Below the box the page shows "Indexed up to" and a time. Requests newer than that time are not searchable yet,
-so an empty result before it is real. Before the first indexing, the page says the search index has not started.
-Captured requests appear shortly after they are recorded.
+Below the box the page shows "Indexed up to" and a relative time, such as "2 minutes ago". Requests newer than that time are not
+searchable yet. Requests the collection service has not delivered yet are not in the results either. Before the first indexing, the page
+says the search index has not started. If the index stays paused or does not start, tell the people who run the platform. Captured requests
+appear shortly after they are recorded.
 
 ## What it cannot do
 
@@ -110,3 +114,8 @@ Captured requests appear shortly after they are recorded.
 - Search inside one JSON field.
 
 Click the time of a result to open the request and the response, with their headers and bodies. A body cut at 16 KiB carries a **Body truncated** marker.
+In that view, **Find similar requests** has four buttons, **Same path**, **Same status**, **Same API** and **Same key**. Each adds that
+filter, and is unavailable when the filter is already there, the search is full, or the request has no such value. The
+**Previous request** and **Next request** arrows move through the results loaded so far.
+
+Verified against commit e4f3acc.

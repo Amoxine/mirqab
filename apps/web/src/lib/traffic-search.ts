@@ -11,7 +11,17 @@
  * Errors are codes, not sentences: the search bar translates them (`analytics.search.errors`).
  */
 
-export const SEARCH_LIMITS = { maxClauses: 8, maxBodyClauses: 3, minTerm: 3, maxValueLength: 200 } as const;
+/** Mirrors `SEARCH_LIMITS` and the bounds in `traffic-search.validate.ts`; the shared tables in both test files pin the two together. */
+export const SEARCH_LIMITS = {
+  maxClauses: 8,
+  maxBodyClauses: 3,
+  minTerm: 3,
+  maxValueLength: 200,
+  maxStatusValues: 10,
+  minStatus: 100,
+  maxStatus: 599,
+  maxLatencyMs: 3_600_000,
+} as const;
 
 /** Words in almost every captured body; a search for one only ever times out. Same set as the API. */
 const STOP_WORDS: ReadonlySet<string> = new Set(['id', 'data', 'name', 'value', 'true', 'false', 'null', 'type', 'status', 'message']);
@@ -114,14 +124,24 @@ const err = (code: SearchErrorCode, params: SearchError['params'] = {}): ParsedT
 
 const alnumLength = (value: string): number => (value.match(/[\p{L}\p{N}]/gu) ?? []).length;
 
+const isStatusCode = (n: number): boolean => n >= SEARCH_LIMITS.minStatus && n <= SEARCH_LIMITS.maxStatus;
+
+/** The same bounds the API enforces: a code outside 100-599, an inverted range or more than 10 codes is a 400 there. */
 function parseStatus(value: string): StatusMatch | null {
   let m = /^(>=|<=|>|<)(\d{3})$/.exec(value);
-  if (m?.[1] && m[2]) return { type: 'cmp', op: m[1] as CompareOp, value: Number(m[2]) };
+  if (m?.[1] && m[2]) return isStatusCode(Number(m[2])) ? { type: 'cmp', op: m[1] as CompareOp, value: Number(m[2]) } : null;
   m = /^([1-5])xx$/i.exec(value);
   if (m?.[1]) return { type: 'range', from: Number(m[1]) * 100, to: Number(m[1]) * 100 + 99 };
   m = /^(\d{3})-(\d{3})$/.exec(value);
-  if (m?.[1] && m[2]) return { type: 'range', from: Number(m[1]), to: Number(m[2]) };
-  if (/^\d{3}(,\d{3})*$/.test(value)) return { type: 'in', values: value.split(',').map(Number) };
+  if (m?.[1] && m[2]) {
+    const from = Number(m[1]);
+    const to = Number(m[2]);
+    return isStatusCode(from) && isStatusCode(to) && from <= to ? { type: 'range', from, to } : null;
+  }
+  if (/^\d{3}(,\d{3})*$/.test(value)) {
+    const values = value.split(',').map(Number);
+    return values.length <= SEARCH_LIMITS.maxStatusValues && values.every(isStatusCode) ? { type: 'in', values } : null;
+  }
   return null;
 }
 
@@ -147,7 +167,8 @@ export function parseToken(raw: string): ParsedToken {
     }
     case 'latency': {
       const lm = /^(>=|<=|>|<)?(\d+)$/.exec(value);
-      return lm?.[2]
+      // Up to an hour, as in the API; `Number` of a very long digit string is Infinity, which is over it too.
+      return lm?.[2] && Number(lm[2]) <= SEARCH_LIMITS.maxLatencyMs
         ? { ok: true, clause: { kind: 'latency', neg, op: (lm[1] ?? '>=') as CompareOp, value: Number(lm[2]) } }
         : err('latency');
     }

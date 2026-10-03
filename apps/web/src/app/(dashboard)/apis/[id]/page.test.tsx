@@ -6,6 +6,7 @@ import apisMessages from '@/messages/en/apis.json';
 import authMessages from '@/messages/en/auth.json';
 import commonMessages from '@/messages/en/common.json';
 import dashboardMessages from '@/messages/en/dashboard.json';
+import docsMessages from '@/messages/en/docs.json';
 import openapiMessages from '@/messages/en/openapi.json';
 import { baseApi } from '@/components/apis/designer/test-utils';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -14,6 +15,7 @@ import ApiDetailPageGated from './page';
 vi.mock('@/hooks/use-permissions', () => ({ usePermissions: vi.fn() }));
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'api-1' }),
+  usePathname: () => '/apis/api-1',
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -50,6 +52,7 @@ function renderPage(granted: readonly string[]) {
         auth: authMessages,
         common: commonMessages,
         dashboard: dashboardMessages,
+        docs: docsMessages,
         openapi: openapiMessages,
       }}
     >

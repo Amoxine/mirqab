@@ -30,7 +30,7 @@ boutons **Créer une API** et **Importer OpenAPI** n’apparaissent pas.
 
 **À la main.** Cliquez sur **Créer une API** et renseignez :
 
-- **Nom** et **Slug**. Le slug ne peut plus changer ensuite.
+- **Nom** et **Slug**. Le slug utilise des lettres minuscules, des chiffres et des tirets simples, et il ne peut plus changer ensuite.
 - **Type d'authentification**. Le formulaire propose **Clé API**, **OAuth2 (identifiants client)** et **Aucun**, et démarre sur **Clé API**.
 - **URL amont**, le serveur qui répond réellement, par exemple `https://api.example.com`.
 - **Chemin d'écoute**, le chemin que les appelants utilisent sur la passerelle. Il doit commencer par `/`.
@@ -39,9 +39,9 @@ Cliquez sur **Créer**.
 
 **À partir d’un document OpenAPI.** Cliquez sur **Importer OpenAPI**, choisissez un fichier, collez le document, ou utilisez
 l’onglet **Depuis une URL**, puis cliquez sur **Vérifier le document** et **Importer**. MIRQAB ouvre la nouvelle API sur son onglet
-**Points de terminaison**. Une API importée démarre avec **Type d'authentification** réglé sur **Aucun** : la passerelle ne
-demande donc pas de clé aux appelants. Pour en exiger une, ouvrez l’API, cliquez sur **Modifier** et passez **Type d'authentification** à
-**Clé API**. Les détails sont dans [API et import OpenAPI](/docs/apis-and-openapi-import).
+**Points de terminaison**. Une API importée est en **Brouillon** avec **Type d'authentification** réglé sur **Aucune**, ce qui signifie qu’aucune clé
+n’est nécessaire. Si les appelants ont besoin d’une clé, ouvrez l’API, cliquez sur **Modifier** et passez **Type d'authentification** à **Clé API** avant
+d’**Activer** l’API. Les schémas de sécurité du document ne sont pas convertis en authentification de la passerelle. Les détails sont dans [API et import OpenAPI](/docs/apis-and-openapi-import).
 
 ## 2. Activer l’API
 
@@ -59,7 +59,7 @@ maintenant : elle ne pourra plus être affichée. Voir [Clés et forfaits](/docs
 ## 4. Appeler l’API
 
 Envoyez la requête à la passerelle, pas à votre serveur amont. L’adresse est celle de la passerelle, suivie du slug de votre
-organisation (affiché sur la page **Organisations**), puis du chemin d’écoute, puis du chemin du point de terminaison. La clé se place dans l’en-tête
+organisation (affiché sur la page **Organisations**), puis du chemin d’écoute, puis du chemin du point de terminaison. Le tableau de bord n’affiche pas l’adresse de la passerelle ; demandez-la aux personnes qui exploitent la plateforme. La clé se place dans l’en-tête
 `Authorization`, qui est le nom d’en-tête par défaut :
 
 ```bash
@@ -67,7 +67,7 @@ curl -H "Authorization: <your-key>" \
   "https://<gateway-address>/<tenant-slug>/<listen-path>/<endpoint-path>"
 ```
 
-Collez la clé telle qu’elle a été affichée. Si le **Type d'authentification** de l’API est **Aucun**, omettez l’en-tête. Pour les codes de statut que vous pouvez recevoir, voir
+Collez la clé telle qu’elle a été affichée. Si le **Type d'authentification** de l’API est **Aucune**, omettez l’en-tête. Pour les codes de statut que vous pouvez recevoir, voir
 [Clés et forfaits](/docs/keys-and-plans#what-callers-see).
 
 Les développeurs qui ne doivent pas utiliser le tableau de bord peuvent obtenir des clés et essayer l’API eux-mêmes dans le
@@ -77,7 +77,7 @@ Les développeurs qui ne doivent pas utiliser le tableau de bord peuvent obtenir
 
 - L’accueil du tableau de bord affiche les requêtes, le taux d’erreur et la latence des dernières 24 heures par défaut.
 - **Analytique** affiche les mêmes chiffres, avec des tableaux par API et par clé, et **Trafic** permet de
-  filtrer par API, clé, méthode, statut, chemin et latence. Les graphiques couvrent tout le trafic. Voir
+  filtrer par API, clé, méthode, statut, chemin et latence. Les graphiques et les chiffres comptent tout le trafic ; les tableaux listent les 50 API ou clés les plus sollicitées. Voir
   [Analyses et trafic](/docs/analytics-and-traffic).
 - Les deux exigent la permission `analytics:read`.
 - Si la page indique **Le pipeline analytique ne reçoit pas de données**, rien n’est encore enregistré. Voir
@@ -90,3 +90,5 @@ Les développeurs qui ne doivent pas utiliser le tableau de bord peuvent obtenir
 - [Clés et forfaits](/docs/keys-and-plans) : clés, forfaits, produits et quotas.
 - [Portail développeur](/docs/portal) : le libre-service de vos développeurs.
 - [Rechercher dans le trafic](/docs/searching-traffic) : retrouvez des requêtes capturées par leur contenu.
+
+Vérifié par rapport au commit e4f3acc.

@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import apis from '@/messages/en/apis.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import products from '@/messages/en/products.json';
 import { mockFetch, ok } from '@/components/apis/endpoints/test-utils';
 import ProductsPage from './page';
@@ -32,7 +33,7 @@ describe('Products list: the APIs a product holds', () => {
     );
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <NextIntlClientProvider locale="en" messages={{ products, common, dashboard, apis }}>
+        <NextIntlClientProvider locale="en" messages={{ products, common, dashboard, docs, apis }}>
           <ProductsPage />
         </NextIntlClientProvider>
       </QueryClientProvider>,

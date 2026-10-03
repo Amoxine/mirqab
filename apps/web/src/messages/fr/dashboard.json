@@ -229,7 +229,8 @@
     "empty": "Aucune page correspondante.",
     "pages": "Pages",
     "docs": "Documentation",
-    "docsHome": "Documentation"
+    "docsHome": "Documentation",
+    "docsUnavailable": "La recherche dans la documentation est indisponible."
   },
   "help": {
     "title": "Aide et raccourcis",

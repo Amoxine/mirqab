@@ -75,9 +75,10 @@ docs/*.jpg
 *.temp
 .cache/
 
-# Local run artifacts (installer logs, agent scratch state)
+# Local run artifacts (installer logs, agent scratch state, graphify output)
 .install-logs/
 .sisyphus/
+graphify-out/
 
 # TypeScript incremental build state (stale copies caused partial dist output)
 *.tsbuildinfo

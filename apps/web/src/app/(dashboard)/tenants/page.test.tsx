@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import apis from '@/messages/en/apis.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import tenants from '@/messages/en/tenants.json';
 import { mockFetch, ok } from '@/components/apis/endpoints/test-utils';
 import TenantsPage from './page';
@@ -42,7 +43,7 @@ describe('Tenants list: rows open their detail', () => {
     mockFetch((call) => (call.path.startsWith('/tenants?') ? list : ok({})));
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <NextIntlClientProvider locale="en" messages={{ tenants, common, dashboard, apis }}>
+        <NextIntlClientProvider locale="en" messages={{ tenants, common, dashboard, docs, apis }}>
           <TenantsPage />
         </NextIntlClientProvider>
       </QueryClientProvider>,

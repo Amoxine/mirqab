@@ -254,7 +254,16 @@
   [dir='rtl'] :is(code, kbd, samp, pre, .font-mono) {
     direction: ltr;
     unicode-bidi: isolate;
+  }
+  [dir='rtl'] :where(code, kbd, samp, .font-mono) {
     text-align: end;
+  }
+  /* A code block is left-to-right text: its lines start at the left and keep their own indent. `end`
+     would right-align every line on its own, so a command and its indented continuation drift apart.
+     The `code` inside the `pre` is named too: a rule on an element beats the alignment it would inherit. */
+  [dir='rtl'] pre,
+  [dir='rtl'] pre code {
+    text-align: start;
   }
   [dir='rtl'] :is(input, textarea).font-mono {
     text-align: start;

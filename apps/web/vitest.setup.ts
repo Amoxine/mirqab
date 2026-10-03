@@ -67,3 +67,27 @@ if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-empty-function -- see comment above
   Element.prototype.scrollIntoView = () => {};
 }
+
+// A message key a test's provider does not hold makes next-intl print `IntlError: MISSING_MESSAGE …` through
+// console.error and carry on, so the test still passes: a real missing key (a new string never added to a
+// locale) then hides in the same noise as a provider that simply lacks a namespace. Fail the test that logged
+// it instead. Fix it where it comes from: add the namespace to that test's provider messages (or to
+// `EN` in components/dashboard/test-render.tsx), or add the key to the locale files.
+const missingMessages: string[] = [];
+const consoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  for (const arg of args) {
+    const text = arg instanceof Error ? arg.message : typeof arg === 'string' ? arg : '';
+    if (text.includes('MISSING_MESSAGE')) missingMessages.push(text.split('\n')[0] ?? text);
+  }
+  consoleError(...args);
+};
+afterEach(() => {
+  const found = [...new Set(missingMessages.splice(0))];
+  if (found.length > 0) {
+    throw new Error(
+      `A message was missing while this test ran (next-intl logged it and went on):\n  ${found.join('\n  ')}\n` +
+        'Give the test provider that namespace (see vitest.setup.ts), or add the key to the locale files.',
+    );
+  }
+});

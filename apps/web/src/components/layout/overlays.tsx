@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useDocsSearch } from '@/hooks/use-docs-search';
+import { isKKey } from '@/lib/hotkey';
 
 /** Page search over the permission-gated navigation (⌘/Ctrl + K). */
 function SearchDialog({
@@ -80,6 +81,11 @@ function SearchDialog({
             <BookOpen className="me-2 h-4 w-4" aria-hidden="true" />
             {t('docsHome')}
           </CommandItem>
+          {docs.isError && (
+            <p role="status" className="text-muted-foreground px-2 py-1.5 text-sm">
+              {t('docsUnavailable')}
+            </p>
+          )}
           {/* Hits come from the docs' own search, which already matched them: `forceMount` stops cmdk filtering them out again. */}
           {(docs.data ?? []).map((hit) => (
             <CommandItem
@@ -166,7 +172,7 @@ export function OverlaysProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && isKKey(e)) {
         e.preventDefault();
         setSearchOpen((open) => !open);
       }

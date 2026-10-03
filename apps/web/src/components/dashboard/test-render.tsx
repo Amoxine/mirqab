@@ -10,9 +10,13 @@ import apis from '@/messages/en/apis.json';
 import auth from '@/messages/en/auth.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import keys from '@/messages/en/keys.json';
 
-export const EN = { analytics, apis, auth, common, dashboard, keys };
+export const EN = { analytics, apis, auth, common, dashboard, docs, keys };
+
+/** The instant the search index reports as how far it has caught up, `ms` before now (a few seconds is "current"). */
+export const indexedAgo = (ms: number): string => new Date(Date.now() - ms).toISOString();
 
 /**
  * Runs `body` on a clock the test moves. A plain click on a linked row waits out a possible double

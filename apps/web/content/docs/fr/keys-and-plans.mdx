@@ -44,13 +44,14 @@ sûr avant de fermer la boîte de dialogue.
 
 - **Renouveler** (`key:update`, clés actives uniquement) : l’identifiant actuel cesse de fonctionner immédiatement et un
   nouveau le remplace. La nouvelle valeur n’est affichée qu’une fois.
-- **Révoquer** (`key:revoke`, clés actives uniquement) : la clé cesse de fonctionner immédiatement et est retirée de
+- **Révoquer** (`key:revoke`, clés actives ou expirées) : la clé cesse de fonctionner immédiatement et est retirée de
   la passerelle. Cette action est irréversible.
 - **Supprimer** (`key:revoke`) : une clé active doit être révoquée avant de pouvoir être supprimée. La suppression est
   définitive.
 
 Ouvrez une clé pour voir ses **Détails**, ses **Limites** (lues en direct depuis la passerelle) et son **Utilisation**. **Modifier**
-change le nom, l’expiration et les limites. Changer le quota réinitialise le quota utilisé sur la période en cours.
+change le nom, l’expiration et les limites ; comme **Renouveler**, cette action ne fonctionne que sur les clés actives, et elle est indisponible tant que la passerelle
+est injoignable. Changer le quota réinitialise le quota utilisé sur la période en cours.
 
 ## Clients OAuth
 
@@ -69,27 +70,29 @@ Une API dont le **Type d'authentification** est **OAuth2 (identifiants client)**
 ## Forfaits
 
 Ouvrez **Forfaits** (`plan:read`). Un forfait est un niveau de débit et de quota que des clés partagent. **Créer un forfait** exige
-`plan:create` ; la modification exige `plan:update` et la suppression `plan:delete`. Des boutons masqués signifient que vous
-n’avez pas la permission.
+`plan:create`. **Modifier** et **Supprimer** sont des entrées du menu d’actions de chaque ligne : la modification exige `plan:update` et la
+suppression `plan:delete`. Des actions masquées signifient que vous n’avez pas la permission.
 
 | Champ | Signification |
 |---|---|
 | **Nom**, **Description** | Libellés du niveau. |
-| **Limite de débit**, **Par (secondes)** | Requêtes autorisées par fenêtre. Vide signifie illimité. |
-| **Plafond du quota** | `-1` signifie illimité. |
+| **Limite de débit**, **Par (secondes)** | Requêtes autorisées par fenêtre. Une limite de débit vide signifie illimité ; un champ **Par** vide signifie 1 seconde. |
+| **Plafond du quota** | Vide ou `-1` signifie illimité. `0` refuse tout. |
 | **Période du quota** | **Horaire**, **Journalier**, **Hebdomadaire** ou **Mensuel**. |
 | **Actif** | Les forfaits inactifs sont masqués du [portail](/docs/portal) : les développeurs ne peuvent donc pas les choisir. |
 
 Modifier un forfait change la limite des clés qui lui sont assignées, sauf si une clé a ensuite été modifiée individuellement.
-Supprimer un forfait le retire ; ses clés sont conservées et se retrouvent sans forfait, et le message de réussite en indique le nombre.
-Un forfait qui a des abonnements au portail ne peut pas être supprimé.
+Un forfait utilisé par un abonnement au portail, même révoqué, ne peut pas être supprimé, et le tableau de bord indique seulement que la suppression a échoué.
+Supprimer un forfait retire ses limites de la passerelle : ses clés sont conservées et affichent **Aucun forfait**, mais la passerelle ne trouve plus les
+limites du forfait pour elles. Émettez de nouvelles clés pour ces appelants avant de supprimer un forfait en cours d’utilisation.
 
 ## Produits
 
 Ouvrez **Produits** (`product:read`). Un produit est un regroupement nommé d’API avec un **Nom**, un **Slug**, une
 **Description** et des **API regroupées**. Les développeurs parcourent les produits dans le portail. Un produit n’accorde pas
-d’accès à lui seul. La création exige `product:create`, la modification `product:update`, la suppression `product:delete`.
-Supprimer un produit laisse ses API intactes. Un produit qui a un abonnement, quel qu’il soit, ne peut pas être supprimé.
+d’accès à lui seul : un développeur obtient l’accès à ses API en s’y abonnant dans le portail. Les clés que vous créez sous **Clés** ignorent les produits.
+La création exige `product:create` ; **Modifier** et **Supprimer** sont des entrées du menu d’actions de chaque ligne, et exigent `product:update` et
+`product:delete`. Supprimer un produit laisse ses API intactes. Un produit qui a un abonnement, quel qu’il soit, ne peut pas être supprimé.
 
 ## Quota de l’organisation
 
@@ -97,15 +100,17 @@ Une organisation peut aussi avoir un quota d’organisation, un plafond au-dessu
 la page de l’organisation et utilisez **Modifier le quota** dans la carte **Utilisation**. **Réinitialiser l'utilisation** remet le compteur à zéro.
 Voir [Rôles, audit et organisations](/docs/roles-audit-tenants).
 
-## Ce que voient les appelants
+## Ce que voient les appelants [#what-callers-see]
 
 Voici les codes qu’un appelant reçoit de la passerelle.
 
 | Code | Cause |
 |---|---|
-| 401 | Aucune clé ni aucun jeton n’a été envoyé à un point de terminaison qui en exige un. Également une clé expirée, jusqu’à ce que la vérification nocturne (à minuit) la retire de la passerelle. |
+| 401 | Aucune clé ni aucun jeton n’a été envoyé à un point de terminaison qui en exige un. Également une clé expirée, jusqu’à ce que la vérification nocturne (à minuit, heure du serveur) la retire de la passerelle. |
 | 403 | La clé a été révoquée, ou une clé expirée a déjà été retirée, ou la clé est inconnue de la passerelle. Également un quota épuisé (**Quota exceeded**) sur la clé, son forfait ou l’organisation, un point de terminaison bloqué, ou **N'autoriser que les points de terminaison déclarés** est activé et le chemin ou la méthode n’est pas déclaré. |
 | 429 | Une limite de débit a été atteinte : celle de la clé, du forfait, de l’API ou d’un point de terminaison. |
 
-Le pare-feu edge, s’il est réglé sur le blocage, arrête un appel avant la passerelle et ne laisse aucun enregistrement. Voir
+Le pare-feu edge, si l’opérateur de la plateforme active le blocage, arrête un appel avant la passerelle et ne laisse aucun enregistrement. Voir
 [Le trajet d’une requête](/docs/how-it-works) et [Dépannage](/docs/troubleshooting).
+
+Vérifié par rapport au commit e4f3acc.

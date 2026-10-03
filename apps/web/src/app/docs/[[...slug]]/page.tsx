@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -7,6 +8,14 @@ import { getMDXComponents } from '@/components/docs/mdx-components';
 
 interface PageProps {
   params: Promise<{ slug?: string[] }>;
+}
+
+function EnglishFallback({ children }: { children: React.ReactNode }) {
+  return (
+    <div lang="en" dir="ltr">
+      {children}
+    </div>
+  );
 }
 
 // The locale comes from the cookie, so these pages are per-request (no generateStaticParams).
@@ -22,18 +31,27 @@ export default async function Page({ params }: PageProps) {
   // file still lives under content/docs/en/ (parser 'dir'), so compare the path prefix.
   const untranslated = !page.path.startsWith(`${locale}/`);
 
+  // The fallback text is English whatever the reader's language: marked as such (and left to right)
+  // so screen readers switch voice and an Arabic page does not mirror it. The notice stays in the
+  // reader's language, outside.
+  const Content = untranslated ? EnglishFallback : Fragment;
+
   return (
     <DocsPage toc={page.data.toc}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
+      <Content>
+        <DocsTitle>{page.data.title}</DocsTitle>
+        <DocsDescription>{page.data.description}</DocsDescription>
+      </Content>
       {untranslated ? (
         <p data-testid="docs-not-translated" className="rounded-md border bg-muted p-3 text-sm">
           {t('notTranslated')}
         </p>
       ) : null}
-      <DocsBody>
-        <MDX components={getMDXComponents()} />
-      </DocsBody>
+      <Content>
+        <DocsBody>
+          <MDX components={getMDXComponents()} />
+        </DocsBody>
+      </Content>
     </DocsPage>
   );
 }

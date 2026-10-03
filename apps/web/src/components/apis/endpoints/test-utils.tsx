@@ -6,19 +6,23 @@ import { NextIntlClientProvider } from 'next-intl';
 import { vi } from 'vitest';
 import enApis from '@/messages/en/apis.json';
 import enCommon from '@/messages/en/common.json';
+import enAnalytics from '@/messages/en/analytics.json';
 import enDashboard from '@/messages/en/dashboard.json';
+import enDocs from '@/messages/en/docs.json';
 import enOpenapi from '@/messages/en/openapi.json';
 import enSpecSource from '@/messages/en/specSource.json';
 import arApis from '@/messages/ar/apis.json';
 import arCommon from '@/messages/ar/common.json';
+import arAnalytics from '@/messages/ar/analytics.json';
 import arDashboard from '@/messages/ar/dashboard.json';
+import arDocs from '@/messages/ar/docs.json';
 import arOpenapi from '@/messages/ar/openapi.json';
 import arSpecSource from '@/messages/ar/specSource.json';
 import type { EndpointGovernanceList } from '@/lib/api/openapi';
 
 const MESSAGES = {
-  en: { apis: enApis, common: enCommon, dashboard: enDashboard, openapi: enOpenapi, specSource: enSpecSource },
-  ar: { apis: arApis, common: arCommon, dashboard: arDashboard, openapi: arOpenapi, specSource: arSpecSource },
+  en: { analytics: enAnalytics, apis: enApis, common: enCommon, dashboard: enDashboard, docs: enDocs, openapi: enOpenapi, specSource: enSpecSource },
+  ar: { analytics: arAnalytics, apis: arApis, common: arCommon, dashboard: arDashboard, docs: arDocs, openapi: arOpenapi, specSource: arSpecSource },
 };
 
 export function renderUi(

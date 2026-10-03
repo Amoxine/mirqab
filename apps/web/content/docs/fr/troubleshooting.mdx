@@ -11,14 +11,14 @@ Trouvez votre symptôme, lisez la cause probable, puis suivez l’action. Pour l
 | Symptôme | Cause | Que faire |
 |---|---|---|
 | Une nouvelle API est enregistrée, mais les appels échouent. | Une nouvelle API démarre en **Brouillon**. Elle n’est pas en ligne tant que son statut n’est pas **Active**. | Ouvrez l’API et choisissez **Activer**. |
-| **Créer une API** est refusé. | Votre organisation a atteint la limite d’API de son forfait : 3 pour Gratuit, 10 pour Starter, 50 pour Pro. Enterprise n’a aucune limite. | Demandez à un administrateur de l’organisation de passer l’organisation à un forfait supérieur. Voir [Rôles, audit et organisations](/docs/roles-audit-tenants). |
+| **Créer une API** est refusé. | Votre organisation a atteint la limite d’API de son forfait : 3 pour Gratuit, 10 pour Starter, 50 pour Pro. Enterprise n’a aucune limite. Le message, renvoyé en anglais par le serveur, indique `The FREE plan allows 3 APIs; this tenant has 3. Upgrade to add more.` | Demandez à un administrateur de l’organisation de passer l’organisation à un forfait supérieur. Voir [Rôles, audit et organisations](/docs/roles-audit-tenants). |
 | Le statut de synchro indique **En attente** juste après un enregistrement. | L’enregistrement rend la main avant la mise à jour de la passerelle. La mise à jour de la passerelle s’exécute ensuite, et le statut se met à jour sur la page. | Patientez un instant. Le statut devient **Synchronisée** ou **Échec**. |
-| Le statut de synchro indique **Échec**. La page de l’API affiche « Échec de la synchronisation avec la passerelle : » et une erreur. | La passerelle n’a pas accepté la définition de l’API. Le texte de l’erreur en donne la raison. | Lisez l’erreur et corrigez le réglage qu’elle nomme. Enregistrer l’API la resynchronise. La carte **État de synchronisation des API** du Tableau de bord liste aussi les API en échec avec un bouton **Réessayer**, qui exige la permission de synchroniser les API (`api:sync`). |
+| Le statut de synchro indique **Échec**. La page de l’API affiche « Échec de la synchronisation avec la passerelle : » et une erreur. | La passerelle n’a pas accepté la définition de l’API. Le texte de l’erreur en donne la raison. | Lisez l’erreur et corrigez le réglage qu’elle nomme. Enregistrer l’API la resynchronise. Un bouton **Réessayer** à côté du badge **Échec** (dans la liste des API et sur la page de l’API) fait de même. La carte **État de synchronisation des API** du Tableau de bord, visible avec `settings:read`, liste aussi les API en échec. Les deux boutons **Réessayer** exigent `api:sync`. |
 
 ## Clés et appels
 
-Un appel refusé à cause de sa clé ou de son quota apparaît dans **Trafic** avec un statut 4xx. Un appel que le pare-feu edge
-arrête, s’il est réglé sur le blocage, n’atteint jamais la passerelle et ne laisse aucun enregistrement. Voir [Analyses et trafic](/docs/analytics-and-traffic).
+Un appel refusé à cause de sa clé ou de son quota est compté dans **Trafic** comme une réponse 4xx, sauf si **Ne pas suivre** est activé pour l’API. Un appel que
+le pare-feu edge arrête, si l’opérateur de la plateforme active le blocage, n’atteint jamais la passerelle et ne laisse aucun enregistrement. Voir [Analyses et trafic](/docs/analytics-and-traffic).
 
 | Symptôme | Cause | Que faire |
 |---|---|---|
@@ -26,20 +26,20 @@ arrête, s’il est réglé sur le blocage, n’atteint jamais la passerelle et 
 | Un appel reçoit **403**. | La clé a été révoquée, ou a expiré et a été retirée. Ou un quota est épuisé (la réponse indique **Quota exceeded**) : celui de la clé, de son forfait ou de l’organisation. Ou une règle de point de terminaison bloque le chemin, ou l’API liste les points de terminaison autorisés et ce chemin n’en fait pas partie. | Vérifiez le statut de la clé dans **Clés**. Ouvrez la clé pour voir son **Quota**. Vérifiez ensuite les règles de points de terminaison de l’API. |
 | Un appel reçoit **429**. | Une limite de débit a été atteinte : celle de la clé, du forfait, de l’API ou d’un point de terminaison. Une limite de débit sur un point de terminaison utilise un compteur unique partagé par toutes les clés : une clé très active peut donc l’épuiser pour les autres. | Dans **Trafic**, réglez **Statut exact** sur 429 pour voir quand cela se produit. Ouvrez la clé pour voir sa **Limite de débit** et son **Quota**. |
 
-## Analytique
+## Analytique [#analytics]
 
 | Symptôme | Cause | Que faire |
 |---|---|---|
-| Une page indique « Le pipeline analytique ne reçoit pas de données ». | L’enregistrement des requêtes est arrêté, ses tables ne sont pas encore créées, ou aucune requête n’est encore arrivée. L’indice de la carte précise lequel. | Indiquez aux personnes qui exploitent la plateforme l’indice que vous voyez. Si aucune requête n’est arrivée, envoyez du trafic via la passerelle. |
+| Une page indique « Le pipeline analytique ne reçoit pas de données ». | Le service de collecte est arrêté, ou ses tables ne sont pas encore créées. L’indice de la carte précise lequel. | Indiquez aux personnes qui exploitent la plateforme l’indice que vous voyez. |
 | Un avis « La collecte analytique est suspendue » s’affiche au-dessus des chiffres. | Les nouvelles requêtes ne sont pas enregistrées : les chiffres sont donc obsolètes. L’avis donne l’heure du dernier enregistrement. | Prévenez les personnes qui exploitent la plateforme. |
-| Les chiffres affichent un tiret ou « Aucune donnée ». | Rien n’a été enregistré sur la période, ou un filtre le masque. Ou **Ne pas suivre** est activé dans le panneau **Modifier** de l’API, et ses requêtes ne sont donc pas enregistrées. | Choisissez une période plus longue. Sur le Tableau de bord, cherchez une pastille **Affichage de** et choisissez **Afficher toutes les API**. Sur **Trafic**, choisissez **Réinitialiser les filtres**. |
-| Les chiffres semblent trop bas. | **Ne pas suivre** est activé pour une API, ou l’enregistreur a été arrêté pendant un moment. | Vérifiez **Ne pas suivre** dans le panneau **Modifier** de l’API, ainsi que les avis au-dessus des chiffres. |
+| Les chiffres affichent un tiret ou « Aucune requête enregistrée sur cette période », sans carte d’alerte. | Le service de collecte fonctionne mais aucune requête n’est arrivée sur la période, ou un filtre la masque. Ou **Ne pas suivre** est activé dans le panneau **Modifier** de l’API, et ses requêtes ne sont donc pas enregistrées. | Choisissez une période plus longue. Si vous venez de commencer, envoyez du trafic via la passerelle. Sur le Tableau de bord, cherchez une pastille **Affichage de** et cliquez sur son x (**Afficher toutes les API**). Sur **Trafic**, choisissez **Réinitialiser les filtres** (cela ne fonctionne que si un filtre est défini). |
+| Les chiffres semblent trop bas. | **Ne pas suivre** est activé pour une API, ou le service de collecte a été arrêté pendant un moment. | Vérifiez **Ne pas suivre** dans le panneau **Modifier** de l’API, ainsi que les avis au-dessus des chiffres. |
 | « Échec du chargement des données ». | La requête des chiffres a échoué. | Utilisez le bouton **Réessayer** de la carte. |
 
 ## Requêtes capturées et Recherche de requêtes
 
 Les requêtes capturées n’existent que pour les API dont l’**Enregistrement détaillé** est activé. L’interrupteur est **Enregistrer le détail complet**,
-dans le Concepteur de l’API, et il est désactivé par défaut.
+sur la carte **Enregistrement détaillé** du Concepteur de l’API (cliquez sur son crayon), et il est désactivé par défaut.
 
 | Symptôme | Cause | Que faire |
 |---|---|---|
@@ -48,11 +48,14 @@ dans le Concepteur de l’API, et il est désactivé par défaut.
 | L’onglet **Trafic** indique « Impossible d'afficher le trafic capturé ». | Le stockage analytique est indisponible, ou sa protection de masquage n’est pas active. Rien n’est affiché. | Utilisez **Réessayer**. Si cela persiste, prévenez les personnes qui exploitent la plateforme. |
 | Recherche de requêtes indique « Aucune requête capturée sur cette période. » | Aucune API n’a de requêtes capturées sur la période. | Activez l’enregistrement détaillé de l’API, ou élargissez la période. |
 | Recherche de requêtes indique « Aucune requête capturée ne correspond à ces filtres sur cette période. » | Rien ne correspond. La recherche de mots ne fait pas de radicalisation : `fund` ne trouve pas `funds`. Un filtre `path:` correspond au début du chemin. Un secret est stocké sous la forme `[REDACTED]`, sa valeur ne peut donc pas être trouvée. | Retirez les filtres un par un. Essayez le mot exact. Voir [Rechercher dans le trafic](/docs/searching-traffic). |
-| Recherche de requêtes indique que l’index de recherche n’a pas encore démarré. | L’indexation n’a pas commencé. | Patientez. Les requêtes capturées apparaissent peu après leur enregistrement. |
-| Une requête récente est absente, et la page affiche « Indexé jusqu’à » une heure antérieure. | La recherche ne couvre que les requêtes jusqu’à cette heure. | Regardez de nouveau dans un instant. |
+| Recherche de requêtes indique que l’index de recherche n’a pas encore démarré. | L’indexation n’a pas commencé. | Patientez. Les requêtes capturées apparaissent peu après leur enregistrement. Si cela persiste, prévenez les personnes qui exploitent la plateforme. |
+| Une requête récente est absente, et la page affiche « Indexé jusqu’à » une heure antérieure. | La recherche ne couvre que les requêtes jusqu’à cette heure, et les requêtes que le service de collecte n’a pas encore transmises ne figurent pas dans les résultats. | Regardez de nouveau dans un instant. Si « Indexé jusqu’à » n’avance plus, prévenez les personnes qui exploitent la plateforme. |
 | Une pastille de filtre est rouge. | Le filtre n’est pas compris. La raison figure sous la zone. | Corrigez ou supprimez la pastille. |
-| Un message sous la zone indique « 8 filtres au maximum par recherche. » ou « 3 filtres de mots du corps au maximum par recherche. » | La recherche a trop de filtres. Aucune pastille ne devient rouge dans ce cas. | Retirez des filtres. Les mots doivent aussi compter 3 lettres ou plus. |
+| Un message sous la zone indique « 8 filtres au maximum par recherche. » ou « 3 filtres de mots du corps au maximum par recherche. » | La recherche a trop de filtres. Aucune pastille ne devient rouge dans ce cas. | Retirez des filtres. Une recherche de mots exige au moins un mot de 3 lettres ou chiffres ou plus. |
 | « Cette recherche est trop large pour aboutir à temps. » | La recherche correspond à trop de requêtes. | Ajoutez un statut, une API, une période plus courte ou un mot plus précis. |
+| « Une autre recherche est encore en cours. Patientez un instant puis réessayez. » | Votre organisation a déjà 2 recherches en cours, ou en a envoyé plus de 20 en une minute. | Patientez un instant puis réessayez. |
+| « Le serveur n’a pas compris l’un des filtres. » | Le serveur a refusé un filtre que la page avait accepté. | Retirez les filtres un par un pour le trouver, puis rechargez la page. |
+| « La recherche a échoué. Réessayez. » | La recherche a échoué pour une autre raison. | Réessayez. Si l’échec se répète, prévenez les personnes qui exploitent la plateforme. |
 | « Vous n’avez pas accès à la recherche de requêtes capturées. » | Le serveur a refusé la recherche pendant votre session, par exemple parce que votre rôle a changé. | Demandez à un administrateur `analytics:read` et `api:update`. Si vous ne les avez jamais eues, la page affiche à la place la carte **Accès refusé**. |
 
 ## « Accès refusé »
@@ -60,3 +63,5 @@ dans le Concepteur de l’API, et il est désactivé par défaut.
 Une page qui affiche « Accès refusé » vous indique la permission qui vous manque, sous la forme `resource:action`. Envoyez-la à un administrateur de
 l’organisation, qui peut vous l’accorder via un rôle. Si une page d’organisation indique « Cette organisation n’existe pas, ou vous n’en êtes pas membre », vous n’êtes pas membre de cette
 organisation. Voir [Rôles, audit et organisations](/docs/roles-audit-tenants).
+
+Vérifié par rapport au commit e4f3acc.

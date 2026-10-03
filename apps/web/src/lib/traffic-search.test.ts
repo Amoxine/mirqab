@@ -35,6 +35,50 @@ const CONTRACT: [string, SearchClause][] = [
   ['timeout', { kind: 'body', neg: false, side: 'any', value: 'timeout' }],
 ];
 
+/**
+ * The bounds, pinned on both sides. `traffic-search.validate.spec.ts` in the API holds the SAME two tables, keyed
+ * by the clause the API receives instead of the text typed: the web parser must refuse every shape the API
+ * answers with 400 (a chip that looks fine and then fails the whole search), and accept every edge the API
+ * accepts. Change a row here and the same row there, or one side stops being checked against the other.
+ */
+const TEN = Array.from({ length: 10 }, (_, i) => 200 + i);
+const ELEVEN = Array.from({ length: 11 }, (_, i) => 200 + i);
+const REJECTED: [string, string, Record<string, unknown>][] = [
+  ['a status above 599', 'status:>=700', { kind: 'status', match: { type: 'cmp', op: '>=', value: 700 } }],
+  ['a status of 000', 'status:>=000', { kind: 'status', match: { type: 'cmp', op: '>=', value: 0 } }],
+  ['a status under 100', 'status:<099', { kind: 'status', match: { type: 'cmp', op: '<', value: 99 } }],
+  ['an exact code under 100', 'status:099', { kind: 'status', match: { type: 'in', values: [99] } }],
+  ['an exact code above 599', 'status:600', { kind: 'status', match: { type: 'in', values: [600] } }],
+  ['a range ending above 599', 'status:600-700', { kind: 'status', match: { type: 'range', from: 600, to: 700 } }],
+  ['a range starting under 100', 'status:050-200', { kind: 'status', match: { type: 'range', from: 50, to: 200 } }],
+  ['a range that ends before it starts', 'status:300-200', { kind: 'status', match: { type: 'range', from: 300, to: 200 } }],
+  ['eleven status codes', `status:${ELEVEN.join(',')}`, { kind: 'status', match: { type: 'in', values: ELEVEN } }],
+  ['a latency over an hour', 'latency:3600001', { kind: 'latency', op: '>=', value: 3_600_001 }],
+  ['a latency with an operator over an hour', 'latency:>3600001', { kind: 'latency', op: '>', value: 3_600_001 }],
+  ['eight methods', 'method:GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS,TRACE', { kind: 'method', values: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE'] }],
+  ['a one-letter method', 'method:G', { kind: 'method', values: ['G'] }],
+  ['a header name with a space', 'reqh:bad name', { kind: 'header', side: 'req', name: 'bad name' }],
+  ['a header name over 64 characters', `reqh:${'h'.repeat(65)}`, { kind: 'header', side: 'req', name: 'h'.repeat(65) }],
+  ['a value over 200 characters', `key:${'k'.repeat(201)}`, { kind: 'key', value: 'k'.repeat(201) }],
+  ['a route over 200 characters', `route:${'r'.repeat(201)}`, { kind: 'route', value: 'r'.repeat(201) }],
+  ['a path under 3 letters or digits', 'path:/a', { kind: 'path', value: '/a' }],
+  ['a body term under 3 letters or digits', 'body:ab', { kind: 'body', side: 'any', value: 'ab' }],
+  ['a body made only of common words', 'body:"true false"', { kind: 'body', side: 'any', value: 'true false' }],
+];
+/** The edges that are still fine: refusing one of these would be the web side being stricter than the API. */
+const EDGES: [string, string, Record<string, unknown>][] = [
+  ['the lowest status', 'status:>=100', { kind: 'status', neg: false, match: { type: 'cmp', op: '>=', value: 100 } }],
+  ['the highest status', 'status:<=599', { kind: 'status', neg: false, match: { type: 'cmp', op: '<=', value: 599 } }],
+  ['the widest status range', 'status:100-599', { kind: 'status', neg: false, match: { type: 'range', from: 100, to: 599 } }],
+  ['a one-code range', 'status:404-404', { kind: 'status', neg: false, match: { type: 'range', from: 404, to: 404 } }],
+  ['ten status codes', `status:${TEN.join(',')}`, { kind: 'status', neg: false, match: { type: 'in', values: TEN } }],
+  ['the lowest latency', 'latency:0', { kind: 'latency', neg: false, op: '>=', value: 0 }],
+  ['an hour of latency', 'latency:<=3600000', { kind: 'latency', neg: false, op: '<=', value: 3_600_000 }],
+  ['seven methods', 'method:GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS', { kind: 'method', neg: false, values: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] }],
+  ['a 200-character key', `key:${'k'.repeat(200)}`, { kind: 'key', neg: false, value: 'k'.repeat(200) }],
+  ['a 64-character header name', `reqh:${'h'.repeat(64)}`, { kind: 'header', neg: false, side: 'req', name: 'h'.repeat(64) }],
+];
+
 describe('tokenize', () => {
   it('keeps a quoted phrase together and splits on other whitespace', () => {
     expect(tokenize('status:>=500  body:"insufficient funds"\tmethod:POST')).toEqual([
@@ -126,6 +170,14 @@ describe('parseToken', () => {
     expect(clause('route:/orders')).toEqual({ kind: 'route', neg: false, value: '/orders' });
     expect(clause('path:/orders')).toEqual({ kind: 'path', neg: false, value: '/orders' });
     expect(errorCode('path:/me')).toBe('termTooShort');
+  });
+
+  it.each(REJECTED)('refuses %s, as the API does: %s', (_label, token) => {
+    expect(parseToken(token).ok, token).toBe(false);
+  });
+
+  it.each(EDGES)('accepts %s, the edge the API still takes: %s', (_label, token, expected) => {
+    expect(clause(token), token).toEqual(expected);
   });
 
   it('a common word inside a more specific phrase is fine', () => {

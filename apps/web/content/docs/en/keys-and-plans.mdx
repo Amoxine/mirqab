@@ -44,13 +44,14 @@ safe before you close the dialog.
 
 - **Rotate** (`key:update`, active keys only): the current credential stops working immediately and a
   new one replaces it. The new value is shown once.
-- **Revoke** (`key:revoke`, active keys only): the key stops working immediately and is removed from
+- **Revoke** (`key:revoke`, active or expired keys): the key stops working immediately and is removed from
   the gateway. This cannot be undone.
 - **Delete** (`key:revoke`): an active key must be revoked before it can be deleted. Deleting removes it
   permanently.
 
 Open a key to see its **Details**, **Limits** (read live from the gateway), and **Usage**. **Edit**
-changes the name, expiry and limits. Changing the quota resets the quota used in the current period.
+changes the name, expiry and limits; like **Rotate**, it works on active keys only, and it is unavailable while the gateway cannot be
+reached. Changing the quota resets the quota used in the current period.
 
 ## OAuth clients
 
@@ -69,27 +70,29 @@ An API whose **Auth type** is **OAuth2 (client credentials)** has a **Clients** 
 ## Plans
 
 Open **Plans** (`plan:read`). A plan is a rate and quota tier that keys share. **Create Plan** needs
-`plan:create`; editing needs `plan:update` and deleting needs `plan:delete`. Hidden buttons mean you
-lack the permission.
+`plan:create`. **Edit** and **Delete** are items in each row's actions menu: editing needs `plan:update` and deleting needs
+`plan:delete`. Hidden actions mean you lack the permission.
 
 | Field | Meaning |
 |---|---|
 | **Name**, **Description** | Labels for the tier. |
-| **Rate limit**, **Per (seconds)** | Requests allowed per window. Blank means unlimited. |
-| **Quota ceiling** | `-1` is unlimited. |
+| **Rate limit**, **Per (seconds)** | Requests allowed per window. A blank rate limit means unlimited; a blank **Per** means 1 second. |
+| **Quota ceiling** | Blank or `-1` is unlimited. `0` refuses everything. |
 | **Quota period** | **Hourly**, **Daily**, **Weekly** or **Monthly**. |
 | **Active** | Inactive plans are hidden from the [portal](/docs/portal), so developers cannot pick them. |
 
 Editing a plan changes the limit for the keys assigned to it, unless a key was edited on its own afterwards.
-Deleting a plan removes it; its keys are kept and become plan-less, and the success message gives their number.
-A plan that has portal subscriptions cannot be deleted.
+A plan that any portal subscription uses, even a revoked one, cannot be deleted, and the dashboard only reports that the deletion failed.
+Deleting a plan removes its limits from the gateway: its keys are kept and show **No plan**, but the gateway no longer finds the plan's
+limits for them. Issue new keys for those callers before you delete a plan that is in use.
 
 ## Products
 
 Open **Products** (`product:read`). A product is a named bundle of APIs with a **Name**, **Slug**,
 **Description** and **APIs bundled**. Developers browse products in the portal. A product does not grant
-access by itself. Creating needs `product:create`, editing `product:update`, deleting `product:delete`.
-Deleting a product leaves its APIs untouched. A product that has any subscription cannot be deleted.
+access by itself: a developer gets access to its APIs by subscribing to it in the portal. Keys you create under **Keys** ignore products.
+Creating needs `product:create`; **Edit** and **Delete** are items in each row's actions menu, needing `product:update` and
+`product:delete`. Deleting a product leaves its APIs untouched. A product that has any subscription cannot be deleted.
 
 ## Tenant quota
 
@@ -103,9 +106,11 @@ These are the codes a caller gets from the gateway.
 
 | Code | Cause |
 |---|---|
-| 401 | No key or token was sent to an endpoint that requires one. Also an expired key, until the nightly check (at midnight) removes it from the gateway. |
+| 401 | No key or token was sent to an endpoint that requires one. Also an expired key, until the nightly check (at midnight, server time) removes it from the gateway. |
 | 403 | The key was revoked, or an expired key was already removed, or the key is not known to the gateway. Also a used-up quota (**Quota exceeded**) on the key, its plan or the tenant, a blocked endpoint, or **Only allow declared endpoints** is on and the path or method is not declared. |
 | 429 | A rate limit was reached: the key's, the plan's, the API's or an endpoint's. |
 
-The edge firewall, if it is set to block, stops a call before the gateway and leaves no record. See
+The edge firewall, if the platform operator turns on blocking, stops a call before the gateway and leaves no record. See
 [How a request travels](/docs/how-it-works) and [Troubleshooting](/docs/troubleshooting).
+
+Verified against commit e4f3acc.

@@ -74,7 +74,8 @@
     "never": "Never",
     "hintPumpDown": "The analytics collection service is not running or cannot be reached, so new requests are not being recorded. Contact the people who run the platform.",
     "hintTablesMissing": "Analytics storage has not been set up yet. Contact the people who run the platform to check that collection is running.",
-    "hintNoTraffic": "The analytics tables exist but no requests have been recorded yet. Send traffic through the gateway to populate them."
+    "hintNoTraffic": "The analytics tables exist but no requests have been recorded yet. Send traffic through the gateway to populate them.",
+    "troubleshooting": "Troubleshooting guide"
   },
   "staleNotice": {
     "title": "Analytics collection is paused",
@@ -287,8 +288,8 @@
     "indexedUntil": "Indexed up to {when}",
     "notIndexedYet": "The search index has not started yet. Captured requests appear here shortly after they are recorded.",
     "coverage": "Word search covers the first 16 KiB of each body.",
-    "emptyNoCapture": "No captured requests in this window. Turn on detailed recording for an API to capture them.",
-    "emptyNoMatch": "No captured request matches these filters in this window.",
+    "emptyNoCapture": "No captured requests found in this window. If you expect some, turn on detailed recording for an API.",
+    "emptyNoMatch": "No captured request matches these filters in what is indexed for this window.",
     "openDetail": "Open {method} {path}",
     "truncatedBadge": "cut at 16 KiB",
     "truncatedHint": "Only the first 16 KiB of a body is kept and searched.",
@@ -341,6 +342,14 @@
       "next": "Next request",
       "position": "{index} of {count}: <bdi>{request}</bdi>"
     },
-    "resultCount": "{count, plural, =0 {No results} one {# result loaded} other {# results loaded}} · {filters, plural, =0 {no filters} one {# filter} other {# filters}}"
+    "resultCount": "{count, plural, =0 {No results} one {# result loaded} other {# results loaded}} · {filters, plural, =0 {no filters} one {# filter} other {# filters}}",
+    "indexBehindTitle": "The search index is behind: recent requests may be missing.",
+    "indexBehindShort": "search index behind",
+    "emptyIndexBehind": "No match in what is indexed so far. The index is behind, so recent requests are not searchable yet.",
+    "coveragePartialTitle": "Search does not cover this whole time range yet: older requests may be missing.",
+    "coveragePartialSince": "Requests are searchable from {when} on.",
+    "emptyPartial": "No match in what is indexed so far. Search does not cover this whole time range yet, so older requests may exist that are not searchable.",
+    "loadMoreFailed": "The next page could not be loaded.",
+    "rangeUnknown": "The link names a time range this page does not know, so it shows the last 24 hours."
   }
 }

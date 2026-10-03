@@ -400,6 +400,19 @@ describe('DataTable rows as links (getRowHref)', () => {
     expect(grid?.className.split(' ')).toEqual(expect.arrayContaining(['grid', 'grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3']));
   });
 
+  it('lets a long unbroken word in a card wrap anywhere, so it cannot widen the card: the name and every value', () => {
+    stubViewport(true);
+    render(wrap(<LinkHarness getRowHref={(row) => `/apis/${row.name}`} />));
+    const name = screen.getAllByText('orders')[0]?.closest('div.flex-1');
+    const value = screen.getByText('ACTIVE').closest('dd');
+    // `overflow-wrap: anywhere` is what lowers the min-content width of an unbroken word (`break-word` does not).
+    expect(name?.className.split(' ')).toEqual(expect.arrayContaining(['min-w-0', '[overflow-wrap:anywhere]']));
+    expect(value?.className.split(' ')).toEqual(expect.arrayContaining(['min-w-0', '[overflow-wrap:anywhere]']));
+    expect(value?.closest('dl')?.className).toContain('grid-cols-[minmax(0,auto)_minmax(0,1fr)]');
+    // And no leftover `break-words`, which would suggest the old contract is still in force.
+    expect(name?.className).not.toContain('break-words');
+  });
+
   it('works in the card view of a phone as well', () => {
     stubViewport(true);
     render(wrap(<LinkHarness getRowHref={(row) => `/apis/${row.name}`} />));

@@ -26,6 +26,9 @@ export function useSearchQuery() {
   const q = searchParams.get('q') ?? '';
   const rangeParam = searchParams.get('range');
   const range = RANGES.find((r) => r === rangeParam) ?? DEFAULT_RANGE;
+  // A link that names a range this page does not know still searches the default, but the page says so:
+  // otherwise a shared link would quietly mean something else than its author meant.
+  const rangeUnknown = rangeParam !== null && range !== rangeParam;
 
   const tokens = useMemo<SearchToken[]>(() => tokenize(q).map((text) => ({ text, parsed: parseToken(text) })), [q]);
   const clauses = useMemo<SearchClause[]>(
@@ -64,6 +67,7 @@ export function useSearchQuery() {
 
   return {
     range,
+    rangeUnknown,
     tokens,
     clauses,
     tooMany,

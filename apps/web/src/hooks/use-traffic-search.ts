@@ -5,6 +5,7 @@ import type { SearchClause } from '@/lib/traffic-search';
 import type { AnalyticsRange } from '@/types';
 
 const SEARCH_PAGE_SIZE = 50;
+const SEARCH_STALE_MS = 5 * 60_000;
 
 /** Mirrors `TrafficSearchItem` in `apps/api/src/modules/analytics/search/traffic-search.service.ts`. */
 export interface TrafficSearchItem {
@@ -35,6 +36,10 @@ export interface TrafficSearchPage {
   nextCursor: TrafficSearchCursor | null;
   /** How far the indexer has caught up; an empty result before this instant is real. */
   indexedUntil: string | null;
+  /** The earliest instant the index covers. Optional: an API image from before the field existed does not send it. */
+  indexedFrom?: string | null;
+  /** Whether the index covers the whole window (`complete`), part of it (`partial`) or nothing yet (`none`). */
+  coverage?: 'complete' | 'partial' | 'none';
 }
 
 export interface TrafficSearchDetail extends TrafficSearchItem {
@@ -52,19 +57,31 @@ export interface TrafficSearchDetail extends TrafficSearchItem {
 export function useTrafficSearch(range: AnalyticsRange, clauses: SearchClause[], enabled = true) {
   return useInfiniteQuery({
     queryKey: queryKeys.analytics.search({ range, clauses }),
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       api
-        .post<TrafficSearchPage>('/analytics/traffic/search', {
-          range,
-          clauses,
-          limit: SEARCH_PAGE_SIZE,
-          ...(pageParam ? { cursor: pageParam } : {}),
-        })
+        .post<TrafficSearchPage>(
+          '/analytics/traffic/search',
+          {
+            range,
+            clauses,
+            limit: SEARCH_PAGE_SIZE,
+            ...(pageParam ? { cursor: pageParam } : {}),
+          },
+          // A search that is no longer wanted (the query was cancelled, or the page left) stops at the network
+          // instead of running on and counting against the per-tenant limit of two in flight.
+          { signal },
+        )
         .then((res) => res.data),
     initialPageParam: null as TrafficSearchCursor | null,
     getNextPageParam: (last) => last.nextCursor,
     placeholderData: keepPreviousData,
     enabled,
+    // A loaded infinite query re-runs EVERY page, one after the other, once it is stale. Each page is a search the
+    // server throttles (20 a minute) and allows two of at a time, so for this query only: not stale for five
+    // minutes (the app default is one), and no refetch of all pages just because the window gained focus. The
+    // search page's own filters and the index notice are what bring a changed result in.
+    staleTime: SEARCH_STALE_MS,
+    refetchOnWindowFocus: false,
     // A 400 or 422 will not change on retry; only a dropped connection is worth another try.
     retry: false,
   });

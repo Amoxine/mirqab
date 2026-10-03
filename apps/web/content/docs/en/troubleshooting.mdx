@@ -11,14 +11,14 @@ Find your symptom, read the likely cause, then follow the action. For how a call
 | Symptom | Cause | What to do |
 |---|---|---|
 | A new API is saved, but calls to it fail. | A new API starts as **Draft**. It is not live until its status is **Active**. | Open the API and choose **Activate**. |
-| **Create API** is refused. | Your tenant reached the API limit of its plan: 3 for Free, 10 for Starter, 50 for Pro. Enterprise has no limit. | Ask a tenant administrator to move the tenant to a larger plan. See [Roles, audit and tenants](/docs/roles-audit-tenants). |
+| **Create API** is refused. | Your tenant reached the API limit of its plan: 3 for Free, 10 for Starter, 50 for Pro. Enterprise has no limit. The message reads "The FREE plan allows 3 APIs; this tenant has 3. Upgrade to add more." | Ask a tenant administrator to move the tenant to a larger plan. See [Roles, audit and tenants](/docs/roles-audit-tenants). |
 | The sync status says **Pending** right after a save. | Saving returns before the gateway is updated. The gateway update runs afterwards, and the status updates on the page. | Wait a moment. The status becomes **Synced** or **Failed**. |
-| The sync status says **Failed**. The API page shows "Gateway sync failed:" and an error. | The gateway did not accept the API definition. The error text says why. | Read the error and fix the setting it names. Saving the API syncs it again. The **API sync status** card on the Dashboard also lists failed APIs with a **Retry** button, which needs permission to sync APIs (`api:sync`). |
+| The sync status says **Failed**. The API page shows "Gateway sync failed:" and an error. | The gateway did not accept the API definition. The error text says why. | Read the error and fix the setting it names. Saving the API syncs it again. A **Retry** button next to the **Failed** badge (on the APIs list and on the API page) does the same. The **API sync status** card on the Dashboard, visible with `settings:read`, also lists failed APIs. Both **Retry** buttons need `api:sync`. |
 
 ## Keys and calls
 
-A call that is refused for its key or quota appears in **Traffic** with a 4xx status. A call that the edge firewall
-stops, if it is set to block, never reaches the gateway and leaves no record. See [Analytics and traffic](/docs/analytics-and-traffic).
+A call that is refused for its key or quota is counted in **Traffic** as a 4xx response, unless the API has **Do not track** on. A call that
+the edge firewall stops, if the platform operator turns on blocking, never reaches the gateway and leaves no record. See [Analytics and traffic](/docs/analytics-and-traffic).
 
 | Symptom | Cause | What to do |
 |---|---|---|
@@ -26,20 +26,20 @@ stops, if it is set to block, never reaches the gateway and leaves no record. Se
 | A call gets **403**. | The key was revoked, or expired and was removed. Or a quota is used up (the response says **Quota exceeded**): the key's, its plan's or the tenant's. Or an endpoint rule blocks the path, or the API lists allowed endpoints and this path is not one of them. | Check the key status in **Keys**. Open the key to see its **Quota**. Then check the endpoint rules of the API. |
 | A call gets **429**. | A rate limit was reached: the key's, the plan's, the API's or an endpoint's. A rate limit on an endpoint uses one counter shared by all keys, so one busy key can exhaust it for the others. | In **Traffic**, set **Exact status** to 429 to see when it happens. Open the key to see its **Rate limit** and **Quota**. |
 
-## Analytics
+## Analytics [#analytics]
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| A page says "Analytics pipeline not receiving data". | The recording of requests is down, its tables are not created yet, or no request has arrived yet. The hint on the card says which. | Tell the people who run the platform which hint you see. If no request has arrived, send traffic through the gateway. |
+| A page says "Analytics pipeline not receiving data". | The collection service is down, or its tables are not created yet. The hint on the card says which. | Tell the people who run the platform which hint you see. |
 | A notice says "Analytics collection is paused" above the figures. | New requests are not being recorded, so the figures are stale. The notice gives the time of the last record. | Tell the people who run the platform. |
-| Figures show a dash or "No data". | Nothing was recorded in the range, or a filter hides it. Or **Do not track** is on in the API's **Edit** sheet, so its requests are not recorded. | Choose a longer range. On the Dashboard, look for a **Showing** chip and choose **Show all APIs**. On **Traffic**, choose **Reset filters**. |
-| Figures look too low. | **Do not track** is on for an API, or the recorder was down for a while. | Check **Do not track** in the API's **Edit** sheet, and the notices above the figures. |
+| Figures show a dash or "No requests were recorded in this range", with no warning card. | The collection service runs but no request arrived in the range, or a filter hides it. Or **Do not track** is on in the API's **Edit** sheet, so its requests are not recorded. | Choose a longer range. If you just started, send traffic through the gateway. On the Dashboard, look for a **Showing** chip and click its x (**Show all APIs**). On **Traffic**, choose **Reset filters** (it works only while a filter is set). |
+| Figures look too low. | **Do not track** is on for an API, or the collection service was down for a while. | Check **Do not track** in the API's **Edit** sheet, and the notices above the figures. |
 | "Failed to load data". | The request for the figures failed. | Use the **Retry** button on the card. |
 
 ## Captured requests and Request search
 
 Captured requests exist only for APIs that have **Detailed recording** on. The switch is **Record full detail**,
-in the Designer of the API, and it is off by default.
+on the **Detailed recording** card in the Designer of the API (click its pencil), and it is off by default.
 
 | Symptom | Cause | What to do |
 |---|---|---|
@@ -48,11 +48,14 @@ in the Designer of the API, and it is off by default.
 | The **Traffic** tab says "Captured traffic can't be shown". | The analytics store is unavailable, or its redaction safeguard is not active. Nothing is shown. | Use **Retry**. If it stays, tell the people who run the platform. |
 | Request search says "No captured requests in this window." | No API has captured requests in the range. | Turn on detailed recording for the API, or widen the range. |
 | Request search says "No captured request matches these filters in this window." | Nothing matches. Word search does not stem, so `fund` does not find `funds`. A `path:` filter matches the start of the path. A secret is stored as `[REDACTED]`, so its value cannot be found. | Remove filters one at a time. Try the exact word. See [Searching traffic](/docs/searching-traffic). |
-| Request search says the search index has not started yet. | Indexing has not begun. | Wait. Captured requests appear shortly after they are recorded. |
-| A recent request is missing, and the page shows "Indexed up to" an earlier time. | The search only covers requests up to that time. | Look again in a moment. |
+| Request search says the search index has not started yet. | Indexing has not begun. | Wait. Captured requests appear shortly after they are recorded. If it stays, tell the people who run the platform. |
+| A recent request is missing, and the page shows "Indexed up to" an earlier time. | The search only covers requests up to that time, and requests the collection service has not delivered yet are not in the results. | Look again in a moment. If "Indexed up to" stops moving, tell the people who run the platform. |
 | A filter chip is red. | The filter is not understood. The reason is under the box. | Fix or remove the chip. |
-| A message under the box says "At most 8 filters per search." or "At most 3 body-word filters per search." | The search has too many filters. No chip turns red for this. | Remove filters. Words must also have 3 letters or more. |
+| A message under the box says "At most 8 filters per search." or "At most 3 body-word filters per search." | The search has too many filters. No chip turns red for this. | Remove filters. A word search needs at least one word of 3 or more letters or digits. |
 | "That search is too broad to finish in time." | The search matches too many requests. | Add a status, an API, a shorter range or a more specific word. |
+| "Another search is still running. Wait a moment and try again." | Your tenant already has 2 searches running, or sent more than 20 in a minute. | Wait a moment and try again. |
+| "The server did not understand one of the filters." | The server refused a filter that the page accepted. | Remove filters one at a time to find it, then reload the page. |
+| "The search failed. Try again." | The search failed for another reason. | Try again. If it keeps failing, tell the people who run the platform. |
 | "You do not have access to search captured requests." | The server refused the search during your session, for example because your role changed. | Ask an administrator for `analytics:read` and `api:update`. Without them from the start, the page shows the **No access** card instead. |
 
 ## "No access"
@@ -60,3 +63,5 @@ in the Designer of the API, and it is off by default.
 A page that shows "No access" tells you the permission you lack, in the form `resource:action`. Send it to a tenant
 administrator, who can grant it through a role. If a tenant page says "This tenant does not exist, or you are not a
 member of it", you are not a member of that tenant. See [Roles, audit and tenants](/docs/roles-audit-tenants).
+
+Verified against commit e4f3acc.

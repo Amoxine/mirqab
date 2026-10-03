@@ -132,3 +132,35 @@ describe('useSearchQuery: after the URL has caught up', () => {
     expect(q(1)).toBe('status:500 method:GET');
   });
 });
+
+describe('useSearchQuery: the time range in the link', () => {
+  it.each([
+    ['no range', '', false, '24h'],
+    ['a known range', 'range=7d', false, '7d'],
+    ['the default written out', 'range=24h', false, '24h'],
+    ['an unknown range', 'range=forever', true, '24h'],
+    ['an empty range', 'range=', true, '24h'],
+    ['a range in the wrong case', 'range=7D', true, '24h'],
+  ])('for a link with %s', (_name, query, unknown, searched) => {
+    const { result } = setup(query);
+    expect(result.current.rangeUnknown).toBe(unknown);
+    expect(result.current.range).toBe(searched);
+  });
+
+  it('stops saying it once the person edits the search: the unknown range is not carried into the new URL', () => {
+    const { result } = setup('range=forever&q=status%3A500');
+    act(() => {
+      result.current.add('method:GET');
+    });
+    expect(new URLSearchParams(written(0)).has('range')).toBe(false);
+    expect(q(0)).toBe('status:500 method:GET');
+  });
+
+  it('stops saying it when the person picks a range', () => {
+    const { result } = setup('range=forever');
+    act(() => {
+      result.current.setRange('7d');
+    });
+    expect(new URLSearchParams(written(0)).get('range')).toBe('7d');
+  });
+});

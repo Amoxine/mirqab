@@ -229,7 +229,8 @@
     "empty": "No matching page.",
     "pages": "Pages",
     "docs": "Documentation",
-    "docsHome": "Documentation"
+    "docsHome": "Documentation",
+    "docsUnavailable": "Documentation search is unavailable."
   },
   "help": {
     "title": "Help & shortcuts",

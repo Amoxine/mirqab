@@ -1,3 +1,32 @@
 {
-  "notTranslated": "Pas encore traduit : version anglaise affichée."
+  "notTranslated": "Pas encore traduit : version anglaise affichée.",
+  "help": {
+    "label": "Aide",
+    "aria": "Aide : {topic}",
+    "topics": {
+      "apis-and-openapi-import": "API et import OpenAPI",
+      "keys-and-plans": "Clés et forfaits",
+      "analytics-and-traffic": "Analyses et trafic",
+      "searching-traffic": "Rechercher dans le trafic",
+      "roles-audit-tenants": "Rôles, audit et organisations"
+    }
+  },
+  "shell": {
+    "menu": "Menu de la documentation",
+    "openMenu": "Ouvrir le menu de la documentation",
+    "closeMenu": "Fermer le menu de la documentation",
+    "collapseSidebar": "Réduire la barre latérale",
+    "expandSidebar": "Développer la barre latérale",
+    "openSearch": "Ouvrir la recherche",
+    "closeSearch": "Fermer",
+    "copyCode": "Copier le code",
+    "codeCopied": "Code copié",
+    "backToDashboard": "{brand} : retour au tableau de bord",
+    "diagram": "Schéma : {steps}"
+  },
+  "notFound": {
+    "title": "Cette page de documentation n’existe pas",
+    "description": "L’adresse comporte peut-être une faute de frappe, ou la page a été renommée.",
+    "home": "Retour à la documentation"
+  }
 }

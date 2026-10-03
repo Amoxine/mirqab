@@ -74,7 +74,8 @@
     "never": "Jamais",
     "hintPumpDown": "Le service de collecte analytique est arrêté ou inaccessible : les nouvelles requêtes ne sont plus enregistrées. Contactez les personnes qui exploitent la plateforme.",
     "hintTablesMissing": "Le stockage analytique n'est pas encore en place. Contactez les personnes qui exploitent la plateforme pour vérifier que la collecte fonctionne.",
-    "hintNoTraffic": "Les tables analytiques existent mais aucune requête n'a encore été enregistrée. Envoyez du trafic via la passerelle pour les alimenter."
+    "hintNoTraffic": "Les tables analytiques existent mais aucune requête n'a encore été enregistrée. Envoyez du trafic via la passerelle pour les alimenter.",
+    "troubleshooting": "Guide de dépannage"
   },
   "staleNotice": {
     "title": "La collecte analytique est suspendue",
@@ -287,8 +288,8 @@
     "indexedUntil": "Indexé jusqu’à {when}",
     "notIndexedYet": "L’index de recherche n’a pas encore démarré. Les requêtes capturées apparaissent ici peu après leur enregistrement.",
     "coverage": "La recherche de mots couvre les 16 premiers Kio de chaque corps.",
-    "emptyNoCapture": "Aucune requête capturée sur cette période. Activez l’enregistrement détaillé d’une API pour en capturer.",
-    "emptyNoMatch": "Aucune requête capturée ne correspond à ces filtres sur cette période.",
+    "emptyNoCapture": "Aucune requête capturée trouvée sur cette période. Si vous en attendez, activez l’enregistrement détaillé d’une API.",
+    "emptyNoMatch": "Aucune requête capturée indexée ne correspond à ces filtres sur cette période.",
     "openDetail": "Ouvrir {method} {path}",
     "truncatedBadge": "coupé à 16 Kio",
     "truncatedHint": "Seuls les 16 premiers Kio d’un corps sont conservés et recherchés.",
@@ -341,6 +342,14 @@
       "next": "Requête suivante",
       "position": "{index} sur {count} : <bdi>{request}</bdi>"
     },
-    "resultCount": "{count, plural, =0 {Aucun résultat} one {# résultat chargé} other {# résultats chargés}} · {filters, plural, =0 {aucun filtre} one {# filtre} other {# filtres}}"
+    "resultCount": "{count, plural, =0 {Aucun résultat} one {# résultat chargé} other {# résultats chargés}} · {filters, plural, =0 {aucun filtre} one {# filtre} other {# filtres}}",
+    "indexBehindTitle": "L’index de recherche a du retard : les requêtes récentes peuvent manquer.",
+    "indexBehindShort": "index de recherche en retard",
+    "emptyIndexBehind": "Aucune correspondance dans ce qui est indexé pour l’instant. L’index a du retard : les requêtes récentes ne sont pas encore interrogeables.",
+    "coveragePartialTitle": "La recherche ne couvre pas encore toute cette période : les requêtes plus anciennes peuvent manquer.",
+    "coveragePartialSince": "Les requêtes sont interrogeables à partir du {when}.",
+    "emptyPartial": "Aucune correspondance dans ce qui est indexé pour l’instant. La recherche ne couvre pas encore toute cette période : des requêtes plus anciennes peuvent exister sans être interrogeables.",
+    "loadMoreFailed": "La page suivante n’a pas pu être chargée.",
+    "rangeUnknown": "Le lien indique une période que cette page ne connaît pas : elle affiche les dernières 24 heures."
   }
 }

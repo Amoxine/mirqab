@@ -30,7 +30,7 @@ Open **APIs**. You have two ways to add one. Both need the `api:create` permissi
 
 **By hand.** Click **Create API** and fill in:
 
-- **Name** and **Slug**. The slug cannot change later.
+- **Name** and **Slug**. The slug uses lowercase letters, digits and single hyphens, and it cannot change later.
 - **Auth type**. The form offers **API Key**, **OAuth2 (client credentials)** and **None**, and starts on **API Key**.
 - **Upstream URL**, the server that really answers, for example `https://api.example.com`.
 - **Listen path**, the path callers use on the gateway. It must start with `/`.
@@ -39,9 +39,9 @@ Click **Create**.
 
 **From an OpenAPI document.** Click **Import OpenAPI**, choose a file, paste the document, or use the
 **From URL** tab, then click **Check document** and **Import**. MIRQAB opens the new API on its
-**Endpoints** tab. An imported API starts with **Auth type** set to **None**, so the gateway does not
-ask callers for a key. To require one, open the API, click **Edit** and change **Auth type** to
-**API Key**. Details are in [APIs and OpenAPI import](/docs/apis-and-openapi-import).
+**Endpoints** tab. An imported API is **Draft** with **Auth type** set to **None**, which means no key is needed. If callers need a
+key, open the API, click **Edit** and change **Auth type** to **API Key** before you **Activate** the API. Security schemes in the
+document are not turned into gateway authentication. Details are in [APIs and OpenAPI import](/docs/apis-and-openapi-import).
 
 ## 2. Activate the API
 
@@ -59,7 +59,7 @@ now; it cannot be shown again. See [Keys and plans](/docs/keys-and-plans).
 ## 4. Call the API
 
 Send the request to the gateway, not to your upstream. The address is the gateway address, then your
-tenant's slug (shown on the **Tenants** page), then the listen path, then the path of the endpoint. The key goes in the
+tenant's slug (shown on the **Tenants** page), then the listen path, then the path of the endpoint. The dashboard does not show the gateway address; ask the people who run the platform for it. The key goes in the
 `Authorization` header, which is the default header name:
 
 ```bash
@@ -77,7 +77,7 @@ Developers who should not use the dashboard can get keys and try the API themsel
 
 - The dashboard home shows requests, error rate and latency for the last 24 hours by default.
 - **Analytics** shows the same figures, with tables per API and per key, and **Traffic** lets you
-  filter by API, key, method, status, path and latency. The charts cover all traffic. See
+  filter by API, key, method, status, path and latency. The charts and figures count all traffic; the tables list the 50 busiest APIs or keys. See
   [Analytics and traffic](/docs/analytics-and-traffic).
 - Both need the `analytics:read` permission.
 - If the page says **Analytics pipeline not receiving data**, nothing is being recorded yet. See
@@ -90,3 +90,5 @@ Developers who should not use the dashboard can get keys and try the API themsel
 - [Keys and plans](/docs/keys-and-plans): keys, plans, products and quotas.
 - [Developer portal](/docs/portal): self-service for your developers.
 - [Searching traffic](/docs/searching-traffic): find captured requests by content.
+
+Verified against commit e4f3acc.

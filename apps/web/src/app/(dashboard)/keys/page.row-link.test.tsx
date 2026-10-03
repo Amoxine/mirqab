@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import apis from '@/messages/en/apis.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import keys from '@/messages/en/keys.json';
 import plans from '@/messages/en/plans.json';
 import { mockFetch, ok } from '@/components/apis/endpoints/test-utils';
@@ -44,7 +45,7 @@ describe('Keys list: rows open their detail', () => {
     mockFetch(() => ok({ data: ROWS, meta: { totalCount: 2, totalPages: 1, page: 1, pageSize: 20 } }));
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <NextIntlClientProvider locale="en" messages={{ keys, common, dashboard, apis, plans }}>
+        <NextIntlClientProvider locale="en" messages={{ keys, common, dashboard, docs, apis, plans }}>
           <KeysPage />
         </NextIntlClientProvider>
       </QueryClientProvider>,

@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { Notice } from '@open-gateway/ui';
 import type { ReactNode } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useLocale, useTranslations } from 'next-intl';
 import { ChartCard as BaseChartCard, ErrorState } from '@open-gateway/ui';
+import { docsHref, TROUBLESHOOTING_ANALYTICS } from '@/lib/docs/contextual';
 import { dateFnsLocale } from '@/lib/date-fns-locale';
 import { cn } from '@/lib/utils';
 import type { Locale } from '@/i18n/locales';
@@ -149,7 +151,21 @@ export function AnalyticsEmptyState({ health, description, className }: Analytic
           <dd>{lastRecordLabel(t, health, locale)}</dd>
         </dl>
       )}
+      {notReady && <TroubleshootingLink />}
     </div>
+  );
+}
+
+/** Where an operator-less user reads what to check: the analytics section of the troubleshooting page. */
+function TroubleshootingLink() {
+  const t = useTranslations('analytics');
+  return (
+    <Link
+      href={docsHref(TROUBLESHOOTING_ANALYTICS)}
+      className="text-primary mt-1 text-sm font-medium underline underline-offset-4 hover:no-underline"
+    >
+      {t('emptyState.troubleshooting')}
+    </Link>
   );
 }
 
@@ -159,7 +175,8 @@ export function AnalyticsStaleNotice({ health }: { health: AnalyticsHealth }) {
   const locale = dateFnsLocale(useLocale() as Locale);
   return (
     <Notice role="status" title={t('staleNotice.title')}>
-      {t('staleNotice.description', { lastRecord: lastRecordLabel(t, health, locale) })}
+      {t('staleNotice.description', { lastRecord: lastRecordLabel(t, health, locale) })}{' '}
+      <TroubleshootingLink />
     </Notice>
   );
 }

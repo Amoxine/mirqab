@@ -11,6 +11,9 @@ export default defineConfig({
   // Next's own compiler for that, so vitest needs the automatic runtime spelled out itself.
   esbuild: { jsx: 'automatic' },
   test: {
+    // Fumadocs' packages import `next/navigation` without the `.js` Node's ESM resolver needs, so they
+    // are bundled by vite instead (which also lets a test mock `next/navigation` for them).
+    server: { deps: { inline: [/fumadocs-/] } },
     // Runs after every test, jsdom or node — see vitest.setup.ts for why. Without this, renders
     // from one component test leak into the next test's query results (found at WP17 part 1).
     setupFiles: ['./vitest.setup.ts'],

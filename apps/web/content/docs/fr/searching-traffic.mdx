@@ -35,9 +35,9 @@ la fois, et **Charger plus** récupère les 50 suivants.
 | `method:` | `method:POST` | Les requêtes de cette méthode. Donnez-en plusieurs avec des virgules, comme `method:PUT,PATCH`. |
 | `latency:` | `latency:>800` | Les requêtes plus lentes que 800 millisecondes. Vous pouvez utiliser `>`, `>=`, `<` et `<=`. Un nombre seul comme `latency:800` signifie 800 ou plus. |
 | `path:` | `path:/orders` | Les requêtes dont le chemin **commence par** le texte. Il faut au moins 3 lettres ou chiffres. |
-| `route:` | `route:/orders` | Les requêtes vers exactement ce chemin, rien en dessous : `route:/orders` ne trouve pas `/orders/42`. Il n’y a pas de longueur minimale, donc `route:/` trouve la racine. Les lignes de points de terminaison de **Trafic** et du tableau de bord ouvrent la recherche avec lui. |
+| `route:` | `route:/orders` | Les requêtes vers exactement ce chemin, rien en dessous : `route:/orders` ne trouve pas `/orders/42`. Il n’y a pas de longueur minimale, donc `route:/` trouve la racine. Sur **Trafic**, les lignes de points de terminaison ouvrent la recherche avec `route:` et `method:` pour ce point de terminaison. Sur le tableau de bord, le taux d’erreur d’un point de terminaison fait de même, limité aux échecs. |
 | `api:` | `api:payments` | Les requêtes vers une API, donnée par son nom, son slug ou son id. |
-| `key:` | `key:mobile-app` | Les requêtes faites avec la clé dont vous donnez l’alias, tel qu’affiché dans la colonne **Clé** des résultats. |
+| `key:` | `key:mobile-app` | Les requêtes faites avec la clé portant exactement ce nom, tel qu’affiché dans la colonne **Clé** des résultats. Deux clés de même nom sont trouvées toutes les deux. |
 | `reqh:` | `reqh:content-type=application/json` | Les requêtes avec cet en-tête et exactement cette valeur. Sans `=` ni valeur, comme dans `reqh:x-tenant`, toute requête qui a l’en-tête. |
 | `resh:` | `resh:x-request-id` | La même chose pour les en-têtes de réponse. |
 | `body:` | `body:"insufficient funds"` | Les requêtes ou réponses dont le corps contient ces mots, dans cet ordre et côte à côte. |
@@ -50,6 +50,9 @@ ensemble.
 Commencez un filtre par `-` pour exclure des résultats. `-status:404` masque tous les 404, et `-res:timeout` masque les réponses
 dont le corps contient « timeout ».
 
+Pendant la saisie, une liste de suggestions apparaît sous la zone. Choisissez-en une avec les flèches et appuyez sur **Entrée** pour l’ajouter. Elle propose
+les noms de filtres ; après `status:`, `method:` ou `latency:`, elle propose des valeurs courantes, et après `api:` ou `key:`, les noms de vos API et de vos clés.
+
 Exemple combiné, sur une seule ligne :
 
 ```text
@@ -57,7 +60,7 @@ api:payments status:>=500 method:POST body:"insufficient funds"
 ```
 
 Quatre boutons sous la zone remplissent la barre avec un exemple de recherche : `status:>=500`, `status:4xx`,
-`latency:>800 method:POST` et `body:"insufficient funds"`. Un bouton remplace tout ce qui se trouve dans la barre.
+`latency:>800 method:POST` et `body:"insufficient funds"`. Un bouton remplace toutes les pastilles déjà présentes dans la barre ; la période est conservée.
 
 ## Comportement des pastilles
 
@@ -65,7 +68,7 @@ Quatre boutons sous la zone remplissent la barre avec un exemple de recherche : 
 - Une pastille que la page ne comprend pas est rouge, et la raison apparaît sous la zone. Par exemple :
   « Le statut ressemble à >=500, 404, 5xx, 200-299 ou 404,429. » Les résultats restent masqués tant que vous ne l’avez pas corrigée ou supprimée.
 - Cliquez sur une pastille pour remettre son texte dans la zone et le modifier. Cliquez sur le **x** d’une pastille pour la supprimer.
-  **Retour arrière** dans une zone vide supprime la dernière pastille.
+  **Backspace** dans une zone vide supprime la dernière pastille.
 
 ## L’URL et la période
 
@@ -78,11 +81,12 @@ en choisissez une autre.
 
 - 8 filtres au maximum par recherche.
 - 3 d’entre eux au maximum peuvent être des filtres de mots du corps (`body:`, `req:` ou `res:`).
-- Un filtre de mots exige au moins 3 lettres ou chiffres.
+- Un filtre `status:` accepte 10 codes au maximum.
+- Un filtre de mots exige au moins un mot de 3 lettres ou chiffres ou plus qui ne soit pas un mot courant.
 - Une valeur de filtre peut faire 200 caractères au maximum.
-- Une recherche composée uniquement de mots courants est refusée : `id`, `data`, `name`, `value`, `true`, `false`, `null`,
-  `type`, `status` et `message`. Ils apparaissent dans presque toutes les requêtes. Une expression contenant au moins un autre mot
-  est acceptée.
+- Les mots courants ne comptent pas : `id`, `data`, `name`, `value`, `true`, `false`, `null`, `type`, `status` et
+  `message`. Ils apparaissent dans presque toutes les requêtes : une recherche composée uniquement de ces mots est donc refusée. Une expression contenant au moins
+  un autre mot est acceptée.
 - Seuls les 16 premiers Kio de chaque capture sont conservés et recherchés, et les en-têtes comptent dans cette limite. Un résultat marqué **coupé à 16 Kio** était plus long : un
   mot situé plus loin ne peut pas être trouvé.
 - Les corps multipart ne sont pas indexés, et une capture qui n’est pas de l’UTF-8 valide est remplacée en bloc.
@@ -94,14 +98,15 @@ en choisissez une autre.
 
 Les secrets sont remplacés par `[REDACTED]`, selon leur nom (et les JWT selon leur forme), avant tout stockage ou toute recherche. Cela couvre les valeurs des
 en-têtes, des paramètres de requête et de formulaire, et des champs JSON dont le nom ressemble à des identifiants. Une valeur masquée ne peut pas être
-recherchée. Un en-tête masqué garde son nom : `reqh:authorization` trouve donc les requêtes qui l’ont envoyé, mais aucune valeur
-ne correspond. Certains champs inoffensifs aux noms proches sont aussi masqués.
+recherchée. Un en-tête masqué garde son nom : `reqh:authorization` trouve donc les requêtes qui l’ont envoyé, mais aucune vraie valeur secrète
+ne peut être trouvée. Certains champs inoffensifs aux noms proches sont aussi masqués.
 
 ## La fraîcheur des résultats
 
-Sous la zone, la page affiche « Indexé jusqu’à » et une heure. Les requêtes plus récentes que cette heure ne sont pas encore recherchables :
-un résultat vide avant cette heure est donc réel. Avant la première indexation, la page indique que l’index de recherche n’a pas démarré.
-Les requêtes capturées apparaissent peu après leur enregistrement.
+Sous la zone, la page affiche « Indexé jusqu’à » et une durée relative, comme « il y a 2 minutes ». Les requêtes plus récentes que ce moment ne sont pas encore
+recherchables. Les requêtes que le service de collecte n’a pas encore transmises ne figurent pas non plus dans les résultats. Avant la première indexation, la page
+indique que l’index de recherche n’a pas démarré. Si l’index reste en pause ou ne démarre pas, prévenez les personnes qui exploitent la plateforme. Les requêtes capturées
+apparaissent peu après leur enregistrement.
 
 ## Ce qu’elle ne sait pas faire
 
@@ -110,3 +115,8 @@ Les requêtes capturées apparaissent peu après leur enregistrement.
 - Chercher à l’intérieur d’un seul champ JSON.
 
 Cliquez sur l’heure d’un résultat pour ouvrir la requête et la réponse, avec leurs en-têtes et leurs corps. Un corps coupé à 16 Kio porte un marqueur **Corps tronqué**.
+Dans cette vue, **Trouver des requêtes similaires** propose quatre boutons, **Même chemin**, **Même statut**, **Même API** et **Même clé**. Chacun ajoute ce
+filtre, et il est indisponible quand le filtre est déjà présent, que la recherche est pleine ou que la requête n’a pas cette valeur. Les
+flèches **Requête précédente** et **Requête suivante** parcourent les résultats déjà chargés.
+
+Vérifié par rapport au commit e4f3acc.

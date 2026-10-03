@@ -5,7 +5,10 @@ import { NextIntlClientProvider } from 'next-intl';
 import arAuth from '@/messages/ar/auth.json';
 import arCommon from '@/messages/ar/common.json';
 import arDashboard from '@/messages/ar/dashboard.json';
+import arDocs from '@/messages/ar/docs.json';
 import arKeys from '@/messages/ar/keys.json';
+import enDocs from '@/messages/en/docs.json';
+import frDocs from '@/messages/fr/docs.json';
 import enAuth from '@/messages/en/auth.json';
 import enCommon from '@/messages/en/common.json';
 import enDashboard from '@/messages/en/dashboard.json';
@@ -23,9 +26,9 @@ afterEach(() => {
 });
 
 const MESSAGES = {
-  en: { auth: enAuth, common: enCommon, dashboard: enDashboard, keys: enKeys },
-  fr: { auth: frAuth, common: frCommon, dashboard: frDashboard, keys: frKeys },
-  ar: { auth: arAuth, common: arCommon, dashboard: arDashboard, keys: arKeys },
+  en: { auth: enAuth, common: enCommon, dashboard: enDashboard, docs: enDocs, keys: enKeys },
+  fr: { auth: frAuth, common: frCommon, dashboard: frDashboard, docs: frDocs, keys: frKeys },
+  ar: { auth: arAuth, common: arCommon, dashboard: arDashboard, docs: arDocs, keys: arKeys },
 };
 
 vi.mock('next/navigation', () => ({
@@ -106,6 +109,8 @@ describe('key detail page quota period', () => {
     const intlErrors = renderPage('en', 3600);
 
     expect(screen.getByText(enKeys.form.quotaPeriods.HOURLY)).toBeDefined();
+    // The real page's header carries the help link for its docs page.
+    expect(screen.getByRole('link', { name: 'Help: Keys and plans' }).getAttribute('href')).toBe('/docs/keys-and-plans');
     expect(intlErrors).toEqual([]);
   });
 });

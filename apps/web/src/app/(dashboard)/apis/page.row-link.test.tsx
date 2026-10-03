@@ -6,6 +6,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import apis from '@/messages/en/apis.json';
 import common from '@/messages/en/common.json';
 import dashboard from '@/messages/en/dashboard.json';
+import docs from '@/messages/en/docs.json';
 import openapi from '@/messages/en/openapi.json';
 import specSource from '@/messages/en/specSource.json';
 import { mockFetch, ok } from '@/components/apis/endpoints/test-utils';
@@ -49,7 +50,7 @@ describe('APIs list: rows open their detail', () => {
     mockFetch(() => ok({ data: ROWS, meta: { totalCount: 2, totalPages: 1, page: 1, pageSize: 20 } }));
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <NextIntlClientProvider locale="en" messages={{ apis, common, dashboard, openapi, specSource }}>
+        <NextIntlClientProvider locale="en" messages={{ apis, common, dashboard, docs, openapi, specSource }}>
           <ApisPage />
         </NextIntlClientProvider>
       </QueryClientProvider>,

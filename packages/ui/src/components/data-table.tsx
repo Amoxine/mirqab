@@ -169,7 +169,9 @@ function AutoCard<TData>({ table, row }: { table: ReactTable<TData>; row: Row<TD
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1 break-words">
+          {/* `anywhere`, not `break-word`: only it also lowers the box's min-content width, so one long unbroken name
+              cannot make a card (or the column it sits in) as wide as the name, wherever the card is laid out. */}
+          <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
             {first && flexRender(first.column.columnDef.cell, first.getContext())}
           </div>
           {unlabelled.map((cell) => (
@@ -187,7 +189,7 @@ function AutoCard<TData>({ table, row }: { table: ReactTable<TData>; row: Row<TD
                   <dt className="text-muted-foreground">
                     {header ? flexRender(cell.column.columnDef.header, header.getContext()) : null}
                   </dt>
-                  <dd className="min-w-0 break-words text-end">
+                  <dd className="min-w-0 text-end [overflow-wrap:anywhere]">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </dd>
                 </div>

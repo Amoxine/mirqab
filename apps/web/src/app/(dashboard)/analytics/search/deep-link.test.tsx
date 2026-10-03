@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import analytics from '@/messages/en/analytics.json';
 import { mockFetch, ok } from '@/components/apis/endpoints/test-utils';
-import { renderApp } from '@/components/dashboard/test-render';
+import { indexedAgo, renderApp } from '@/components/dashboard/test-render';
 import TrafficSearchPage from './page';
 
 const replace = vi.fn();
@@ -48,7 +48,7 @@ const page = (items: unknown[]) => ({
   items,
   hasMore: false,
   nextCursor: null,
-  indexedUntil: '2026-09-29T11:59:50.000Z',
+  indexedUntil: indexedAgo(10_000),
 });
 /** The URL of the last `router.replace`, split so a test can read the params whatever their order. */
 function lastReplace() {

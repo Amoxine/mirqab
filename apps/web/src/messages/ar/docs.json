@@ -1,3 +1,32 @@
 {
-  "notTranslated": "لم تُترجم بعد: يُعرض النص الإنجليزي."
+  "notTranslated": "لم تُترجم بعد: يُعرض النص الإنجليزي.",
+  "help": {
+    "label": "مساعدة",
+    "aria": "مساعدة: {topic}",
+    "topics": {
+      "apis-and-openapi-import": "الواجهات البرمجية واستيراد OpenAPI",
+      "keys-and-plans": "المفاتيح والخطط",
+      "analytics-and-traffic": "التحليلات وحركة المرور",
+      "searching-traffic": "البحث في حركة المرور",
+      "roles-audit-tenants": "الأدوار والتدقيق والمؤسسات"
+    }
+  },
+  "shell": {
+    "menu": "قائمة الوثائق",
+    "openMenu": "فتح قائمة الوثائق",
+    "closeMenu": "إغلاق قائمة الوثائق",
+    "collapseSidebar": "طيّ الشريط الجانبي",
+    "expandSidebar": "توسيع الشريط الجانبي",
+    "openSearch": "فتح البحث",
+    "closeSearch": "إغلاق",
+    "copyCode": "نسخ الشيفرة",
+    "codeCopied": "تم نسخ الشيفرة",
+    "backToDashboard": "{brand}: العودة إلى لوحة التحكم",
+    "diagram": "مخطط: {steps}"
+  },
+  "notFound": {
+    "title": "صفحة الوثائق هذه غير موجودة",
+    "description": "ربما كُتب العنوان بشكل خاطئ، أو أُعيدت تسمية الصفحة.",
+    "home": "العودة إلى الوثائق"
+  }
 }

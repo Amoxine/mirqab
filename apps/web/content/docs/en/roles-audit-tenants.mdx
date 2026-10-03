@@ -35,6 +35,8 @@ Without a permission, the dashboard changes in three ways:
 | The **Roles & permissions** card and page | `role:read`, and `settings:read` for the card on Settings |
 | Create, edit or delete a role | `role:create`, `role:update`, `role:delete` |
 
+The built-in **Admin** role does not include `tenant:delete` or `role:delete`. Only **Super Admin** has them unless you add them to a role.
+
 On the Dashboard, the **Recent activity** card needs `audit:read`, and the gateway node map and **API sync status**
 card need `settings:read`.
 
@@ -42,20 +44,24 @@ card need `settings:read`.
 
 Under **Settings**, **Roles & permissions** lists the roles of the current tenant, built-in ones included, with how many permissions
 each grants and how many members hold it. **Create Role** asks for a name, a description and a set of permissions, chosen in a
-matrix with the actions Read, Create, Update, Delete, Revoke, Sync and Export. A change to a role applies to its
-members on their next request, with no new login.
+matrix with one row per resource and one column per action (Create, Delete, Export, Read, Revoke, Sync and Update). A change to a role applies to its
+members on their next request, with no new login. A member's open dashboard may need a page reload to show or hide buttons.
 
 A role you create here cannot yet be given to a member: **Invite** and the member role menu offer only Admin,
 Operator and Viewer.
 
-- **Super Admin** is a system-wide role. It cannot be created, edited or deleted here, and its row has no menu.
+- **Super Admin** is a system-wide role. It cannot be created, edited or deleted here, and its row has no menu. The app cannot assign it:
+  it exists only for the administrator the installation seeds, in the seeded default tenant.
 - A role cannot be deleted while any member holds it. Its **Delete** item is disabled.
+
+Role names appear as stored, in lower case (`admin`, `operator`, `viewer`, `super_admin`), in this list and in the **Switch tenant** menu.
+The Members card shows them as Admin, Operator, Viewer and Super Admin.
 
 ## Audit Logs
 
 **Audit Logs** (under **Trust & operations**) records who changed what in your tenant. It needs `audit:read`.
 The table has the columns Timestamp, User, Action, Resource and IP Address, 20 rows per page. An entry with no user shows
-**System**. An empty table reads "No audit logs found."
+**System**. An empty table reads "No audit logs found." Select a row to open the full entry.
 
 Open **Filters** to narrow the list:
 
@@ -66,6 +72,9 @@ Open **Filters** to narrow the list:
 | **From** and **To** | A date range. |
 
 **Clear All** removes the filters.
+
+Some entries, such as key rotations, usage resets and quota changes, show their internal name (for example `QUOTA_UPDATED`) and cannot be
+chosen in **Action**; find them with **Resource** (`keys` or `tenants`). Sign-ins and sign-outs are not part of this tenant log.
 
 **Export CSV** downloads the log as a file named `audit-logs-` and the date. It exports up to 10,000 entries for the
 selected date range. The resource and action filters are not applied to the export. You need `audit:export`.
@@ -78,7 +87,7 @@ requests, errors, error rate and average latency for the smallest range that sti
 
 A tenant is one organization with its own APIs, keys, members and usage. **Tenants** (under **Manage**) lists the
 tenants you belong to. A **Super Admin** sees every tenant. Each row shows the name and slug, a status (Active, Suspended or Archived), the plan
-(Free, Starter, Pro or Enterprise) and the **Org quota**.
+(Free, Starter, Pro or Enterprise) and the **Org quota**. The list also shows a **Created** column and shows 20 rows per page.
 
 - **Create Tenant** asks for a name, a slug and a plan. The slug cannot be changed afterwards.
 - In the row menu, **Edit** changes the details, **Edit quota** sets the quota ceiling and renewal period, and
@@ -86,7 +95,8 @@ tenants you belong to. A **Super Admin** sees every tenant. Each row shows the n
   they do not cut off members or traffic. **Archive** cannot be undone from that page.
   To stop a tenant's traffic, use the option **Cut this tenant off entirely**, which refuses every request from the
   tenant, whatever its quota. To stop a person's access, remove them from **Members**.
-- A quota of -1 is unlimited.
+- A quota of -1 is unlimited, and a quota of 0 refuses every request. The **Edit quota** form always opens with the renewal period on
+  Monthly, so check it when you change the ceiling.
 - Open a tenant to see its Overview, its Members and its Usage, with a **Reset usage** button for the quota counter.
   **Edit quota** and **Reset usage** need `tenant:update`, and the Members card needs `user:read`.
 
@@ -102,11 +112,14 @@ Viewer. **Super Admin** is not offered.
 If no user has that email, the form says "No user with this email has signed in yet. They need to register and log
 in once before you can invite them." If the person is already a member, it says so. The role column is a menu for
 Admin, Operator and Viewer members when you hold `user:update`. Otherwise it is a label. The Super Admin member's
-role is always a label. The trash icon removes a member, who "loses access to this tenant immediately".
+role is always a label. The trash icon removes a member, who "loses access to this tenant immediately". A tenant must keep at least one Admin: demoting or removing the last one is
+refused. Removing a member asks you to confirm.
 
 ## Switching tenant
 
 If you belong to more than one tenant, the tenant name at the top of the sidebar is a menu titled **Switch tenant**.
-It lists each tenant with your role in it, and a check mark shows the current one. Choosing another reloads the
+It lists each tenant with your role in it (the stored name, such as `admin`), and a check mark shows the current one. Choosing another reloads the
 page in that tenant. Your permissions, sidebar and data then come from that tenant. With one tenant, the name is
 shown without a menu.
+
+Verified against commit e4f3acc.

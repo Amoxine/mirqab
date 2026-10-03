@@ -10,17 +10,18 @@ hides its figures, range control and **Refresh** button. See [Roles, audit and t
 
 ## The time range
 
-Every analytics figure covers one range: **Last hour**, **Last 24 hours**, **Last 7 days** or
-**Last 30 days**. The control shows them as 1h, 24h, 7d and 30d, with the long names as tooltips. The Dashboard and **Analytics** start on Last 24 hours. Chart time buckets are in UTC.
+Every traffic figure covers one range: **Last hour**, **Last 24 hours**, **Last 7 days** or
+**Last 30 days**. **Active APIs** and **Active keys** are the exception: they count the APIs and keys that are Active now.
+The control shows them as 1h, 24h, 7d and 30d, with the long names as tooltips. The Dashboard and **Analytics** start on Last 24 hours. Chart time buckets are in UTC.
 Changing the range reloads the analytics cards on the page. On the Dashboard, **Refresh** reloads them again. Cards that do not depend on analytics are not reloaded.
 
 ## The Dashboard
 
-The Dashboard opens with these cards, top to bottom:
+The Dashboard opens with these cards (on wide screens some sit side by side):
 
 | Card | What it shows |
 |---|---|
-| Overview | Total requests, Success rate and Avg latency for the range, and a bar of responses by status class. |
+| Overview | Total requests, Success rate and Avg latency for the range, and a bar of responses by status class: 2xx, 4xx and 5xx, with any 3xx counted under 2xx. |
 | Latency | Average latency, split into time spent upstream (in your API) and time added by the gateway. |
 | Error rate | The share of requests that ended in an error, with its trend and the peak. |
 | Top APIs | Which APIs carry the most requests. |
@@ -28,7 +29,9 @@ The Dashboard opens with these cards, top to bottom:
 | Traffic by API | Volume, error rate, average latency and status for the busiest APIs. |
 | Request volume | Requests and error rate over time, as a chart or a table. |
 
-A dash instead of a number means nothing was recorded in the range. The Dashboard never shows a made-up zero.
+A dash instead of a number means nothing was recorded in the range. The Dashboard never shows a made-up zero. The **Latency** and **Error rate** cards say "No latency without traffic in this range." and
+"No errors without traffic in this range." instead of a dash.
+The Dashboard and **Analytics** figures can be up to a minute old, because the answers are cached for 60 seconds, even after **Refresh** on the Dashboard.
 P95 and P99 are the latency that 95% and 99% of requests stayed under. A row in **Traffic by API** gets a
 triangle mark at an error rate of 5% or more.
 
@@ -43,34 +46,37 @@ The Dashboard also shows cards that do not depend on analytics, each only if you
 
 ## One API or several
 
-When your tenant manages exactly one API, the API cards describe that API. **Top APIs** becomes
+When your tenant manages exactly one API and you may read APIs (`api:read`), the API cards describe that API. **Top APIs** becomes
 **Top endpoints**, and **Traffic by API** becomes **Traffic by endpoint**. The Overview, Latency, Error rate, Key figures,
 Request volume and Recent activity cards narrow to that API too. You cannot clear this scope.
 
 When you manage several APIs, the cards cover all of them. To narrow the Dashboard, use the
-crosshair button on a row of **Traffic by API**. Its tooltip reads **Show only** followed by the API name. A **Showing** chip with the API name
-appears at the top, and `?api=` is added to the page address, so you can share the narrowed view.
+crosshair button (shown to people who may read APIs) on a row of **Traffic by API**. Its tooltip reads **Show only** followed by the API name. A **Showing** chip with the API name
+appears at the top, and `?api=` is added to the page address, so you can share the narrowed view. The cards then change as they do for a single API,
+including **Top endpoints** and **Traffic by endpoint**.
 The chip has a close button named **Show all APIs**. Use it to go back.
 
 ## The Analytics page
 
 **Analytics** shows tiles (Total requests, Error rate, Avg latency, Errors, Active APIs, Active keys), then the
 charts **Requests**, **Latency** and **Status codes**, and two tables: **Traffic by API** and **Traffic by key**.
-Each table lists requests, errors, error rate and average latency.
+Each table lists requests, errors, error rate, average latency and a **Status** column; the key table also has an **API** column.
+The API and key tables, and the API and key lists in the filters, show the 50 busiest in the range. The endpoint tables show 10.
+The charts and figures count all traffic.
 
 ## The Traffic page
 
-**Traffic** shows live gateway traffic, narrowed by these filters:
+**Traffic** shows near-live gateway traffic, a request appearing about 10 seconds after it is made. Narrow it with these filters:
 
 | Filter | Choices |
 |---|---|
 | Time range | The four ranges above. |
 | API | **All APIs** or one API. |
-| API key | **All keys** or one key. The list shows the keys of the API you chose. |
+| API key | **All keys** or one key. The list shows the keys of the API you chose; with no API chosen it shows all keys, up to 50. |
 | Method | **All methods** or one of GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. |
 | Status class | Success (2xx), Redirect (3xx), Client error (4xx), Server error (5xx). |
 | Authentication | **All traffic**, **With an API key** or **Without a key**. |
-| Latency | **Any latency** or **Slower than** 100, 250, 500, 1000 or 2000 ms. |
+| Latency | **Any latency** or **Slower than** 100, 250, 500, 1000 or 2000 ms (at least that slow). |
 | Exact status | One code from 100 to 599. |
 | Path contains | Text that appears anywhere in the request path, up to 200 characters. |
 
@@ -80,7 +86,7 @@ When any are set, the filter card shows the text "N filters active" next to **Re
 Below the filters, the page shows key figures (Requests, Throughput, Error rate, Avg latency, P95 latency,
 P99 latency, Clients, Data received), the charts **Requests over time** and **Latency over time**, **Traffic mix**,
 and two endpoint tables: **Busiest endpoints** and **Slowest endpoints**. The slowest table ranks by P95 among the
-busiest endpoints and needs at least 5 requests per endpoint.
+50 busiest endpoints and needs at least 5 requests per endpoint.
 
 To find individual requests by their headers or bodies, use [Request search](/docs/searching-traffic).
 
@@ -88,12 +94,15 @@ To find individual requests by their headers or bodies, use [Request search](/do
 
 Analytics, Traffic and the Dashboard check that requests are being recorded before they draw figures.
 
-- **Analytics pipeline not receiving data** replaces the figures. The card reports whether the recorder is
-  Running or Not running, whether its tables are Present or Missing, the Rows recorded and the Last record.
-  The hint says which case applies: the recorder is down, its tables do not exist yet, or no requests have
-  arrived yet. In the last case, send traffic through the gateway.
+- **Analytics pipeline not receiving data** replaces the figures. The card reports whether the **Collection service** is
+  Running or Not running, whether the **Raw table** and the **Aggregate table** are Present or Missing, the Rows recorded and the Last record.
+  The hint says which case applies: the collection service is down, or its tables do not exist yet.
+  If the service runs but no request has arrived, there is no card: figures show a dash or "No requests were recorded in this range".
+  Send traffic through the gateway.
 - **Analytics collection is paused** appears above the figures when earlier records exist. The figures are stale.
   The notice gives the time of the Last record.
 - **Failed to load data** means the request for the figures failed. Use the retry button.
 
-Restarting the recorder is work for whoever runs the platform. Tell them which message you see.
+Restarting the collection service is work for whoever runs the platform. Tell them which message you see.
+
+Verified against commit e4f3acc.
