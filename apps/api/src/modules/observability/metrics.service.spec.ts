@@ -178,7 +178,7 @@ describe('MetricsService scrape (OG-OBS-02 / C4)', () => {
 
   it('never puts a URL in a label, and every label value is from a closed set', async () => {
     const text = await scrape(makeService());
-    const ours = text.split('\n').filter((line) => /^og_(tyk|job|authz|analytics)_/.test(line));
+    const ours = text.split('\n').filter((line) => /^og_(tyk|job|authz|analytics|traffic)_/.test(line));
 
     expect(ours.length).toBeGreaterThan(0);
     expect(text).not.toContain('://');
@@ -190,8 +190,9 @@ describe('MetricsService scrape (OG-OBS-02 / C4)', () => {
             node: /^tyk-[12]$/,
             operation: /^[a-zA-Z]+$/,
             outcome: /^(ok|error|circuit_open)$/,
-            task: /^(reconcile|health_check|metering|quota_reset|key_expiry|analytics_retention|spec_source_fetch)$/,
+            task: /^(reconcile|health_check|metering|quota_reset|key_expiry|analytics_retention|spec_source_fetch|search_index|search_maintenance)$/,
             reason: /^(tenant_mismatch|missing_permission|no_tenant)$/,
+            phase: /^(create|partition_create|partition_drop)$/,
           }[name] ?? /^$/,
         )]);
       }

@@ -477,6 +477,23 @@ groups:
           description: '{{ $value }} error outcome(s) in the last hour.'
           runbook: RB-17
 
+      # Request search (apps/api/src/modules/analytics/search). The indexer sets this gauge on every tick that can
+      # read its state, a PAUSED one included (the redaction trigger is missing), so an index that has stalled, is
+      # failing, or is paused is a number that keeps growing: BackgroundJobFailing only sees the ticks that error.
+      # 900 s is the indexer's 15-minute lookback: it is never legitimately further behind than that. After a rules
+      # change the table is rebuilt from the retention floor and the number starts large and falls as it catches up;
+      # `for: 15m` lets a rebuild that is making progress through, and one that is not will fire.
+      - alert: TrafficSearchIndexLagging
+        expr: og_traffic_search_indexed_age_seconds > 900
+        for: 15m
+        labels:
+          severity: warning
+          owner: app
+        annotations:
+          summary: 'Request search is behind: its newest indexed request is {{ $value | humanizeDuration }} old'
+          description: 'The indexer is paused (redaction trigger missing), failing, or still rebuilding. Searches report coverage=partial meanwhile.'
+          runbook: RB-17
+
       # ── Pump and analytics ───────────────────────────────────────────────
       # PUMP-02 / AL-PUMP-01.
       - alert: PumpHealthFailing

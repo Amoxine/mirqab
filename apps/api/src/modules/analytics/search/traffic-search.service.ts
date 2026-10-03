@@ -5,12 +5,14 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { analyticsWindow } from '../services/pump-query.builder';
 import { TrafficSearchIndexerService } from './traffic-search.indexer.service';
-import { queryWithTimeout, SearchTimeoutError } from './traffic-search.query';
+import { isMissingRelation, queryWithTimeout, SearchTimeoutError } from './traffic-search.query';
 import { trafficSearchQuery } from './traffic-search.query.builder';
 import type { SearchCursor, SearchRange, TrafficSearchRequest } from './traffic-search.types';
 import { isRowId, isRowTs, SearchValidationError, validateSearchRequest } from './traffic-search.validate';
@@ -32,13 +34,25 @@ export interface TrafficSearchItem {
   resTruncated: boolean;
 }
 
+/**
+ * What the table can say about the window that was searched:
+ *  - `complete`: it covers the whole window up to now (give or take the indexer's lag), so an empty result is real;
+ *  - `partial`: it covers only part of it (indexing started later than the window does, is still catching up after a
+ *    rebuild, or has stalled), so an empty result may only mean "not indexed";
+ *  - `none`: nothing is indexed yet.
+ */
+export type SearchCoverage = 'complete' | 'partial' | 'none';
+
 export interface TrafficSearchPage {
   range: SearchRange;
   items: TrafficSearchItem[];
   hasMore: boolean;
   nextCursor: SearchCursor | null;
-  /** How far the indexer has caught up; an empty result before this instant is real, after it is not yet known. */
+  /** How far the indexer has caught up: a request after this instant is not searchable yet. */
   indexedUntil: string | null;
+  /** The earliest instant the table covers: a request before it may exist and not be searchable. */
+  indexedFrom: string | null;
+  coverage: SearchCoverage;
 }
 
 export interface TrafficSearchDetail extends TrafficSearchItem {
@@ -75,6 +89,20 @@ const MIN_TIMEOUT_MS = 100;
 const MAX_TIMEOUT_MS = 10_000;
 /** Searches one tenant may have running at once; each can hold a connection for the whole statement budget. */
 const MAX_IN_FLIGHT_PER_TENANT = 2;
+/** Searches the whole process may have running at once, whoever asks: a few tenants must not hold every connection. */
+const DEFAULT_MAX_IN_FLIGHT = 3;
+const MAX_IN_FLIGHT_LIMIT = 20;
+/** The indexer ticks every 10 s and re-reads a 15 min lookback: a table this close to now is as current as it gets. */
+const COVERAGE_FRESH_MS = 5 * 60_000;
+
+/**
+ * The part of the indexer the service reads. `indexedFrom` is optional: a source that cannot say where its coverage
+ * starts leaves the claim at `partial` instead of `complete`, which is the honest reading of "unknown".
+ */
+interface IndexProgress {
+  indexedUntil(): Promise<Date | null>;
+  indexedFrom?(): Promise<Date | null>;
+}
 
 interface TenantApi {
   id: string;
@@ -92,11 +120,12 @@ interface TenantApi {
 export class TrafficSearchService {
   // ponytail: per-process count; move it to Redis if the API runs as more than one replica.
   private readonly inFlight = new Map<string, number>();
+  private inFlightTotal = 0;
 
   constructor(
     @Inject('PRISMA_CLIENT') private readonly prisma: PrismaClient,
     private readonly configService: ConfigService,
-    private readonly indexer: TrafficSearchIndexerService,
+    @Inject(TrafficSearchIndexerService) private readonly indexer: IndexProgress,
   ) {}
 
   async search(tenantId: string, body: unknown): Promise<TrafficSearchPage> {
@@ -115,10 +144,18 @@ export class TrafficSearchService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    if (this.inFlightTotal >= this.maxInFlight()) {
+      throw new HttpException(
+        { error: 'SEARCH_BUSY', message: 'Search is busy right now. Try again in a moment.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
     this.inFlight.set(tenantId, running + 1);
+    this.inFlightTotal += 1;
     try {
       return await this.page(tenantId, request);
     } finally {
+      this.inFlightTotal -= 1;
       const left = (this.inFlight.get(tenantId) ?? 1) - 1;
       if (left > 0) this.inFlight.set(tenantId, left);
       else this.inFlight.delete(tenantId);
@@ -127,8 +164,10 @@ export class TrafficSearchService {
 
   private async page(tenantId: string, request: TrafficSearchRequest): Promise<TrafficSearchPage> {
     const apis = await this.tenantApis(tenantId);
-    const indexedUntil = (await this.indexer.indexedUntil().catch(() => null))?.toISOString() ?? null;
-    if (apis.length === 0) return { range: request.range, items: [], hasMore: false, nextCursor: null, indexedUntil };
+    const now = new Date();
+    const progress = await this.progress(request.range, now);
+    if (progress === null) return this.notReady(request.range);
+    if (apis.length === 0) return { range: request.range, items: [], hasMore: false, nextCursor: null, ...progress };
 
     const byTyk = new Map(apis.map((a) => [a.tykApiId, a]));
     const resolveApi = (value: string): string[] => {
@@ -136,8 +175,14 @@ export class TrafficSearchService {
       return apis.filter((a) => a.id === value || a.name.toLowerCase() === wanted || a.slug.toLowerCase() === wanted).map((a) => a.tykApiId);
     };
 
-    const query = trafficSearchQuery({ request, tykApiIds: apis.map((a) => a.tykApiId), resolveApi });
-    const rows = await this.run<ListRow[]>(query);
+    const query = trafficSearchQuery({ request, tykApiIds: apis.map((a) => a.tykApiId), resolveApi, now });
+    let rows: ListRow[];
+    try {
+      rows = await this.run<ListRow[]>(query);
+    } catch (err) {
+      if (isMissingRelation(err)) return this.notReady(request.range);
+      throw err;
+    }
     const hasMore = rows.length > request.limit;
     const page = rows.slice(0, request.limit);
     const last = page.at(-1);
@@ -147,8 +192,39 @@ export class TrafficSearchService {
       items: page.map((r) => this.item(r, byTyk)),
       hasMore,
       nextCursor: hasMore && last ? { ts: last.ts_iso, id: String(last.id) } : null,
-      indexedUntil,
+      ...progress,
     };
+  }
+
+  /**
+   * How much of the window the indexer covers. `null` when the tables are not there yet (a clean "not ready" answer, not an
+   * error). A state that cannot be READ is a 503 of its own: an empty list with `indexedUntil: null` would tell the person
+   * "indexing has not started", and a restored database would be blamed for what was a failed query.
+   */
+  private async progress(
+    range: SearchRange,
+    now: Date,
+  ): Promise<{ indexedUntil: string | null; indexedFrom: string | null; coverage: SearchCoverage } | null> {
+    try {
+      const [until, from] = await Promise.all([this.indexer.indexedUntil(), this.indexer.indexedFrom?.() ?? Promise.resolve(null)]);
+      if (!until || !from) {
+        // Nothing indexed is `none`; an end without a known start cannot claim to cover the window.
+        return { indexedUntil: until?.toISOString() ?? null, indexedFrom: from?.toISOString() ?? null, coverage: until ? 'partial' : 'none' };
+      }
+      const windowStart = analyticsWindow(range, now).from;
+      const covered = from.getTime() <= windowStart.getTime() && until.getTime() >= now.getTime() - COVERAGE_FRESH_MS;
+      return { indexedUntil: until.toISOString(), indexedFrom: from.toISOString(), coverage: covered ? 'complete' : 'partial' };
+    } catch (err) {
+      if (isMissingRelation(err)) return null;
+      throw new ServiceUnavailableException({
+        error: 'SEARCH_INDEX_UNAVAILABLE',
+        message: 'The search index could not be read. Try again in a moment.',
+      });
+    }
+  }
+
+  private notReady(range: SearchRange): TrafficSearchPage {
+    return { range, items: [], hasMore: false, nextCursor: null, indexedUntil: null, indexedFrom: null, coverage: 'none' };
   }
 
   /** One row with its headers and bodies. `ts` is required: it is what lets Postgres open one partition. */
@@ -221,8 +297,16 @@ export class TrafficSearchService {
     return rows.flatMap((r) => (r.tykApiId ? [{ id: r.id, name: r.name, slug: r.slug, tykApiId: r.tykApiId }] : []));
   }
 
+  /** An empty or non-numeric value is the default, like every other knob: `Number('')` is 0, which would clamp to a 100 ms budget. */
   private timeoutMs(): number {
-    const v = Number(this.configService.get<string>('TRAFFIC_SEARCH_TIMEOUT_MS'));
+    const raw = this.configService.get<string>('TRAFFIC_SEARCH_TIMEOUT_MS');
+    const v = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN;
     return Number.isInteger(v) ? Math.min(Math.max(v, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS;
+  }
+
+  private maxInFlight(): number {
+    const raw = this.configService.get<string>('TRAFFIC_SEARCH_MAX_CONCURRENT');
+    const v = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN;
+    return Number.isInteger(v) && v > 0 ? Math.min(v, MAX_IN_FLIGHT_LIMIT) : DEFAULT_MAX_IN_FLIGHT;
   }
 }

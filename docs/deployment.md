@@ -488,6 +488,12 @@ operator. Left on, the restored cluster inherits an `archive_command` pointing a
 it does not have and jams its own `pg_wal`; given that volume, it would write its segments **over
 the primary's archive**.
 
+The table-set check ignores the search table's daily partitions, `og_traffic_search_YYYYMMDD`: they
+rotate at every UTC midnight (two days created ahead, one dropped), so a daily backup always differs from
+the primary there, and comparing them made a healthy backup fail as "a different cluster or schema
+version". The parent `og_traffic_search` and `og_traffic_search_state` are still compared, as is every other
+table; `infra/scripts/pg-restore-scratch.check.sh` pins both halves.
+
 A mismatch is not automatically a bad backup — a primary that took writes after the backup will
 differ, which is why the output names *which* databases differ. `opengateway` matching while the
 Ory databases have moved is ordinary traffic; `opengateway` differing is the one worth chasing.

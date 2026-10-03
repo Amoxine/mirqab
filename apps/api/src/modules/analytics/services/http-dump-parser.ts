@@ -22,7 +22,9 @@
  * but a separate function — that one reads Tyk's `/debug` envelope, this one Pump's columns.
  */
 
-import { TRUNCATED_DUMP_MARKER } from './pump-query.builder';
+import { createHash } from 'node:crypto';
+import { storable } from '../text-safety';
+import { TRUNCATED_DUMP_MARKER, UNREDACTABLE_DUMP_PLACEHOLDER } from './pump-query.builder';
 
 /** Longest body returned, in characters. Anything past it is cut and `truncated` is set. */
 export const MAX_BODY_CHARS = 16 * 1024;
@@ -86,6 +88,11 @@ export interface HttpDump {
   body: string;
   /** The body was cut: by the trigger before storage, by the query's clip, or at `MAX_BODY_CHARS`. */
   truncated: boolean;
+  /**
+   * The trigger could not decode this dump (gzip, binary) and stored its placeholder instead of the
+   * capture: nothing in it was read, so nothing can be said about its headers or body. Absent otherwise.
+   */
+  unredactable?: true;
 }
 
 export interface DumpOptions {
@@ -115,7 +122,7 @@ function isSecretName(raw: string): boolean {
  * a form-encoded body. `code` joins the pattern here only — as a parameter it is an OAuth
  * authorization code, as a JSON key it is almost always an error code.
  */
-function redactPairs(text: string): string {
+export function redactPairs(text: string): string {
   return text
     .replace(PAIR, (pair, sep: string, name: string) =>
       isSecretName(name) || name.toLowerCase() === 'code' ? `${sep}${name}=${REDACTED}` : pair,
@@ -181,8 +188,11 @@ export function parseHttpDump(b64: string | null | undefined, options: DumpOptio
   if (typeof b64 !== 'string' || b64 === '') return null;
 
   // Buffer skips non-base64 characters (including the newlines Postgres's `encode` inserts) and
-  // replaces invalid UTF-8 with U+FFFD, so neither step can throw.
-  const decoded = Buffer.from(b64, 'base64').toString('utf8');
+  // replaces invalid UTF-8 with U+FFFD, so neither step can throw. NUL is dropped here, before any
+  // pattern reads the text: a NUL inside `pass\0word` must not hide the name from `isSecretName`, and
+  // no column of the search table can hold one.
+  const decoded = storable(Buffer.from(b64, 'base64').toString('utf8'));
+  const unredactable = decoded.trim() === UNREDACTABLE_DUMP_PLACEHOLDER;
   // The trigger cut this dump before storing it and said so on a last line of its own. Drop that
   // line (cut inside the headers it would parse as a bogus header) and report it as `truncated`.
   const cut = decoded.endsWith(`\n${TRUNCATED_DUMP_MARKER}`);
@@ -209,7 +219,37 @@ export function parseHttpDump(b64: string | null | undefined, options: DumpOptio
   return {
     startLine: redactPairs(startLine),
     headers: Object.fromEntries(headers),
-    body: body.slice(0, MAX_BODY_CHARS),
+    // `slice` counts UTF-16 units, so it can leave half an emoji at the cut; that half is not valid text.
+    body: storable(body.slice(0, MAX_BODY_CHARS)),
     truncated: cut || options.clipped === true || body.length > MAX_BODY_CHARS,
+    ...(unredactable ? { unredactable: true as const } : {}),
   };
+}
+
+/**
+ * Bump when the parser changes in a way no pattern below shows (a new step, a changed order). A change to
+ * any pattern needs no bump: it is part of the fingerprint. Either one changes `projectionTag`, which makes
+ * the indexer rebuild the search projection, because rows stored under the old rules may have let
+ * something through that these rules now hide.
+ */
+export const PARSER_REDACTION_VERSION = 1;
+
+/** A fingerprint of everything that decides what this parser hides, for `projectionTag`. */
+export function parserRulesFingerprint(version: number = PARSER_REDACTION_VERSION): string {
+  const rules = [
+    String(version),
+    SECRET_NAME.source,
+    SECRET_NAME.flags,
+    [...SECRET_EXACT].sort().join(','),
+    KEY_SUFFIX.source,
+    CAMEL_KEY_SUFFIX.source,
+    JWT_VALUE.source,
+    PAIR.source,
+    JSON_TOKEN.source,
+    TRIGGER_TAIL.source,
+    CONTAINER_OPEN.source,
+    REDACTED,
+    String(MAX_BODY_CHARS),
+  ];
+  return createHash('sha256').update(rules.join('\u0000')).digest('hex').slice(0, 16);
 }

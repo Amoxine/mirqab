@@ -8,6 +8,49 @@ const rejects = (input: unknown, message: RegExp) => {
 };
 const body = (value: string, side = 'any') => ({ kind: 'body', side, value });
 
+/**
+ * The bounds, pinned on both sides. `apps/web/src/lib/traffic-search.test.ts` holds the SAME two tables, keyed by
+ * the text typed instead of the clause sent: whatever the API answers with 400 the web parser must refuse before
+ * it ever reaches here (a chip that looks fine and then fails the whole search), and every edge accepted here
+ * must be accepted there. Change a row here and the same row there.
+ */
+const TEN = Array.from({ length: 10 }, (_, i) => 200 + i);
+const ELEVEN = Array.from({ length: 11 }, (_, i) => 200 + i);
+const REJECTED: [string, Record<string, unknown>][] = [
+  ['a status above 599', { kind: 'status', match: { type: 'cmp', op: '>=', value: 700 } }],
+  ['a status of 000', { kind: 'status', match: { type: 'cmp', op: '>=', value: 0 } }],
+  ['a status under 100', { kind: 'status', match: { type: 'cmp', op: '<', value: 99 } }],
+  ['an exact code under 100', { kind: 'status', match: { type: 'in', values: [99] } }],
+  ['an exact code above 599', { kind: 'status', match: { type: 'in', values: [600] } }],
+  ['a range ending above 599', { kind: 'status', match: { type: 'range', from: 600, to: 700 } }],
+  ['a range starting under 100', { kind: 'status', match: { type: 'range', from: 50, to: 200 } }],
+  ['a range that ends before it starts', { kind: 'status', match: { type: 'range', from: 300, to: 200 } }],
+  ['eleven status codes', { kind: 'status', match: { type: 'in', values: ELEVEN } }],
+  ['a latency over an hour', { kind: 'latency', op: '>=', value: 3_600_001 }],
+  ['a latency with an operator over an hour', { kind: 'latency', op: '>', value: 3_600_001 }],
+  ['eight methods', { kind: 'method', values: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE'] }],
+  ['a one-letter method', { kind: 'method', values: ['G'] }],
+  ['a header name with a space', { kind: 'header', side: 'req', name: 'bad name' }],
+  ['a header name over 64 characters', { kind: 'header', side: 'req', name: 'h'.repeat(65) }],
+  ['a value over 200 characters', { kind: 'key', value: 'k'.repeat(201) }],
+  ['a route over 200 characters', { kind: 'route', value: 'r'.repeat(201) }],
+  ['a path under 3 letters or digits', { kind: 'path', value: '/a' }],
+  ['a body term under 3 letters or digits', { kind: 'body', side: 'any', value: 'ab' }],
+  ['a body made only of common words', { kind: 'body', side: 'any', value: 'true false' }],
+];
+const EDGES: [string, Record<string, unknown>][] = [
+  ['the lowest status', { kind: 'status', neg: false, match: { type: 'cmp', op: '>=', value: 100 } }],
+  ['the highest status', { kind: 'status', neg: false, match: { type: 'cmp', op: '<=', value: 599 } }],
+  ['the widest status range', { kind: 'status', neg: false, match: { type: 'range', from: 100, to: 599 } }],
+  ['a one-code range', { kind: 'status', neg: false, match: { type: 'range', from: 404, to: 404 } }],
+  ['ten status codes', { kind: 'status', neg: false, match: { type: 'in', values: TEN } }],
+  ['the lowest latency', { kind: 'latency', neg: false, op: '>=', value: 0 }],
+  ['an hour of latency', { kind: 'latency', neg: false, op: '<=', value: 3_600_000 }],
+  ['seven methods', { kind: 'method', neg: false, values: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] }],
+  ['a 200-character key', { kind: 'key', neg: false, value: 'k'.repeat(200) }],
+  ['a 64-character header name', { kind: 'header', neg: false, side: 'req', name: 'h'.repeat(64) }],
+];
+
 describe('validateSearchRequest', () => {
   it('defaults to 24h, no clauses, the default page size and no cursor', () => {
     expect(validateSearchRequest({})).toEqual({ range: '24h', clauses: [], limit: SEARCH_LIMITS.defaultPageSize });
@@ -123,6 +166,39 @@ describe('validateSearchRequest', () => {
     ['a cursor in year 0', { cursor: { ts: '0000-01-01T00:00:00Z', id: '1' } }, /cursor is malformed/],
   ])('rejects %s', (_label, input, message) => {
     rejects(input, message);
+  });
+
+  it.each(REJECTED)('refuses %s with a 400, which the web parser must also refuse', (_label, c) => {
+    expect(() => validateSearchRequest({ clauses: [c] })).toThrow(SearchValidationError);
+  });
+
+  it.each(EDGES)('accepts %s, which the web parser must also accept', (_label, c) => {
+    expect(validateSearchRequest({ clauses: [c] }).clauses[0]).toEqual(c);
+  });
+
+  describe('text Postgres cannot store is a 400, not a 500', () => {
+    const NUL = 'a\u0000b';
+    const LONE_HIGH = `a\uD83D`;
+    const LONE_LOW = `\uDE00a`;
+    const stringFields: [string, (v: string) => Record<string, unknown>][] = [
+      ['a path', (value) => ({ kind: 'path', value: `/orders${value}` })],
+      ['a route', (value) => ({ kind: 'route', value: `/orders${value}` })],
+      ['an api', (value) => ({ kind: 'api', value })],
+      ['a key', (value) => ({ kind: 'key', value })],
+      ['a header value', (value) => ({ kind: 'header', side: 'req', name: 'x-a', value })],
+      ['a body phrase', (value) => body(`refund declined ${value}`)],
+    ];
+    const bad: [string, string][] = [['a NUL', NUL], ['an unpaired high surrogate', LONE_HIGH], ['an unpaired low surrogate', LONE_LOW]];
+
+    for (const [fieldName, make] of stringFields) {
+      it.each(bad)(`${fieldName} with %s is refused`, (_name, value) => {
+        rejects({ clauses: [make(value)] }, /cannot be searched for/);
+      });
+    }
+
+    it('a real emoji (a proper pair) is fine', () => {
+      expect(clause({ kind: 'key', value: 'k😀' })).toMatchObject({ kind: 'key', value: 'k😀' });
+    });
   });
 
   describe('body terms', () => {

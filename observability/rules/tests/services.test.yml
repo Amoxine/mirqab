@@ -525,6 +525,45 @@ tests:
         alertname: BackgroundJobFailing
         exp_alerts: []
 
+  # TrafficSearchIndexLagging: og_traffic_search_indexed_age_seconds (search indexer, set every tick).
+  - interval: 1m
+    input_series:
+      - series: 'og_traffic_search_indexed_age_seconds'
+        values: '2000x40'
+    alert_rule_test:
+      - eval_time: 10m # over the threshold, but not yet for 15 minutes
+        alertname: TrafficSearchIndexLagging
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: TrafficSearchIndexLagging
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: app
+            exp_annotations:
+              summary: 'Request search is behind: its newest indexed request is 33m 20s old'
+              description: 'The indexer is paused (redaction trigger missing), failing, or still rebuilding. Searches report coverage=partial meanwhile.'
+              runbook: RB-17
+
+  # A healthy index is seconds behind, and a rebuild that catches up stops firing.
+  - interval: 1m
+    input_series:
+      - series: 'og_traffic_search_indexed_age_seconds'
+        values: '30x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TrafficSearchIndexLagging
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'og_traffic_search_indexed_age_seconds'
+        values: '5000x10 600x40'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: TrafficSearchIndexLagging
+        exp_alerts: []
+
   # TykFanoutPartialFailure. `operation` value from the real closed list, TYK_FANOUT_OPERATIONS
   # (apps/api/src/common/metrics/ops-metrics.ts) — not an invented one.
   - interval: 1m

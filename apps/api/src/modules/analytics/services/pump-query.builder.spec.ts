@@ -2,18 +2,22 @@ import 'reflect-metadata';
 import { Prisma } from '@prisma/client';
 import {
   ANALYTICS_INDEX_DDL,
+  analyticsRedactionDdl,
   analyticsWindow,
   apiRollupQuery,
   errorRatePercent,
   keyRollupQuery,
+  MAX_REDACTED_DUMP_CHARS,
   MAX_TIME_SERIES_BUCKETS,
   rawStatsQuery,
+  REDACTION_TRIGGER,
   retentionAggregateQuery,
   retentionRawQuery,
   statusCodeQuery,
   tablePresenceQuery,
   timeSeriesQuery,
   toNumber,
+  TRUNCATED_DUMP_MARKER,
   UNAUTHENTICATED_KEY_HASH,
 } from './pump-query.builder';
 
@@ -341,5 +345,59 @@ describe('ANALYTICS_INDEX_DDL', () => {
 
     expect(leading).toBeDefined();
     expect(indexes.some(({ columns }) => columns[0] === leading && columns[1].startsWith('"timestamp"'))).toBe(true);
+  });
+});
+
+
+describe('ANALYTICS_INDEX_DDL: what the search indexer reads', () => {
+  it('has a partial index on the timestamp of captured rows, with the predicate the indexer filters on', () => {
+    expect(ANALYTICS_INDEX_DDL).toMatch(
+      /CREATE INDEX IF NOT EXISTS og_tyk_analytics_captured_ts ON public\.tyk_analytics \("timestamp"\)\s+WHERE rawrequest <> '' OR rawresponse <> ''/,
+    );
+  });
+});
+
+describe('analyticsRedactionDdl: the install, as text', () => {
+  const ddl = analyticsRedactionDdl(['password', 'token']);
+
+  it('issues trigger DDL only when the trigger is missing, disabled or not the right kind, after bounding the lock wait', () => {
+    expect(ddl).toContain('trigger_needs_install := NOT EXISTS');
+    expect(ddl).toContain("tgenabled IN ('O', 'A')");
+    expect(ddl).toContain('tgtype = 7'); // row + before + insert
+    expect(ddl).toContain("tgfoid = 'public.og_redact_tyk_analytics'::regproc");
+    const guard = ddl.indexOf('IF trigger_needs_install THEN');
+    const lock = ddl.indexOf("set_config('lock_timeout', '5s', true)");
+    const drop = ddl.indexOf('DROP TRIGGER IF EXISTS og_redact_tyk_analytics_trg');
+    const create = ddl.indexOf('CREATE TRIGGER og_redact_tyk_analytics_trg');
+    expect(guard).toBeGreaterThan(-1);
+    expect(lock).toBeGreaterThan(guard);
+    expect(drop).toBeGreaterThan(lock);
+    expect(create).toBeGreaterThan(drop);
+    // Nothing that takes the table lock sits outside the guard.
+    expect(ddl.slice(0, guard)).not.toContain('DROP TRIGGER');
+    expect(ddl.slice(0, guard)).not.toContain('CREATE TRIGGER');
+  });
+
+  it('rewrites only the rows the function changes, computing it once per row', () => {
+    const update = ddl.slice(ddl.indexOf('UPDATE public.tyk_analytics t'));
+    expect(update).toContain('t.rawrequest IS DISTINCT FROM r.rq OR t.rawresponse IS DISTINCT FROM r.rs');
+    expect(update.match(/og_redact_http_dump\(/g)).toHaveLength(2); // once per column, in the subquery
+    expect(update).not.toMatch(/SET rawrequest = og_redact_http_dump/);
+  });
+
+  it('takes the truncation marker off a dump it already cut before counting, so a second pass is a no-op', () => {
+    const body = ddl.slice(ddl.indexOf('CREATE OR REPLACE FUNCTION og_redact_http_dump'), ddl.indexOf('CREATE OR REPLACE FUNCTION og_redact_tyk_analytics'));
+    const strip = body.indexOf("truncated := right(plain, length(marker) + 1) = E'\\n' || marker");
+    const count = body.indexOf(`truncated := truncated OR length(plain) > ${String(MAX_REDACTED_DUMP_CHARS)}`);
+    const cut = body.indexOf(`plain := left(plain, ${String(MAX_REDACTED_DUMP_CHARS)})`);
+    expect(strip).toBeGreaterThan(-1);
+    expect(count).toBeGreaterThan(strip);
+    expect(cut).toBeGreaterThan(count);
+    expect(body).toContain(`marker text := '${TRUNCATED_DUMP_MARKER}'`);
+    expect(body).toContain(`plain := plain || E'\\n${TRUNCATED_DUMP_MARKER}'`);
+  });
+
+  it('still creates the trigger under the name the presence check looks for', () => {
+    expect(ddl).toContain(`CREATE TRIGGER ${REDACTION_TRIGGER}`);
   });
 });

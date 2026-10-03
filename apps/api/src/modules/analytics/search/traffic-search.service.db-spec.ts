@@ -58,9 +58,10 @@ describe('traffic search service on a real Postgres', () => {
     await store.maintain(NOW);
     for (const apiid of ['tyk-a', 'tyk-b']) {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO public.og_traffic_search (ts, apiid, method, path, status, latency_ms, key_alias, ip, req_headers, res_headers, req_body, res_body, dedupe_key)
+        `INSERT INTO public.og_traffic_search (ts, apiid, method, path, status, latency_ms, key_alias, ip, req_headers, res_headers, req_body, res_body, dedupe_key, fts)
          SELECT '2026-09-29T10:00:00Z'::timestamptz + (g || ' seconds')::interval, $1, 'POST', '/shared/orders', 500, 900, 'shared-key', '10.0.0.1',
-                '{"x-shared":"yes"}'::jsonb, '{"x-shared":"yes"}'::jsonb, 'cross tenant needle request', 'cross tenant needle response', $1 || g
+                '{"x-shared":"yes"}'::jsonb, '{"x-shared":"yes"}'::jsonb, 'cross tenant needle request', 'cross tenant needle response', $1 || g,
+                to_tsvector('simple', 'cross tenant needle request' || ' ' || 'cross tenant needle response') -- what the indexer stores
            FROM generate_series(1, ${String(ROWS_PER_TENANT)}) g`,
         apiid,
       );
@@ -163,12 +164,24 @@ describe('traffic search service on a real Postgres', () => {
   });
 
   it('a statement over its budget is cancelled and the setting does not leak to the next request', async () => {
+    await queryWithTimeout(prisma, Prisma.sql`SELECT 1`, 150); // a warm connection: on a loaded machine getting one can take seconds, which is not what is measured here
     const started = Date.now();
-    await expect(queryWithTimeout(prisma, Prisma.sql`SELECT pg_sleep(3)`, 150)).rejects.toBeInstanceOf(SearchTimeoutError);
-    expect(Date.now() - started).toBeLessThan(2_000); // cancelled at ~150 ms, not after the 3 s sleep
+    await expect(queryWithTimeout(prisma, Prisma.sql`SELECT pg_sleep(8)`, 150)).rejects.toBeInstanceOf(SearchTimeoutError);
+    expect(Date.now() - started).toBeLessThan(6_000); // cancelled at ~150 ms, not after the 8 s sleep
 
     const after = await prisma.$queryRaw<{ statement_timeout: string }[]>`SHOW statement_timeout`;
     expect(after[0]?.statement_timeout).toBe('0'); // SET LOCAL ended with its transaction
     expect(await queryWithTimeout<{ one: number }[]>(prisma, Prisma.sql`SELECT 1 AS one`, 150)).toEqual([{ one: 1 }]);
+  });
+
+  // Last on purpose: it removes the table and has the upkeep put it back (empty).
+  it('with the search table gone the endpoint says "not ready" instead of failing, and answers normally once the table is back', async () => {
+    await prisma.$executeRawUnsafe('DROP TABLE public.og_traffic_search, public.og_traffic_search_state CASCADE');
+    const page = await service.search('tenant-A', { range: '7d' });
+    expect(page).toEqual({ range: '7d', items: [], hasMore: false, nextCursor: null, indexedUntil: null, indexedFrom: null, coverage: 'none' });
+
+    await prisma.$executeRawUnsafe('DROP SEQUENCE IF EXISTS public.og_traffic_search_id_seq');
+    await store.maintain(NOW);
+    expect(await service.search('tenant-A', { range: '7d' })).toMatchObject({ items: [], coverage: 'partial' });
   });
 });

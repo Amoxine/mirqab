@@ -420,6 +420,10 @@ DO $$ BEGIN
     CREATE INDEX IF NOT EXISTS og_tyk_analytics_apikey_ts ON public.tyk_analytics (apikey, "timestamp" DESC);
     CREATE INDEX IF NOT EXISTS og_tyk_analytics_captured_apiid_ts ON public.tyk_analytics (apiid, "timestamp" DESC)
       WHERE rawrequest <> '' OR rawresponse <> '';
+    -- The search indexer reads captured rows by time alone, across every API: without this it filters the whole
+    -- window's rows (almost all of them uncaptured) out of the heap. Same predicate, so the same planner rule.
+    CREATE INDEX IF NOT EXISTS og_tyk_analytics_captured_ts ON public.tyk_analytics ("timestamp")
+      WHERE rawrequest <> '' OR rawresponse <> '';
   END IF;
 END $$;
 `;
@@ -483,7 +487,9 @@ export const DEFAULT_REDACT_FIELDS = [
 export const UNREDACTABLE_DUMP_PLACEHOLDER = '[UNREDACTABLE: non-UTF8 body]';
 
 /**
- * Decoded characters of a dump that `og_redact_http_dump` keeps; the rest is dropped BEFORE redaction.
+ * Decoded characters of the capture that `og_redact_http_dump` keeps; the rest is dropped BEFORE redaction.
+ * What it stores is up to this many characters plus, when it cut, the marker line below: the stored dump can be
+ * longer than this number, and a second pass over it takes the marker off before it counts (so it is a no-op).
  * Regex redaction costs per match, so an unbounded body full of `"cvv":1,` could hold a single-row
  * INSERT for many seconds and stall the pump for every tenant. Measured on Postgres 16, one row of
  * dense adversarial input: 40-80 ms whatever its size (before: ~0.9 s at 16 KB, ~3.4 s at 64 KB,
@@ -552,9 +558,11 @@ export function redactFieldsFrom(configured: string | undefined): string[] {
  * boot before the pump creates `tyk_analytics`, and every dump the pump writes before the trigger
  * exists is stored unredacted. So when the trigger was missing (or disabled — same effect), the same
  * statement also redacts the dumps already stored, in the same transaction — "trigger present" then always means "stored rows
- * redacted", which is what the traffic reader checks. Redaction is idempotent, and rows already
- * redacted are never rewritten on an ordinary re-install. The trigger DDL's table lock (it conflicts
- * with INSERT's) is held until commit, so pump inserts wait for that one-off backfill.
+ * redacted", which is what the traffic reader checks. Redaction is idempotent (a second pass over a row is a
+ * no-op, also for a dump cut at the cap), and rows already redacted are never rewritten. An ordinary re-install
+ * issues no trigger DDL when the trigger is intact; when it must, its table lock (it conflicts with INSERT's) is
+ * held until commit and waits at most `lock_timeout` (5 s), so the pump is never stalled behind it for long and
+ * the caller retries (`ensureRedaction`). Pump inserts do wait for the one-off backfill of rows stored meanwhile.
  */
 export function analyticsRedactionDdl(fields: string[]): string {
   const fieldsLiteral = fields.join('|').replace(/'/g, "''");
@@ -562,7 +570,7 @@ export function analyticsRedactionDdl(fields: string[]): string {
   return `
 DO $$
 DECLARE
-  trigger_was_missing boolean;
+  trigger_needs_install boolean;
 BEGIN
   IF to_regclass('public.tyk_analytics') IS NOT NULL THEN
     CREATE OR REPLACE FUNCTION og_redact_http_dump(b64 text, fields text) RETURNS text AS $fn$
@@ -570,13 +578,22 @@ BEGIN
       plain text;
       truncated boolean;
       f text;
+      marker text := '${TRUNCATED_DUMP_MARKER}';
     BEGIN
       IF b64 IS NULL OR b64 = '' THEN
         RETURN b64;
       END IF;
       BEGIN
         plain := convert_from(decode(b64, 'base64'), 'UTF8');
-        truncated := length(plain) > ${String(MAX_REDACTED_DUMP_CHARS)};
+        -- A dump this function already cut ends with the marker line. Take it off before counting, and
+        -- put it back at the end: without that a second pass cut into the marker (when the first pass's
+        -- redaction had left the text a little under the cap) and appended it again, so re-redacting a
+        -- stored row changed it, and the backfill rewrote every long row on every run.
+        truncated := right(plain, length(marker) + 1) = E'\\n' || marker;
+        IF truncated THEN
+          plain := left(plain, length(plain) - length(marker) - 1);
+        END IF;
+        truncated := truncated OR length(plain) > ${String(MAX_REDACTED_DUMP_CHARS)};
         plain := left(plain, ${String(MAX_REDACTED_DUMP_CHARS)});
         plain := regexp_replace(plain, 'Authorization:[ \\t]*[^\\r\\n]*', 'Authorization: [REDACTED]', 'gi');
         plain := regexp_replace(plain, 'Cookie:[ \\t]*[^\\r\\n]*', 'Cookie: [REDACTED]', 'gi');
@@ -621,23 +638,35 @@ BEGIN
     END;
     $fn$ LANGUAGE plpgsql;
 
-    -- A disabled trigger ('D', or replica-only 'R') let rows in unredacted just like a missing one.
-    trigger_was_missing := NOT EXISTS (
+    -- Needs (re)creating when it is missing, disabled ('D', or replica-only 'R': rows got in unredacted just
+    -- like a missing one), or not what it should be: BEFORE INSERT (tgtype 7 = row + before + insert) on THIS
+    -- function. The function body above was replaced in place, so an intact trigger needs no DDL at all.
+    trigger_needs_install := NOT EXISTS (
       SELECT 1 FROM pg_trigger
        WHERE tgname = 'og_redact_tyk_analytics_trg' AND tgrelid = 'public.tyk_analytics'::regclass
          AND tgenabled IN ('O', 'A')
+         AND tgtype = 7
+         AND tgfoid = 'public.og_redact_tyk_analytics'::regproc
     );
 
-    DROP TRIGGER IF EXISTS og_redact_tyk_analytics_trg ON tyk_analytics;
-    CREATE TRIGGER og_redact_tyk_analytics_trg
-      BEFORE INSERT ON tyk_analytics
-      FOR EACH ROW EXECUTE FUNCTION og_redact_tyk_analytics();
+    IF trigger_needs_install THEN
+      -- DROP/CREATE TRIGGER take a table lock that waits for the pump's running inserts and holds back every
+      -- insert behind it. Give up after 5 s rather than stall the pump for every tenant; the caller retries.
+      PERFORM set_config('lock_timeout', '5s', true);
+      DROP TRIGGER IF EXISTS og_redact_tyk_analytics_trg ON tyk_analytics;
+      CREATE TRIGGER og_redact_tyk_analytics_trg
+        BEFORE INSERT ON tyk_analytics
+        FOR EACH ROW EXECUTE FUNCTION og_redact_tyk_analytics();
 
-    IF trigger_was_missing THEN
-      UPDATE public.tyk_analytics
-         SET rawrequest = og_redact_http_dump(rawrequest, '${fieldsLiteral}'),
-             rawresponse = og_redact_http_dump(rawresponse, '${fieldsLiteral}')
-       WHERE rawrequest <> '' OR rawresponse <> '';
+      -- Rows stored while it was not firing. Only the ones the function changes are rewritten: an UPDATE that
+      -- writes the same value still makes a new row version (the table doubles, nothing is a HOT update).
+      UPDATE public.tyk_analytics t
+         SET rawrequest = r.rq, rawresponse = r.rs
+        FROM (SELECT ctid AS id,
+                     og_redact_http_dump(rawrequest, '${fieldsLiteral}') AS rq,
+                     og_redact_http_dump(rawresponse, '${fieldsLiteral}') AS rs
+                FROM public.tyk_analytics WHERE rawrequest <> '' OR rawresponse <> '') r
+       WHERE t.ctid = r.id AND (t.rawrequest IS DISTINCT FROM r.rq OR t.rawresponse IS DISTINCT FROM r.rs);
     END IF;
   END IF;
 END $$;

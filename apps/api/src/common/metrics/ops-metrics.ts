@@ -1,4 +1,4 @@
-import { Counter, type Registry } from 'prom-client';
+import { Counter, Gauge, type Registry } from 'prom-client';
 
 /**
  * Counters bumped from code that `ObservabilityModule` itself depends on — the Tyk client, the
@@ -52,6 +52,9 @@ export const JOBS = [
   'key_expiry',
   'analytics_retention',
   'spec_source_fetch',
+  // The request-search projection: the indexer's 10-second tick and the table's own upkeep (search/).
+  'search_index',
+  'search_maintenance',
 ] as const;
 export type JobName = (typeof JOBS)[number];
 
@@ -78,6 +81,34 @@ export async function countJobRun<T>(job: JobName, run: () => Promise<T>): Promi
   }
 }
 
+/** Captured requests the search table refused (a value Postgres rejects) and the indexer skipped so the others could land. */
+export const searchSkippedRowsTotal = new Counter({
+  name: 'og_traffic_search_skipped_rows_total',
+  help: 'Captured requests skipped by the search indexer because the search table refused them',
+  registers: [],
+});
+
+/** The phases of the search table's upkeep, so a failure names which one. */
+export const SEARCH_MAINTENANCE_PHASES = ['create', 'partition_create', 'partition_drop'] as const;
+export type SearchMaintenancePhase = (typeof SEARCH_MAINTENANCE_PHASES)[number];
+
+export const searchMaintenanceFailuresTotal = new Counter({
+  name: 'og_traffic_search_maintenance_failures_total',
+  help: 'Failed steps of the search table upkeep, by phase',
+  labelNames: ['phase'] as const,
+  registers: [],
+});
+
+/**
+ * Seconds between now and the instant the search table is known to cover up to. Set on every indexer tick that
+ * can read its state, including a paused one, so a stalled index shows as a number that keeps growing.
+ */
+export const searchIndexedAgeSeconds = new Gauge({
+  name: 'og_traffic_search_indexed_age_seconds',
+  help: 'Age in seconds of the newest instant the request-search table covers',
+  registers: [],
+});
+
 export const AUTHZ_DENIAL_REASONS = ['tenant_mismatch', 'missing_permission', 'no_tenant'] as const;
 export type AuthzDenialReason = (typeof AUTHZ_DENIAL_REASONS)[number];
 
@@ -97,6 +128,9 @@ export function registerOpsCounters(registry: Registry, nodeCount: number): void
   registry.registerMetric(tykFanoutTotal);
   registry.registerMetric(jobRunsTotal);
   registry.registerMetric(authzDeniedTotal);
+  registry.registerMetric(searchSkippedRowsTotal);
+  registry.registerMetric(searchMaintenanceFailuresTotal);
+  registry.registerMetric(searchIndexedAgeSeconds);
 
   for (let index = 0; index < nodeCount; index++) {
     for (const operation of TYK_FANOUT_OPERATIONS) {
@@ -110,4 +144,6 @@ export function registerOpsCounters(registry: Registry, nodeCount: number): void
     jobRunsTotal.inc({ task: job, outcome: 'error' }, 0);
   }
   for (const reason of AUTHZ_DENIAL_REASONS) authzDeniedTotal.inc({ reason }, 0);
+  searchSkippedRowsTotal.inc(0);
+  for (const phase of SEARCH_MAINTENANCE_PHASES) searchMaintenanceFailuresTotal.inc({ phase }, 0);
 }

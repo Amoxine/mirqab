@@ -1,4 +1,4 @@
-import { FULLTEXT_ANY } from './traffic-search.sql';
+import { FULLTEXT_COLUMN } from './traffic-search.sql';
 
 /**
  * The search projection: one redacted row per captured request, range-partitioned by UTC day.
@@ -10,14 +10,29 @@ import { FULLTEXT_ANY } from './traffic-search.sql';
  * Indexes (chosen from a 500k-row benchmark, `docs/ANALYTICS-PIPELINE.md`):
  *  - `(apiid, ts DESC)` and `(apiid, method, ts DESC)`: tenant + window, newest first; cheap.
  *  - GIN `jsonb_path_ops` on both header columns: `header:` clauses; small.
- *  - GIN on the full-text expression: word search over the bodies; the costly one (it caps inserts).
+ *  - GIN on the stored `fts` column: word search over the bodies; the costly one (it caps inserts).
  *  Left out on purpose: trigram, JSON-body, path and partial-status indexes (measured expensive or unused).
  *
- * The full-text index is on `FULLTEXT_ANY`, the same string the query builder emits, because Postgres
- * only uses an expression index when the query repeats the exact expression.
+ * `fts` is a plain column the indexer fills (`to_tsvector` of both bodies, computed once at insert); it is not a
+ * generated column because adding one to a table that has rows rewrites every partition. A table built before the
+ * column existed gets it by `ADD COLUMN` (a metadata change) and loses the expression index it replaces; its rows have
+ * no `fts` until the indexer rebuilds them (`PROJECTION_RULES_VERSION` changed, so it does), and a search meanwhile
+ * reports `coverage: partial`, never a wrong answer: a NULL vector matches nothing.
  *
  * `id` comes from a sequence, not an identity column: a partitioned table cannot have one on PG 16.
  * It is unique only together with `ts`, so the dedupe key is `(ts, dedupe_key)`.
+ *
+ * The state row (`og_traffic_search_state`, one row) is the indexer's memory: `scanned_until` (everything
+ * before it was copied), `indexed_from` (the earliest instant the table covers: a search window that starts
+ * earlier is only partly answered), `generation` (raised by every reset, so a scan that started before a
+ * TRUNCATE cannot write into the table after it), `redaction_tag` (the rules the rows were built under; a
+ * different tag rebuilds the table) and `auth_headers` (each API's configured auth header when its rows were
+ * built). The table is derived data: every column added later is added with `ADD COLUMN IF NOT EXISTS`
+ * above, so an older table is upgraded in place and the tag then rebuilds what the new rules need.
+ *
+ * Header-exists clauses (`@?` on the `jsonb_path_ops` indexes) cannot narrow by key: the index hashes path+value, so it
+ * answers `@>` (name and value) but holds no bare keys, and the planner reads the window's rows and filters. That scales
+ * with the rows the tenant and time predicates leave, not with the header; see the query builder.
  */
 export const TRAFFIC_SEARCH_DDL = `
 DO $$ BEGIN
@@ -39,8 +54,15 @@ DO $$ BEGIN
     res_body      text        NOT NULL DEFAULT '',
     req_truncated boolean     NOT NULL DEFAULT false,
     res_truncated boolean     NOT NULL DEFAULT false,
-    dedupe_key    text        NOT NULL
+    dedupe_key    text        NOT NULL,
+    unredactable  boolean     NOT NULL DEFAULT false,
+    fts           tsvector
   ) PARTITION BY RANGE (ts);
+
+  -- A table created before this column existed: a constant default is a metadata change, not a rewrite, and
+  -- on a partitioned table the column is added to every partition.
+  ALTER TABLE public.og_traffic_search ADD COLUMN IF NOT EXISTS unredactable boolean NOT NULL DEFAULT false;
+  ALTER TABLE public.og_traffic_search ADD COLUMN IF NOT EXISTS fts tsvector;
 
   ALTER SEQUENCE public.og_traffic_search_id_seq OWNED BY public.og_traffic_search.id;
 
@@ -54,13 +76,23 @@ DO $$ BEGIN
     ON public.og_traffic_search USING gin (req_headers jsonb_path_ops);
   CREATE INDEX IF NOT EXISTS og_traffic_search_res_headers
     ON public.og_traffic_search USING gin (res_headers jsonb_path_ops);
-  CREATE INDEX IF NOT EXISTS og_traffic_search_fts
-    ON public.og_traffic_search USING gin ((${FULLTEXT_ANY}));
+  CREATE INDEX IF NOT EXISTS og_traffic_search_fts_col
+    ON public.og_traffic_search USING gin (${FULLTEXT_COLUMN});
+  -- The expression index this one replaces (it cannot serve a query on the column, and costs every insert).
+  DROP INDEX IF EXISTS public.og_traffic_search_fts;
 
   CREATE TABLE IF NOT EXISTS public.og_traffic_search_state (
     id            smallint    PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-    scanned_until timestamptz NOT NULL
+    scanned_until timestamptz NOT NULL,
+    indexed_from  timestamptz,
+    generation    bigint      NOT NULL DEFAULT 0,
+    redaction_tag text,
+    auth_headers  jsonb       NOT NULL DEFAULT '{}'::jsonb
   );
+  ALTER TABLE public.og_traffic_search_state ADD COLUMN IF NOT EXISTS indexed_from timestamptz;
+  ALTER TABLE public.og_traffic_search_state ADD COLUMN IF NOT EXISTS generation bigint NOT NULL DEFAULT 0;
+  ALTER TABLE public.og_traffic_search_state ADD COLUMN IF NOT EXISTS redaction_tag text;
+  ALTER TABLE public.og_traffic_search_state ADD COLUMN IF NOT EXISTS auth_headers jsonb NOT NULL DEFAULT '{}'::jsonb;
 END $$;
 `;
 

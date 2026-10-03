@@ -170,6 +170,12 @@ jobs:
       - name: Guard — prod ports guard cases
         run: bash infra/scripts/check-prod-ports.check.sh
 
+      # The restore drill's L3 table-set comparison must ignore the daily og_traffic_search_YYYYMMDD partitions
+      # (they rotate at UTC midnight, a daily backup always differs) and must still fail on a real missing
+      # table. Pure shell over the script's own extracted definitions; the drill itself needs Docker volumes.
+      - name: Guard — restore drill table-set cases
+        run: bash infra/scripts/pg-restore-scratch.check.sh
+
       # The one that matters: base + prod must publish exactly the edge's five ports, with a Compose new
       # enough to honour the overlay's `ports: !reset []`. An edit that re-publishes a development port
       # (or a Compose that silently ignores the tag) fails here instead of on a host.
@@ -181,6 +187,27 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+      # The `*.db-spec.ts` tests need a REAL Postgres (dedupe, the redaction trigger, trigger pause, the leak
+      # oracle, tenant isolation, the search partitions, the half-failed backfill, the statement timeout), and
+      # `pnpm test` never matches them: `foo.db-spec.ts` ends in `-spec.ts`, not `.spec.ts`. That is
+      # deliberate, they must not run against whatever database is configured, but it also meant nothing in CI
+      # ran them. This does, against the Postgres service above, which the migration step has already brought
+      # up to date (the specs that use tenants, audit and spec sources need that; the pump-table specs create
+      # what they need themselves).
+      #
+      # BOTH variables are set, to the same service database, because every spec imports
+      # `common/testing/throwaway-db.guard` first and it throws unless DATABASE_URL equals
+      # OG_THROWAWAY_DATABASE_URL (and is not the stack's :33002). That is the guard working, not a hurdle to
+      # route around: it exists because an unset DATABASE_URL once fell back to the live stack database and a
+      # spec dropped `tyk_analytics` there. This database is a service container that dies with the job.
+      # They run in band (the specs share and recreate tables) and the script passes --watchman=false.
+      - name: DB specs (real Postgres)
+        timeout-minutes: 15
+        run: pnpm --filter @open-gateway/api test:db
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test?schema=public
+          OG_THROWAWAY_DATABASE_URL: postgresql://test:test@localhost:5432/test?schema=public
 
       - name: Build
         run: pnpm build

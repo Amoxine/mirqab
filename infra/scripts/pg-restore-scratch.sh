@@ -75,6 +75,33 @@ STRICT=false
 die() { echo "ERROR: $*" >&2; exit 1; }
 say() { echo "[restore] $*"; }
 
+# ── Rotating partitions are not part of the schema L3 compares ───────────────────────────────────
+# The search projection (apps/api .../traffic-search.ddl.ts) keeps one partition per UTC day,
+# `og_traffic_search_YYYYMMDD`, created two days ahead and dropped when it expires, so the SET of them
+# changes at every UTC midnight. A base backup is daily, so any backup older than the last rotation lists
+# partitions the primary no longer has and misses ones it has gained. Comparing them made a healthy
+# backup exit 1 with "different cluster / schema version", which is the one message an operator takes
+# seriously. They are dropped from the rows this script compares, anchored on the table field:
+# `og_traffic_search_[0-9]{8}` exactly. The parent `og_traffic_search` and `og_traffic_search_state` are
+# ordinary schema, stay in, and a missing one still fails; the parent's own row count already includes
+# every partition's rows. Pinned by infra/scripts/pg-restore-scratch.check.sh, which extracts these
+# definitions from this file and runs them.
+ROTATING_PARTITION_ROW='^[^|]*[|]og_traffic_search_[0-9]{8}[|]'
+# Filters `db|table|count` rows. `grep -v` exits 1 when it selects nothing, which is not a failure here
+# (and would be under pipefail), so only a real grep error (2) propagates.
+without_rotating_partitions() { grep -vE "$ROTATING_PARTITION_ROW" || [ $? -eq 1 ]; }
+
+# table_set_diff PRIMARY_COUNTS SCRATCH_COUNTS WORKDIR
+# Compares the db-qualified table SETS of two `db|table|count` files. Returns 0 when they are identical;
+# otherwise prints the diff body (no ---/+++ header) on stdout and returns 1.
+table_set_diff() {
+  cut -d'|' -f1,2 <"$2" | sort >"$3/s.set"
+  cut -d'|' -f1,2 <"$1" | sort >"$3/p.set"
+  diff -u "$3/p.set" "$3/s.set" >"$3/set.diff" && return 0
+  sed -n '3,$p' "$3/set.diff"
+  return 1
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --backup) BACKUP="${2:-}"; shift 2 ;;
@@ -329,7 +356,7 @@ dump_counts() {
   : >"$out"
   for db in opengateway hydra kratos keto; do
     docker exec "$container" psql -U opengateway -d "$db" -tAF'|' -c "$COUNT_SQL" 2>"$tmp/psql.err" \
-      | sed "s/^/$db|/" >>"$out" \
+      | sed "s/^/$db|/" | without_rotating_partitions >>"$out" \
       || die "row count query failed on $container/$db: $(tr '\n' ' ' <"$tmp/psql.err")"
   done
 }
@@ -349,11 +376,12 @@ p_tables="$(wc -l <"$tmp/primary.txt" | tr -d ' ')"
 
 # Table SET (db-qualified), not count: the same NUMBER of differently-named tables is a
 # wrong-cluster backup, and a count comparison waves it straight through.
-cut -d'|' -f1,2 <"$tmp/scratch.txt" | sort >"$tmp/s.set"
-cut -d'|' -f1,2 <"$tmp/primary.txt" | sort >"$tmp/p.set"
-if ! diff -u "$tmp/p.set" "$tmp/s.set" >"$tmp/set.diff"; then
+#
+# `og_traffic_search_YYYYMMDD` partitions are already out of both files (dump_counts): they rotate daily,
+# so their set legitimately differs between a backup and the primary. See without_rotating_partitions.
+if ! set_diff_body="$(table_set_diff "$tmp/primary.txt" "$tmp/scratch.txt" "$tmp")"; then
   say "L3 FAILED: the restored table set differs from the primary's"
-  sed -n '3,$p' "$tmp/set.diff" | sed 's/^/    /' >&2
+  printf '%s\n' "$set_diff_body" | sed 's/^/    /' >&2
   die "this backup is of a different cluster, a different schema version, or is incomplete"
 fi
 
@@ -389,7 +417,7 @@ if grep -q '^HOLLOW ' "$tmp/hollow.txt"; then
   done
   die "this backup did not capture the data"
 fi
-say "L3 PASS: $s_tables tables, table set identical, no database hollow"
+say "L3 PASS: $s_tables tables, table set identical, no database hollow (daily og_traffic_search_YYYYMMDD partitions not compared: they rotate at UTC midnight)"
 # The number L3 actually measured, printed on PASS and not only on failure. Without it the run said
 # "complete" while 4 of 10 tables in a database were empty where the primary's are populated — true,
 # unalarming, and invisible. Output that reports only the verdict and never the measurement is how a

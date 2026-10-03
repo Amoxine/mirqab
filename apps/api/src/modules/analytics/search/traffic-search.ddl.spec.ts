@@ -8,15 +8,26 @@ import {
   partitionName,
   utcDay,
 } from './traffic-search.ddl';
-import { FULLTEXT_ANY } from './traffic-search.sql';
 
 describe('traffic search DDL', () => {
-  it('builds the full-text index on the exact expression the query builder emits', () => {
-    expect(TRAFFIC_SEARCH_DDL).toContain(`USING gin ((${FULLTEXT_ANY}))`);
+  it('builds the full-text index on the stored column the query reads, and drops the expression index it replaces', () => {
+    expect(TRAFFIC_SEARCH_DDL).toMatch(/CREATE INDEX IF NOT EXISTS og_traffic_search_fts_col\s+ON public\.og_traffic_search USING gin \(fts\)/);
+    expect(TRAFFIC_SEARCH_DDL).toContain('DROP INDEX IF EXISTS public.og_traffic_search_fts;');
+    expect(TRAFFIC_SEARCH_DDL).not.toContain('to_tsvector');
+  });
+
+  it('adds the columns an older table lacks in place, each guarded, after the table it extends', () => {
+    for (const column of ['unredactable boolean NOT NULL DEFAULT false', 'fts tsvector']) {
+      expect(TRAFFIC_SEARCH_DDL).toContain(`ALTER TABLE public.og_traffic_search ADD COLUMN IF NOT EXISTS ${column}`);
+    }
+    for (const column of ['indexed_from timestamptz', 'generation bigint NOT NULL DEFAULT 0', 'redaction_tag text', "auth_headers jsonb NOT NULL DEFAULT '{}'::jsonb"]) {
+      expect(TRAFFIC_SEARCH_DDL).toContain(`ALTER TABLE public.og_traffic_search_state ADD COLUMN IF NOT EXISTS ${column}`);
+    }
+    expect(TRAFFIC_SEARCH_DDL.indexOf('ADD COLUMN IF NOT EXISTS fts')).toBeGreaterThan(TRAFFIC_SEARCH_DDL.indexOf('CREATE TABLE IF NOT EXISTS public.og_traffic_search ('));
   });
 
   it('creates the lean index set and nothing heavier', () => {
-    for (const name of ['dedupe', 'apiid_ts', 'apiid_method_ts', 'req_headers', 'res_headers', 'fts']) {
+    for (const name of ['dedupe', 'apiid_ts', 'apiid_method_ts', 'req_headers', 'res_headers', 'fts_col']) {
       expect(TRAFFIC_SEARCH_DDL).toContain(`og_traffic_search_${name}`);
     }
     expect(TRAFFIC_SEARCH_DDL).not.toMatch(/gin_trgm_ops|res_json|WHERE status/);

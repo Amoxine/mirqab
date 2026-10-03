@@ -10,17 +10,22 @@ PostgreSQL, where the NestJS API reads them with tenant-scoped SQL.
 ## Pipeline
 
 ```
-client ──► Tyk Gateway :33005 (data plane; control API on :8081, not published) ──► upstream
+client ──► Edge :33005 (TLS + WAF) ──► Tyk Gateway :8080 (data plane; control API on :8081; neither published) ──► upstream
                 │  ENABLEANALYTICS=true, ANALYTICSCONFIG_TYPE="" (buffer in Redis)
                 ▼
-          Redis :33003  (records, TTL 3600s)
+          Redis :6379  (records, TTL 3600s)
                 │  tyk-pump, purge_delay 10s, purge_chunk 1000
                 ▼
-          PostgreSQL :33002 (127.0.0.1)   tyk_analytics (raw)  +  tyk_aggregated (hourly rollup)
+          PostgreSQL :5432   tyk_analytics (raw)  +  tyk_aggregated (hourly rollup)
                 │  prisma.$queryRaw, scoped to the tenant's tykApiId set
                 ▼
           NestJS /api/analytics/*  ──►  Next.js /analytics
 ```
+
+Ports: `33005` is the **edge's** published gateway port (TLS and the WAF); the gateway itself listens on `8080` (control
+API on `8081`) inside the compose network and is not published. `33003` (Redis) and `33002` (PostgreSQL, loopback only)
+are laptop conveniences of the base `infra/docker-compose.yml`: `docker-compose.prod.yml` resets them, so in production
+both are reachable only from containers on the network (`redis:6379`, `postgres:5432`).
 
 | Component | Pin | Why |
 |---|---|---|
@@ -55,7 +60,7 @@ Load-bearing settings — do not "clean these up":
 |---|---|
 | `dont_purge_uptime_data: true` | Defaults to `false`, which starts an uptime pump even with no uptime target. When it cannot reach a persistent DB **the whole pump process exits**, taking both Postgres pumps with it. |
 | `storage_expiration_time: 3600` | With `purge_chunk` set and this unset the pump overrides the Redis TTL to 60 s. Matches the gateway's `STORAGEEXPIRATIONTIME`. |
-| `omit_detailed_recording: true` | Drops `rawrequest`/`rawresponse` at the pump even if detailed recording is ever enabled — they hold full bodies (PII, unbounded growth). |
+| `omit_detailed_recording: false` on the postgres pump | Captured dumps are kept and redacted at insert by a trigger (see Redaction). They hold bodies (PII, unbounded growth), which is why detailed recording is off per API by default. |
 | `log_level: "info"` | The pump maps `debug`→Info, `info`→Warn; **`"error"` is unhandled and silently becomes `silent`**. |
 | `health_check_endpoint_name` / `_port` (`"health"` / `8083`) | Serves `GET /health` → `200 {"status": "ok"}`. These are the pump's defaults, pinned explicitly because the API's liveness probe depends on them. The name has **no leading slash**; the port is not published to the host. |
 | `table_sharding: false` | Sharding would create `tyk_analytics_YYYYMMDD` tables and break every query. |
@@ -89,7 +94,7 @@ pumpReachable`. The UI treats the two failure shapes differently:
 | State | UI |
 |---|---|
 | Tables missing, or pump down with no rows recorded | Full-page "Analytics pipeline not receiving data" state |
-| Pump down, tables hold rows | Warning banner ("Tyk Pump is not running … last record N ago") **and** the existing data, shown as stale |
+| Pump down, tables hold rows | Warning notice "Analytics collection is paused" (with the time of the last record) **and** the existing data, shown as stale |
 
 Proof (compose stack): `docker stop open-gateway-tyk-pump` → the next health call returns
 `pumpReachable:false`; `docker start open-gateway-tyk-pump` → `true` again within seconds.
@@ -179,7 +184,8 @@ the start of its hourly bucket.
 
 ## Endpoints
 
-All require `analytics:read`; `range` ∈ `1h | 24h | 7d | 30d` (default `24h`).
+All require `analytics:read` unless noted: `POST /analytics/traffic/search` and `GET /analytics/traffic/search/:id` need `analytics:read` and
+`api:update`; `export` needs `analytics:export`. `range` ∈ `1h | 24h | 7d | 30d` (default `24h`).
 
 | Endpoint | Source | Notes |
 |---|---|---|
@@ -189,6 +195,7 @@ All require `analytics:read`; `range` ∈ `1h | 24h | 7d | 30d` (default `24h`).
 | `GET /api/analytics/keys` | aggregate | Per-key rollup by `ApiKey.tykKeyId` |
 | `GET /api/analytics/top-apis?limit=` | aggregate | `limit` ≤ 50 |
 | `GET /api/analytics/status-codes` | aggregate | `dimension='apiid'` + `code_*`; 2xx from `counter_success` |
+| `GET /api/analytics/traffic` | raw | Filtered KPIs, time series and endpoint tables; filters by API, key, method, status, path (substring, up to 200 characters), latency and authentication |
 | `GET /api/analytics/health` | both + pump probe | `pipelineReady` (both tables exist **and** `pumpReachable`) + `pumpReachable` + `rawTablePresent` / `aggregateTablePresent` + tenant-scoped `rowCount` / `lastRecordAt` |
 | `GET /api/analytics/export?format=csv` | raw | Requires `analytics:export` (403 without it), not `analytics:read`. Streams — writes each page to the response as it is fetched, never buffers the full CSV — capped at `ANALYTICS_EXPORT_MAX_ROWS` (50,000) rows |
 
@@ -244,7 +251,7 @@ The bracket passes for a configured field that holds an object or array (`"cooki
 run only when a listed field is actually followed by `{` or `[`. Unguarded they tripled the regex count per dump and
 measured 0.25 ms -> 10.7 ms per dump (about 20 ms per row with both columns, so a 1000-row pump batch would stall
 ~20 s); guarded it is 0.30 ms. A database spec (`pump-redaction.db-spec.ts`, the last case) inserts 1200 ordinary
-rows and fails if that batch takes more than 8 s (about 1 s measured; about 24 s without the guard).
+rows and fails if that batch takes more than 8 s (about 0.6 s measured; about 24 s without the guard).
 
 A dump that cannot be decoded (a gzip/binary body is not UTF-8) is stored as the base64
 of `[UNREDACTABLE: non-UTF8 body]` in that column only: never the unredacted original, and never an
@@ -284,18 +291,21 @@ cron provider — a second root is an error.
 Now that detailed recording is on (`omit_detailed_recording: false`), `tyk_analytics` rows are
 meaningfully bigger — the two base64 dump columns dominate. Measured against a real
 gateway+pump+Postgres, 101 rows of a representative traffic mix (a ~400-byte GET/POST request with
-one auth header, a small JSON body, a ~1000-byte response), **with the redaction trigger and all
-three of this table's own indexes (`og_tyk_analytics_*`) already applied**:
+one auth header, a small JSON body, a ~1000-byte response), **with the redaction trigger and the three
+`og_tyk_analytics_*` indexes that existed then (`apiid_ts`, `ts`, `apikey_ts`) already applied**. The
+partial indexes on captured rows that `ANALYTICS_INDEX_DDL` has gained since (`captured_apiid_ts`, and `captured_ts`
+for the search indexer) are not in these figures:
 
-| Metric | Measured |
+| Metric | Measured (small sample, 101 rows; the dev table measured 3.9 KB/row) |
 |---|---|
 | Row payload alone (`pg_column_size`) | ~1.85 KB/row → **~1.85 GB per million requests** |
-| Table + these 3 indexes (`pg_total_relation_size`) | ~2.8 KB/row → **~2.8 GB per million requests** |
+| Table + those 3 indexes (`pg_total_relation_size`) | ~2.8 KB/row → **~2.8 GB per million requests** |
 
 Actual cost scales with real request/response size (a large body costs more; an API with detailed
 recording left off for that API costs ~0, its `rawrequest`/`rawresponse` stay empty). At the default
 `ANALYTICS_RETENTION_DAYS=30`, a tenant sustaining 1M detailed-recording requests/day should budget
-**~85 GB** for `tyk_analytics` alone at steady state (30 × ~2.8 GB) before it starts aging out. Turn
+**~85 GB** for `tyk_analytics` alone at steady state (30 × ~2.8 GB) before it starts aging out. That figure rests on the
+small sample: at the 3.9 KB/row the dev table measured it would be about 117 GB, and no note reproduces either number. Turn
 detailed recording off per-API (WP15b's `enable_detailed_recording` toggle) for APIs that don't need
 request/response bodies in analytics — the scalar columns alone (no detailed recording) cost a few
 hundred bytes/row, not ~2.8 KB.
@@ -317,7 +327,8 @@ POST /analytics/traffic/search ── typed clauses, tenant's Tyk API ids, windo
 
 **Why a copy and not indexes on `tyk_analytics`.** The dumps there are base64 text, so they cannot be searched
 without decoding every row, and a full-text index on a table the pump writes would put its cost on the pump's
-insert path (measured below: the full-text index cuts inserts from thousands of rows per second to hundreds).
+insert path (measured: 2,700-3,000 rows/s with plain and header indexes and 150 rows/s once the full-text index was added, in a
+20,000-row test in 1,000-row batches; the lean set below sustains 156-234 rows/s in 500-row batches).
 The projection holds decoded, redacted text in its own table, written by one indexer in batches of 500.
 
 **Table** (`search/traffic-search.ddl.ts`, created at API boot and every 6 hours, idempotent, not a Prisma
@@ -419,8 +430,8 @@ as orders of magnitude.
 | Full-text index alone | 304 MB | 1,453 MB (3.0 KB/row), about 88% of index size |
 | Both header indexes | 28 MB | 114 MB |
 
-- **Write rate.** Between 234 rows/s (first 25,000) and about 180-195 rows/s (last 25,000), sustained over the
-  whole load. Compare this with your own traffic: the indexer must sustain your peak captured-request rate.
+- **Write rate.** 234 rows/s for the first 25,000 rows; most later 25,000-row chunks ran at 180-210 rows/s, the slowest
+  at 156 rows/s, and the final chunk (23,000 rows) at 184 rows/s. Compare this with your own traffic: the indexer must sustain your peak captured-request rate.
 - **Query time, median over repeated runs** (500,000 rows; "24h" is about 71,000 rows, "7d" covers all of them):
 
 | Filter | 24h | 7d |
@@ -465,7 +476,7 @@ curl -s -b /tmp/og.jar https://localhost:33001/api/analytics/health
 
 | Symptom | Cause |
 |---|---|
-| Dashboard says "Tyk Pump is not running" | `pumpReachable:false`: the pump is stopped, `PUMP_HEALTH_URL` is unset on the API, or the pump's `health_check_endpoint_*` changed (`docker compose exec api node -e "fetch(process.env.PUMP_HEALTH_URL).then(r=>console.log(r.status))"`) |
+| Dashboard says "Analytics collection is paused", or the empty state shows the collection service as Not running | `pumpReachable:false`: the pump is stopped, `PUMP_HEALTH_URL` is unset on the API, or the pump's `health_check_endpoint_*` changed (`docker compose exec api node -e "fetch(process.env.PUMP_HEALTH_URL).then(r=>console.log(r.status))"`) |
 | Pump exits seconds after start | `dont_purge_uptime_data` missing → uptime pump kills the process |
 | Tables never appear | Pump cannot reach Postgres, or it has purged nothing yet (tables are created on first purge) |
 | Rows in `tyk_analytics`, none in `tyk_aggregated` | Only the `sql` pump initialised — check for `Init Pump: POSTGRESAGGREGATE` |

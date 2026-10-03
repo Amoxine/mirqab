@@ -1,4 +1,5 @@
-import { JWT_VALUE, parseHttpDump, REDACTED, type HttpDump } from '../services/http-dump-parser';
+import { parseHttpDump, redactPairs, type HttpDump } from '../services/http-dump-parser';
+import { storable } from '../text-safety';
 
 /** What `tyk_analytics` gives for one captured request (the pump table, before any redaction by this module). */
 export interface CapturedRow {
@@ -34,11 +35,24 @@ export interface SearchRow {
   resBody: string;
   reqTruncated: boolean;
   resTruncated: boolean;
+  /** Either dump could not be decoded (gzip, binary), so none of its headers or body were read. */
+  unredactable: boolean;
   dedupeKey: string;
 }
 
 /** Stored instead of a multipart body: the parser does not understand boundaries, so its redaction cannot be trusted there. */
 export const MULTIPART_PLACEHOLDER = '[multipart body not indexed]';
+
+/**
+ * Stored instead of a body that is not JSON or a form. The parser reads those two shapes (JSON by key, a
+ * form by `name=value`); it does not read `password=x` on its own line, `user=bob password=x`, an XML
+ * `<Password>`, a YAML `password: x` or HTML, so anything it leaves readable there would be searchable.
+ * An unreadable body is hidden whole, the same decision as multipart.
+ */
+export const OPAQUE_BODY_PLACEHOLDER = '[body not indexed: its format cannot be redacted]';
+
+/** Stored instead of a capture the trigger could not decode; visible, so the row does not look like an empty request. */
+export const UNREDACTABLE_BODY_PLACEHOLDER = '[UNREDACTABLE: non-UTF8 body]';
 
 /** A header value longer than this is cut: it bounds the GIN index, and a search for one is not a real use. */
 const MAX_HEADER_VALUE = 1000;
@@ -51,14 +65,28 @@ function headersOf(dump: HttpDump | null): Record<string, string> {
   if (!dump) return {};
   const out = new Map<string, string>();
   for (const [name, value] of Object.entries(dump.headers)) {
-    out.set(name.toLowerCase().slice(0, MAX_HEADER_NAME), value.slice(0, MAX_HEADER_VALUE));
+    // `slice` counts UTF-16 units and can cut an emoji in half; `storable` repairs the half (it is the poison pill).
+    out.set(storable(name.toLowerCase().slice(0, MAX_HEADER_NAME)), storable(value.slice(0, MAX_HEADER_VALUE)));
   }
   return Object.fromEntries(out);
 }
 
+/** `application/json; charset=utf-8` -> `application/json`. */
+const mediaType = (contentType: string | undefined): string => (contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+
+const isJsonType = (type: string): boolean =>
+  type === 'application/json' || type === 'text/json' || type === 'application/x-ndjson' || type.endsWith('+json');
+
 function bodyOf(dump: HttpDump | null, headers: Record<string, string>): string {
   if (!dump) return '';
-  return /^multipart\//i.test(headers['content-type'] ?? '') ? MULTIPART_PLACEHOLDER : dump.body;
+  if (dump.unredactable) return UNREDACTABLE_BODY_PLACEHOLDER;
+  if (dump.body === '') return '';
+  const type = mediaType(headers['content-type']);
+  if (type.startsWith('multipart/')) return MULTIPART_PLACEHOLDER;
+  if (isJsonType(type) || type === 'application/x-www-form-urlencoded') return dump.body;
+  // No Content-Type: a body that opens like JSON was read as JSON, anything else is not trusted.
+  if (type === '' && /^\s*[{[]/.test(dump.body)) return dump.body;
+  return OPAQUE_BODY_PLACEHOLDER;
 }
 
 /**
@@ -73,20 +101,21 @@ export function buildSearchRow(row: CapturedRow, authHeaderName: string | null):
   const resHeaders = headersOf(response);
   return {
     ts: row.ts_iso,
-    apiid: row.apiid,
-    method: row.method ?? '',
-    // The pump's own `path` column, not a dump: the parser never sees it, so a JWT in a path segment is hidden here.
-    path: (row.path ?? '').replace(JWT_VALUE, REDACTED),
+    apiid: storable(row.apiid),
+    method: storable(row.method ?? ''),
+    // The pump's own `path` column, not a dump: the parser never sees it, so a JWT or a `token=` parameter in it is hidden here.
+    path: redactPairs(storable(row.path ?? '')),
     status: num(row.responsecode),
     latencyMs: num(row.latency_total),
-    keyAlias: row.alias ?? '',
-    ip: row.ipaddress ?? '',
+    keyAlias: storable(row.alias ?? ''),
+    ip: storable(row.ipaddress ?? ''),
     reqHeaders,
     resHeaders,
-    reqBody: bodyOf(request, reqHeaders),
-    resBody: bodyOf(response, resHeaders),
+    reqBody: storable(bodyOf(request, reqHeaders)),
+    resBody: storable(bodyOf(response, resHeaders)),
     reqTruncated: request?.truncated ?? false,
     resTruncated: response?.truncated ?? false,
+    unredactable: request?.unredactable === true || response?.unredactable === true,
     dedupeKey: row.dedupe_key,
   };
 }

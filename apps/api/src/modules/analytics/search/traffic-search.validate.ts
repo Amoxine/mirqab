@@ -1,3 +1,4 @@
+import { isStorable } from '../text-safety';
 import {
   SEARCH_LIMITS,
   SEARCH_RANGES,
@@ -45,6 +46,8 @@ function str(o: Record<string, unknown>, key: string, label = key): string {
   if (v.length > SEARCH_LIMITS.maxValueLength) {
     return fail(`${label} is longer than ${String(SEARCH_LIMITS.maxValueLength)} characters.`);
   }
+  // A NUL or an unpaired surrogate is valid JSON and invalid in Postgres: left alone it is a 500, here it is a 400.
+  if (!isStorable(v)) return fail(`${label} has a character that cannot be searched for.`);
   return v;
 }
 

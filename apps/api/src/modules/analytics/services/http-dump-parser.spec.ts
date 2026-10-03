@@ -1,5 +1,12 @@
-import { MAX_BODY_CHARS, parseHttpDump } from './http-dump-parser';
-import { TRUNCATED_DUMP_MARKER } from './pump-query.builder';
+import { isStorable } from '../text-safety';
+import {
+  MAX_BODY_CHARS,
+  PARSER_REDACTION_VERSION,
+  parseHttpDump,
+  parserRulesFingerprint,
+  redactPairs,
+} from './http-dump-parser';
+import { TRUNCATED_DUMP_MARKER, UNREDACTABLE_DUMP_PLACEHOLDER } from './pump-query.builder';
 
 const b64 = (text: string): string => Buffer.from(text, 'utf8').toString('base64');
 
@@ -355,5 +362,58 @@ describe('parseHttpDump', () => {
       expect(() => parseHttpDump(input, { authHeaderName: 'X-Key' })).not.toThrow();
       expect(JSON.stringify(parseHttpDump(input))).not.toContain('token=abc');
     });
+  });
+});
+
+describe('parseHttpDump: text Postgres will accept', () => {
+  const EMOJI = '😀';
+
+  it('a body cut at the bound in the middle of an emoji is still well formed', () => {
+    const parsed = parseHttpDump(b64(`HTTP/1.1 200 OK\r\n\r\n${'a'.repeat(MAX_BODY_CHARS - 1)}${EMOJI}`));
+    expect(parsed?.body).toHaveLength(MAX_BODY_CHARS);
+    expect(parsed?.truncated).toBe(true);
+    expect(isStorable(parsed?.body ?? '')).toBe(true);
+  });
+
+  it('drops NUL from the dump before anything reads it, so a NUL cannot split a secret name from its pattern', () => {
+    const parsed = parseHttpDump(b64('GET /x?pass\u0000word=PLANTED-NUL HTTP/1.1\r\nX-A: a\u0000b\r\n\r\nbo\u0000dy'));
+    expect(JSON.stringify(parsed)).not.toContain('PLANTED-NUL');
+    expect(JSON.stringify(parsed)).not.toContain('\\u0000');
+    expect(parsed?.headers['X-A']).toBe('ab');
+    expect(parsed?.body).toBe('body');
+  });
+
+  it('flags the trigger’s placeholder as unredactable, and nothing else', () => {
+    expect(parseHttpDump(b64(UNREDACTABLE_DUMP_PLACEHOLDER))).toMatchObject({ unredactable: true, headers: {}, body: '' });
+    expect(parseHttpDump(pgB64(UNREDACTABLE_DUMP_PLACEHOLDER))?.unredactable).toBe(true);
+    expect(parseHttpDump(b64('HTTP/1.1 200 OK\r\n\r\nfine'))?.unredactable).toBeUndefined();
+    expect(parseHttpDump(b64(`HTTP/1.1 200 OK\r\n\r\n${UNREDACTABLE_DUMP_PLACEHOLDER}`))?.unredactable).toBeUndefined();
+  });
+});
+
+describe('redactPairs', () => {
+  it('hides a secret parameter in a path or query string, and a JWT wherever it sits', () => {
+    expect(redactPairs('/orders?access_token=PLANTED-A&page=2')).toBe('/orders?access_token=[REDACTED]&page=2');
+    expect(redactPairs('/a;sessionid=PLANTED-B')).toBe('/a;sessionid=[REDACTED]');
+    expect(redactPairs('/verify/eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJQTEFOVEVEIn0.c2lnbmF0dXJl/done')).toBe('/verify/[REDACTED]/done');
+    expect(redactPairs('/plain/path')).toBe('/plain/path');
+  });
+});
+
+describe('the parser’s rules are versioned', () => {
+  it('has a fingerprint of its rule sources, pinned here: editing a rule changes it and fails this test on purpose', () => {
+    // When this fails after an intended rule change: update the expected value AND bump PARSER_REDACTION_VERSION
+    // if the change is not visible in a pattern (logic only). The new value rebuilds the search projection,
+    // so rows stored under the old rules stop being searchable.
+    expect(parserRulesFingerprint()).toBe('9a947aaf1841e8a5');
+  });
+
+  it('depends on the explicit version too, for a change that no regular expression shows', () => {
+    expect(parserRulesFingerprint(PARSER_REDACTION_VERSION + 1)).not.toBe(parserRulesFingerprint());
+  });
+
+  it('is the same on every call', () => {
+    expect(parserRulesFingerprint()).toBe(parserRulesFingerprint());
+    expect(parserRulesFingerprint()).toMatch(/^[0-9a-f]{16}$/);
   });
 });

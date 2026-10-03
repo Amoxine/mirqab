@@ -7,7 +7,7 @@ import type { RedisService } from '../../../common/redis/redis.service';
 import { AnalyticsRetentionScheduler } from './analytics-retention.scheduler';
 import { AnalyticsService } from './analytics.service';
 import type { PumpHealthService } from './pump-health.service';
-import { MAX_REDACTED_DUMP_CHARS, TRUNCATED_DUMP_MARKER, UNREDACTABLE_DUMP_PLACEHOLDER } from './pump-query.builder';
+import { analyticsRedactionDdl, MAX_REDACTED_DUMP_CHARS, TRUNCATED_DUMP_MARKER, UNREDACTABLE_DUMP_PLACEHOLDER } from './pump-query.builder';
 
 /**
  * The `tyk_analytics` redaction trigger and index DDL against a REAL Postgres (AC-LOG02.6, AC-LOG02.7):
@@ -129,7 +129,7 @@ describe('tyk_analytics redaction trigger on a real Postgres', () => {
     expect(decodeStrict(after.rawrequest)).not.toContain('real-token'); // the trigger is live
     const indexes = await prisma.$queryRaw<{ n: bigint }[]>`
       SELECT COUNT(*)::bigint AS n FROM pg_indexes WHERE tablename = 'tyk_analytics' AND indexname LIKE 'og_tyk_analytics_%'`;
-    expect(Number(indexes[0].n)).toBe(4);
+    expect(Number(indexes[0].n)).toBe(5); // the three leading-column ones, the captured-rows one, and the captured-rows timestamp one the search indexer reads
   });
 
   it('installs both DDL statements through onModuleInit without a warning', async () => {
@@ -338,6 +338,104 @@ describe('tyk_analytics redaction trigger on a real Postgres', () => {
     expect(rows[3]).toEqual({ rawrequest: null, rawresponse: null });
   });
 
+  describe('idempotence and the trigger DDL', () => {
+    const REDACT = (column: string) => `og_redact_http_dump(${column}, 'password|token')`;
+
+    /** A dump whose redaction shrinks it by a few characters, sized so that the cap falls just inside or outside the result. */
+    const dumpOf = (length: number): string => {
+      const head = 'POST /x HTTP/1.1\r\nContent-Type: application/json\r\n\r\n';
+      const tail = '"password":"abcdefghijkl"}'; // 12 characters become the 10 of [REDACTED]
+      return head + 'a'.repeat(Math.max(0, length - head.length - tail.length)) + tail;
+    };
+
+    it.each([
+      MAX_REDACTED_DUMP_CHARS - 40,
+      MAX_REDACTED_DUMP_CHARS - 2,
+      MAX_REDACTED_DUMP_CHARS,
+      MAX_REDACTED_DUMP_CHARS + 1,
+      MAX_REDACTED_DUMP_CHARS + 2,
+      MAX_REDACTED_DUMP_CHARS + 60,
+      MAX_REDACTED_DUMP_CHARS + 5000,
+    ])('redacting a stored dump of %i characters again is a no-op, at the cap too', async (length) => {
+      const [row] = await insert([{ req: b64(dumpOf(length)), res: '' }]);
+      const id = apiIds[apiIds.length - 1];
+      const again = await prisma.$queryRawUnsafe<{ same: boolean; text: string }[]>(
+        `SELECT rawrequest = ${REDACT('rawrequest')} AS same, convert_from(decode(${REDACT('rawrequest')}, 'base64'), 'UTF8') AS text
+           FROM public.tyk_analytics WHERE apiid = $1`,
+        id,
+      );
+      expect(decodeStrict(row.rawrequest)).not.toContain('abcdefghijkl');
+      expect(again[0]?.same).toBe(true);
+      // The marker is there once, at the end, and nowhere inside.
+      const text = again[0]?.text ?? '';
+      expect(text.split(TRUNCATED_DUMP_MARKER).length - 1).toBe(length > MAX_REDACTED_DUMP_CHARS ? 1 : 0);
+      if (length > MAX_REDACTED_DUMP_CHARS) expect(text.endsWith(`\n${TRUNCATED_DUMP_MARKER}`)).toBe(true);
+      // What was kept never exceeds the cap plus the marker line.
+      expect(text.length).toBeLessThanOrEqual(MAX_REDACTED_DUMP_CHARS + 1 + TRUNCATED_DUMP_MARKER.length);
+    });
+
+    it('a re-install with an intact trigger issues no trigger DDL at all: the trigger keeps its identity', async () => {
+      const oid = async (): Promise<string> =>
+        (await prisma.$queryRaw<{ oid: string }[]>`SELECT oid::text AS oid FROM pg_trigger WHERE tgname = 'og_redact_tyk_analytics_trg' AND NOT tgisinternal`)[0]?.oid ?? '';
+      const before = await oid();
+      await service.onModuleInit();
+      await scheduler.purgeExpiredAnalytics();
+      expect(await oid()).toBe(before); // DROP + CREATE would have made a new one
+    });
+
+    it('a trigger that is not BEFORE INSERT FOR EACH ROW on this function is replaced, and the rows it let through are redacted', async () => {
+      await prisma.$executeRawUnsafe('DROP TRIGGER og_redact_tyk_analytics_trg ON public.tyk_analytics');
+      // An AFTER trigger on the same function exists and is enabled, yet cannot redact what it is shown: the wrong kind.
+      await prisma.$executeRawUnsafe(
+        'CREATE TRIGGER og_redact_tyk_analytics_trg AFTER INSERT ON public.tyk_analytics FOR EACH ROW EXECUTE FUNCTION og_redact_tyk_analytics()',
+      );
+      const [leaked] = await insert([{ req: b64(SECRET_DUMP), res: '' }]);
+      const leakedId = apiIds[apiIds.length - 1];
+      expect(decodeStrict(leaked.rawrequest)).toContain('real-token');
+
+      await service.onModuleInit();
+
+      const kind = await prisma.$queryRaw<{ tgtype: number }[]>`SELECT tgtype::int AS tgtype FROM pg_trigger WHERE tgname = 'og_redact_tyk_analytics_trg' AND NOT tgisinternal`;
+      expect(kind).toEqual([{ tgtype: 7 }]);
+      const [healed] = await prisma.$queryRaw<Row[]>`SELECT rawrequest, rawresponse FROM public.tyk_analytics WHERE apiid = ${leakedId}`;
+      expect(decodeStrict(healed.rawrequest)).not.toContain('real-token');
+    });
+
+    it('gives up on a table lock the pump holds after 5 s instead of stalling it, and succeeds once the lock is gone', async () => {
+      await prisma.$executeRawUnsafe('ALTER TABLE public.tyk_analytics DISABLE TRIGGER og_redact_tyk_analytics_trg'); // so the DDL must DROP + CREATE it
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let locked: () => void = () => undefined;
+      const lockTaken = new Promise<void>((resolve) => {
+        locked = resolve;
+      });
+      // A pump insert in flight: ROW EXCLUSIVE conflicts with the ACCESS EXCLUSIVE that DROP TRIGGER wants.
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRawUnsafe('LOCK TABLE public.tyk_analytics IN ROW EXCLUSIVE MODE');
+          locked();
+          await held;
+        },
+        { timeout: 60_000 },
+      );
+      await lockTaken;
+
+      const started = Date.now();
+      await expect(prisma.$queryRawUnsafe(analyticsRedactionDdl(['password', 'token']))).rejects.toThrow(/lock timeout|55P03/i);
+      const waited = Date.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(4_500);
+      expect(waited).toBeLessThan(15_000);
+
+      release();
+      await holder;
+      await expect(prisma.$queryRawUnsafe(analyticsRedactionDdl(['password', 'token']))).resolves.toBeDefined();
+      const enabled = await prisma.$queryRaw<{ tgenabled: string }[]>`SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'og_redact_tyk_analytics_trg' AND NOT tgisinternal`;
+      expect(enabled).toEqual([{ tgenabled: 'O' }]);
+    });
+  });
+
   it('has the partial (apiid, timestamp DESC) index on captured rows, and a captured-rows lookup uses it', async () => {
     const defs = await prisma.$queryRaw<{ indexdef: string }[]>`
       SELECT indexdef FROM pg_indexes WHERE tablename = 'tyk_analytics' AND indexname = 'og_tyk_analytics_captured_apiid_ts'`;
@@ -347,7 +445,10 @@ describe('tyk_analytics redaction trigger on a real Postgres', () => {
     );
 
     // The traffic inspector's query shape (AC-LOG02.4's "captured"); seqscan off so the tiny fixture
-    // table cannot hide an unusable predicate behind a cheaper full scan.
+    // table cannot hide an unusable predicate behind a cheaper full scan. Analyzed first: there are now two partial indexes
+    // on the captured rows (this one, and the timestamp-only one the search indexer reads), and without statistics the
+    // planner has no reason to prefer the one that also matches the apiid.
+    await prisma.$executeRawUnsafe('ANALYZE public.tyk_analytics');
     const plan = await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
       return tx.$queryRaw<{ 'QUERY PLAN': string }[]>`

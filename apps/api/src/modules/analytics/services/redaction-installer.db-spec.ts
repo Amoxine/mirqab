@@ -3,7 +3,8 @@ import { Logger } from '@nestjs/common';
 import { prisma } from '@open-gateway/database';
 import { TRAFFIC_SEARCH_DDL, partitionDdl } from '../search/traffic-search.ddl';
 import { redactFieldsFrom } from './pump-query.builder';
-import { ensureRedaction, redactionTag } from './redaction-installer';
+import { readState, TAG_PENDING } from '../search/traffic-search.state';
+import { BACKFILL_BATCH_ROWS, ensureRedaction, redactionTag } from './redaction-installer';
 
 /**
  * Redaction upgrades against a REAL Postgres: a first install records the rules' version, a changed
@@ -126,7 +127,57 @@ describe('redaction installer on a real Postgres', () => {
     expect(after).toContain('visible');
     expect(await tag()).toBe(TAG);
     expect(Number((await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM public.og_traffic_search`)[0]?.n)).toBe(0);
-    expect(Number((await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM public.og_traffic_search_state`)[0]?.n)).toBe(0);
+    // The state is kept, not deleted: a reset raises the generation (a scan that began before it can no longer write),
+    // clears what is covered, and starts the rebuild at the retention floor, so the WHOLE window is rebuilt and not the
+    // first-run backfill. The installer's own reset is marked, so the indexer adopts it instead of resetting again.
+    const state = await readState(prisma);
+    expect(state?.generation).toBe(1);
+    expect(state?.indexedFrom).toBeNull();
+    expect(state?.redactionTag).toBe(TAG_PENDING);
+    const floorAge = Date.now() - (state?.scannedUntil.getTime() ?? 0);
+    expect(floorAge).toBeGreaterThan(30 * 86_400_000 - 60_000);
+    expect(floorAge).toBeLessThan(30 * 86_400_000 + 60_000);
+  });
+
+  it('rewrites only the rows the function changes: a row that was already clean keeps its version, and a long window is many short statements', async () => {
+    await makeTable();
+    await ensureRedaction(prisma, FIELDS, 30, NOW);
+    // Through the live trigger (unlike `insertRaw`, which bypasses it): already redacted on the way in.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.tyk_analytics ("timestamp", apiid, apikey, rawrequest, rawresponse) VALUES ($1::timestamptz, 'a1', 'clean-already', $2, '')`,
+      new Date(NOW.getTime() - 86_400_000).toISOString(),
+      leaky,
+    );
+    await prisma.$executeRawUnsafe(`COMMENT ON FUNCTION public.og_redact_http_dump(text, text) IS 'ddl:old'`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.tyk_analytics DISABLE TRIGGER USER`);
+    // BACKFILL_BATCH_ROWS * 2 + 25 leaky rows inside one 10-minute window: more than two batches' worth.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO public.tyk_analytics ("timestamp", apiid, apikey, rawrequest, rawresponse)
+       SELECT $1::timestamptz + (g || ' seconds')::interval, 'a1', 'leaky' || g, $2, '' FROM generate_series(1, ${String(BACKFILL_BATCH_ROWS * 2 + 25)}) g`,
+      new Date(NOW.getTime() - 3 * 86_400_000).toISOString(),
+      leaky,
+    );
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.tyk_analytics ENABLE ALWAYS TRIGGER og_redact_tyk_analytics_trg`);
+    const versionOf = async (key: string): Promise<string> => (await prisma.$queryRaw<{ x: string }[]>`SELECT xmin::text AS x FROM public.tyk_analytics WHERE apikey = ${key}`)[0]?.x ?? '';
+    const cleanBefore = await versionOf('clean-already');
+
+    const install = await ensureRedaction(prisma, FIELDS, 30, NOW);
+    const result = await install.done;
+
+    expect(result.rows).toBe(BACKFILL_BATCH_ROWS * 2 + 25); // only the leaky ones were rewritten
+    expect(await versionOf('clean-already')).toBe(cleanBefore); // not touched: an UPDATE that writes the same value still makes a new row version
+    expect(await stored()).not.toContain('PLANTED-PW');
+  });
+
+  it('a second pass over what the backfill wrote changes nothing', async () => {
+    await makeTable();
+    await ensureRedaction(prisma, FIELDS, 30, NOW);
+    await prisma.$executeRawUnsafe(`COMMENT ON FUNCTION public.og_redact_http_dump(text, text) IS 'ddl:old'`);
+    await insertRaw(1, 'k1');
+    await (await ensureRedaction(prisma, FIELDS, 30, NOW)).done;
+    await prisma.$executeRawUnsafe(`COMMENT ON FUNCTION public.og_redact_http_dump(text, text) IS 'ddl:old'`);
+    const again = await (await ensureRedaction(prisma, FIELDS, 30, NOW)).done;
+    expect(again.rows).toBe(0);
   });
 
   it('an install from before versions existed (no tag) counts as changed', async () => {

@@ -1,5 +1,5 @@
 import { trafficSearchQuery } from './traffic-search.query.builder';
-import { FULLTEXT_ANY, FULLTEXT_REQ, FULLTEXT_RES } from './traffic-search.sql';
+import { FULLTEXT_REQ, FULLTEXT_RES } from './traffic-search.sql';
 import { validateSearchRequest } from './traffic-search.validate';
 
 const NOW = new Date('2026-09-29T12:00:00.000Z');
@@ -70,14 +70,15 @@ describe('trafficSearchQuery', () => {
   });
 
   describe('body word search', () => {
-    it('emits the exact expression the GIN index is built on, so the planner can use it', () => {
+    it('matches against the stored vector the GIN index is built on, and never computes one per row for an either-side search', () => {
       const { sql } = build({ clauses: [{ kind: 'body', side: 'any', value: 'insufficient funds' }] });
-      expect(sql).toContain(`${FULLTEXT_ANY} @@ phraseto_tsquery('simple', $3)`);
+      expect(sql).toContain("fts @@ phraseto_tsquery('simple', $3)");
+      expect(sql).not.toContain('to_tsvector');
     });
 
     it('a side-specific search keeps the index probe and adds an exact recheck on that side', () => {
       const res = build({ clauses: [{ kind: 'body', side: 'res', value: 'timeout' }] }).sql;
-      expect(res).toContain(`(${FULLTEXT_ANY} @@ phraseto_tsquery('simple', $3) AND ${FULLTEXT_RES} @@ phraseto_tsquery('simple', $4))`);
+      expect(res).toContain(`(fts @@ phraseto_tsquery('simple', $3) AND ${FULLTEXT_RES} @@ phraseto_tsquery('simple', $4))`);
       const req = build({ clauses: [{ kind: 'body', side: 'req', value: 'timeout' }] }).sql;
       expect(req).toContain(`AND ${FULLTEXT_REQ} @@`);
     });
@@ -114,6 +115,18 @@ describe('trafficSearchQuery', () => {
   it('a negated clause keeps rows where the column is NULL', () => {
     const { sql } = build({ clauses: [{ kind: 'header', neg: true, side: 'res', name: 'x-cache' }] });
     expect(sql).toContain('NOT COALESCE((res_headers @? $3::jsonpath), false)');
+  });
+
+  it('a negated HEADER clause skips a capture that could not be read, whose headers are missing rather than absent', () => {
+    for (const header of [{ kind: 'header', neg: true, side: 'req', name: 'authorization' }, { kind: 'header', neg: true, side: 'res', name: 'x-a', value: 'b' }]) {
+      expect(build({ clauses: [header] }).sql).toMatch(/\(NOT COALESCE\(\(\w+ @[?>] \$3::json\w+\), false\) AND NOT unredactable\)/);
+    }
+    // Only headers: a negated body, status or path clause says nothing about what was not read.
+    for (const other of [{ kind: 'body', neg: true, side: 'any', value: 'timeout' }, { kind: 'status', neg: true, match: { type: 'cmp', op: '>=', value: 500 } }, { kind: 'route', neg: true, value: '/' }]) {
+      expect(build({ clauses: [other] }).sql).not.toContain('unredactable');
+    }
+    // And a positive header clause needs no help: the rows it must not match have no headers at all.
+    expect(build({ clauses: [{ kind: 'header', side: 'req', name: 'authorization' }] }).sql).not.toContain('unredactable');
   });
 
   it('api: resolves only within the tenant, and an unknown name matches nothing', () => {

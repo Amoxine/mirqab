@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { analyticsWindow } from '../services/pump-query.builder';
 import { escapeLike } from '../services/traffic-query.builder';
-import { FULLTEXT_ANY, FULLTEXT_REQ, FULLTEXT_RES } from './traffic-search.sql';
+import { FULLTEXT_COLUMN, FULLTEXT_REQ, FULLTEXT_RES } from './traffic-search.sql';
 import type { SearchClause, StatusMatch, TrafficSearchRequest } from './traffic-search.types';
 
 /**
@@ -61,15 +61,21 @@ function predicate(clause: SearchClause, resolveApi: (value: string) => string[]
       return Prisma.sql`key_alias = ${clause.value}`;
     case 'header': {
       const column = Prisma.raw(clause.side === 'req' ? 'req_headers' : 'res_headers');
-      // `@?` and `@>` are the operators a jsonb_path_ops index serves; `?` (exists) is not.
+      // A header WITH a value is `@>`, which the `jsonb_path_ops` index serves (it hashes path + value): 6 ms for one
+      // request id in 120k rows over 30 days. A header with no value is "does this key exist", which that index CANNOT
+      // narrow, because it stores no bare keys: the planner reads the window's rows and filters (measured 120-350 ms for a
+      // header no row has, at 120k rows; it scales with the rows the tenant and window leave, not with the header). That is
+      // accepted rather than fixed: a `text[]` of header names with its own GIN index would serve it, at the cost of a
+      // column and an index written for every captured request, for a clause that is rarely the only filter. Add it if
+      // header-exists searches over a large window become common.
       return clause.value === undefined
         ? Prisma.sql`${column} @? ${`$."${clause.name}"`}::jsonpath`
         : Prisma.sql`${column} @> ${JSON.stringify({ [clause.name]: clause.value })}::jsonb`;
     }
     case 'body': {
-      // The combined-document expression is what the GIN index serves; a side-specific search adds an
+      // The stored vector of both bodies is what the GIN index serves; a side-specific search adds an
       // exact recheck on that side so `req:` never matches a word that only the response contains.
-      const any = Prisma.sql`${Prisma.raw(FULLTEXT_ANY)} @@ phraseto_tsquery('simple', ${clause.value})`;
+      const any = Prisma.sql`${Prisma.raw(FULLTEXT_COLUMN)} @@ phraseto_tsquery('simple', ${clause.value})`;
       if (clause.side === 'any') return any;
       const side = Prisma.raw(clause.side === 'req' ? FULLTEXT_REQ : FULLTEXT_RES);
       return Prisma.sql`(${any} AND ${side} @@ phraseto_tsquery('simple', ${clause.value}))`;
@@ -94,7 +100,11 @@ export function trafficSearchQuery({ request, tykApiIds, resolveApi, now }: Traf
   for (const clause of request.clauses) {
     const sql = predicate(clause, resolveApi);
     // COALESCE: a NULL column (no JSON body, say) means "did not match", so a negated clause keeps the row.
-    where.push(clause.neg ? Prisma.sql`NOT COALESCE((${sql}), false)` : sql);
+    // Except a header clause on a capture that could not be read (`unredactable`): it has no headers because
+    // none were read, not because none were sent, so "has no Authorization header" must not claim it.
+    if (!clause.neg) where.push(sql);
+    else if (clause.kind === 'header') where.push(Prisma.sql`(NOT COALESCE((${sql}), false) AND NOT unredactable)`);
+    else where.push(Prisma.sql`NOT COALESCE((${sql}), false)`);
   }
   if (request.cursor) {
     // The cursor stays text: a JS Date would round its microseconds to milliseconds and skip or repeat rows at the page edge.

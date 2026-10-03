@@ -801,6 +801,27 @@ pnpm test:watch
 pnpm test -- --coverage
 ```
 
+**Database specs.** `apps/api` also has `*.db-spec.ts` tests that need a real Postgres (the search
+partitions, the redaction trigger, dedupe, tenant isolation, concurrent writers, the statement timeout).
+`pnpm test` never runs them: the name ends in `-spec.ts`, not `.spec.ts`. They run with their own script and
+refuse to start unless `DATABASE_URL` and `OG_THROWAWAY_DATABASE_URL` are set to the SAME throwaway database
+(never the stack's `:33002`); with an unset `DATABASE_URL` Prisma would otherwise fall back to the live stack
+database, and a spec once dropped `tyk_analytics` there:
+
+```bash
+docker run --rm -d --name og-pg -e POSTGRES_PASSWORD=review -p 127.0.0.1:35434:5432 postgres:16-alpine
+export DATABASE_URL='postgresql://postgres:review@127.0.0.1:35434/postgres?schema=public'
+export OG_THROWAWAY_DATABASE_URL="$DATABASE_URL"
+pnpm db:migrate                              # the specs that use tenants, audit and spec sources need the app schema
+pnpm --filter @open-gateway/api test:db      # in band, 120 s default per test; a spec's own jest.setTimeout wins
+docker rm -f og-pg
+```
+
+CI runs the same script against its Postgres service in the `DB specs (real Postgres)` step. If one fails
+with "Exceeded timeout" on a heavily loaded machine, look at the cascade before the cause: a timed-out test
+leaves work running on the shared tables, and the tests after it fail for that reason. Do not add retries to
+these specs: several exist to catch races, and a retry would hide the bug.
+
 ### Backend Testing (NestJS + Jest)
 
 ```typescript
