@@ -41,6 +41,8 @@ interface Script {
   refuse: Map<string, Error>;
   /** Rows an `INSERT INTO ...state` reports as changed: 0 = a reset got in between. */
   commitChanges: number;
+  /** The API ids the search table already holds rows for (what `EXISTS (... apiid = ANY(...))` looks up). */
+  indexedApiIds: string[];
 }
 
 const tag = projectionTag('ddl:abc');
@@ -84,6 +86,7 @@ function setup(over: Partial<Script> = {}) {
     pages: [[]],
     refuse: new Map(),
     commitChanges: 1,
+    indexedApiIds: [],
     ...over,
   };
   const calls = {
@@ -117,6 +120,10 @@ function setup(over: Partial<Script> = {}) {
       return Promise.resolve(page);
     }
     if (text.includes('min(ts)')) return Promise.resolve([{ ts: null }]);
+    if (text.includes('EXISTS') && text.includes('apiid = ANY')) {
+      const asked = sqlValues[0] as string[];
+      return Promise.resolve([{ present: asked.some((id) => script.indexedApiIds.includes(id)) }]);
+    }
     return Promise.reject(new Error(`unscripted query: ${text}`));
   };
 
@@ -524,6 +531,51 @@ describe('the indexer: rows built under old rules', () => {
     const removed = setup({ state: stateRow({ auth_headers: { 'tyk-a': 'X-A', 'tyk-gone': 'X-G' } }), apis: [{ tykApiId: 'tyk-a', config: { authHeaderName: 'X-A' } }] });
     await removed.indexer.tick(NOW);
     expect(removed.calls.resets).toBe(0);
+  });
+
+  describe('an API the recorded auth headers do not know yet', () => {
+    const newApi = { tykApiId: 'tyk-b', config: { authHeaderName: 'X-Api-Token' } };
+    const known = { 'tyk-a': 'X-Same' };
+    const apis = [{ tykApiId: 'tyk-a', config: { authHeaderName: 'X-Same' } }, newApi];
+
+    it('is rebuilt for when its custom header was unknown while rows for it were indexed: those rows hold the header value as it was', async () => {
+      const { indexer, calls } = setup({ state: stateRow({ auth_headers: known }), apis, indexedApiIds: ['tyk-b'] });
+      await indexer.tick(NOW);
+      expect(calls.resets).toBe(1);
+      expect(JSON.parse(calls.commits[0]?.[4] as string)).toEqual({ 'tyk-a': 'X-Same', 'tyk-b': 'X-Api-Token' });
+    });
+
+    it('is not rebuilt for when nothing was indexed for it: there is no old row to fix', async () => {
+      const { indexer, calls } = setup({ state: stateRow({ auth_headers: known }), apis, indexedApiIds: ['tyk-a'] });
+      await indexer.tick(NOW);
+      expect(calls.resets).toBe(0);
+      expect(JSON.parse(calls.commits[0]?.[4] as string)).toEqual({ 'tyk-a': 'X-Same', 'tyk-b': 'X-Api-Token' });
+    });
+
+    it('is not rebuilt for when it has no custom header: the default one was always redacted', async () => {
+      const plain = { tykApiId: 'tyk-b', config: {} };
+      const { indexer, calls } = setup({ state: stateRow({ auth_headers: known }), apis: [apis[0], plain], indexedApiIds: ['tyk-b'] });
+      await indexer.tick(NOW);
+      expect(calls.resets).toBe(0);
+    });
+
+    it('is looked up once, in one statement, however many such APIs there are', async () => {
+      const { indexer, calls } = setup({
+        state: stateRow({ auth_headers: known }),
+        apis: [...apis, { tykApiId: 'tyk-c', config: { authHeaderName: 'X-Other' } }],
+      });
+      await indexer.tick(NOW);
+      expect(calls.queries.filter((q) => q.includes('apiid = ANY'))).toHaveLength(1);
+    });
+
+    it('is not looked up at all on a first run, or when every API is already known', async () => {
+      const first = setup({ state: null, apis });
+      await first.indexer.tick(NOW);
+      expect(first.calls.queries.some((q) => q.includes('apiid = ANY'))).toBe(false);
+      const all = setup({ state: stateRow({ auth_headers: { 'tyk-a': 'X-Same', 'tyk-b': 'X-Api-Token' } }), apis });
+      await all.indexer.tick(NOW);
+      expect(all.calls.queries.some((q) => q.includes('apiid = ANY'))).toBe(false);
+    });
   });
 
   it('records the auth headers it indexed under, so the next change is seen', async () => {

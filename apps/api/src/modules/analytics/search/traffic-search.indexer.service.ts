@@ -20,6 +20,7 @@ import {
   readState,
   resetProjection,
   TAG_PENDING,
+  unseenCustomAuthHeaders,
   type IndexState,
 } from './traffic-search.state';
 import { TrafficSearchStoreService } from './traffic-search.store.service';
@@ -208,11 +209,16 @@ export class TrafficSearchIndexerService {
       const changed = changedAuthHeaders(state.authHeaders, authHeaders);
       // `pending-rebuild` is the installer's own reset: the table is already empty, nothing older is left to clear.
       const stale = state.redactionTag !== tag && state.redactionTag !== TAG_PENDING;
-      if (stale || changed.length > 0) {
+      // An API whose custom header was not known while its requests were indexed: those rows kept the header's value.
+      const unseen = stale || changed.length > 0 ? [] : unseenCustomAuthHeaders(state.authHeaders, authHeaders);
+      const exposed = unseen.length > 0 && (await this.hasIndexedRows(unseen));
+      if (stale || changed.length > 0 || exposed) {
         this.logger.warn(
           stale
             ? 'The rules the search table was built under changed: rebuilding it from the retained captures'
-            : `The auth header of ${String(changed.length)} API(s) changed: rebuilding the search table from the retained captures`,
+            : changed.length > 0
+              ? `The auth header of ${String(changed.length)} API(s) changed: rebuilding the search table from the retained captures`
+              : `${String(unseen.length)} API(s) with their own auth header already had requests indexed before it was known: rebuilding the search table from the retained captures`,
         );
         await resetProjection(this.prisma, this.store.retentionDays(), tag, authHeaders);
         state = await readState(this.prisma);
@@ -373,6 +379,13 @@ export class TrafficSearchIndexerService {
     }
     this.paused = !present;
     return present;
+  }
+
+  /** Whether the search table already holds a row for any of these APIs: one indexed lookup per API, stopping at the first hit. */
+  private async hasIndexedRows(apiIds: string[]): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<{ present: boolean }[]>`
+      SELECT EXISTS (SELECT 1 FROM public.og_traffic_search WHERE apiid = ANY(${apiIds}::text[])) AS present`;
+    return rows[0]?.present;
   }
 
   private async tableExists(): Promise<boolean> {

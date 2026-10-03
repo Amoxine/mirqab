@@ -485,5 +485,31 @@ describe('traffic search indexer on a real Postgres', () => {
       const from = await indexer.indexedFrom();
       expect(from && from.getTime() <= new Date('2026-09-19T00:00:00Z').getTime()).toBe(true);
     });
+
+    it('rebuilds when an API with its own auth header was indexed before that header was known, so the value leaves the table', async () => {
+      const partner = 'PLANTED-PARTNER-HDR';
+      await pumpRow('2026-09-29T10:30:00Z', 'partner-1', `GET /partner HTTP/1.1\r\nX-Partner-Ref: ${partner}\r\n\r\n`, 'HTTP/1.1 200 OK\r\n\r\nok', 'tyk-partner', '/partner');
+      // No definition for this API yet, so X-Partner-Ref is an ordinary header and is stored as it was sent.
+      await indexer.scan(new Date('2026-09-29T10:00:00Z'), NOW, false);
+      const dump = async () =>
+        (await prisma.$queryRaw<{ j: string }[]>`SELECT row_to_json(t)::text AS j FROM public.og_traffic_search t WHERE apiid = 'tyk-partner'`)
+          .map((r) => r.j)
+          .join('\n');
+      expect(await dump()).toContain(partner); // the exposure the rebuild closes
+
+      apis.push({ tykApiId: 'tyk-partner', config: { authHeaderName: 'X-Partner-Ref' } });
+      try {
+        const before = await readState(prisma);
+        await indexer.tick(NOW); // the API is new to the recorded headers and already has rows: the table is rebuilt
+        const after = await readState(prisma);
+        expect(after?.generation).toBe((before?.generation ?? 0) + 1);
+        expect(after?.authHeaders).toMatchObject({ 'tyk-partner': 'X-Partner-Ref' });
+        // The row is back (rebuilt from the raw capture) and still says the header was sent, without its value.
+        expect(await dump()).toContain('x-partner-ref');
+        expect(await dump()).not.toContain(partner);
+      } finally {
+        apis.pop();
+      }
+    });
   });
 });

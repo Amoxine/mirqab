@@ -32,6 +32,19 @@ export function changedAuthHeaders(known: Record<string, string | null>, current
   return changed;
 }
 
+/**
+ * The APIs with a custom auth header that the recorded headers do not list at all. `changedAuthHeaders` leaves them alone
+ * because a new API has no old rows, but one can: requests are indexed for an API id before its definition (and so its header
+ * name) is known to the dashboard, and a deleted and re-created API is forgotten in between. Those rows were redacted
+ * without the custom header, so whether any exist decides if the table must be rebuilt. An API on the default header was
+ * always redacted by the default rules, so it never needs this.
+ */
+export function unseenCustomAuthHeaders(known: Record<string, string | null>, current: Map<string, string | null>): string[] {
+  const unseen: string[] = [];
+  for (const [apiId, name] of current) if (name && !Object.hasOwn(known, apiId)) unseen.push(apiId);
+  return unseen;
+}
+
 export interface IndexState {
   scannedUntil: Date;
   indexedFrom: Date | null;
